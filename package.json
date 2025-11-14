@@ -1,5 +1,5 @@
 {
-  "name": "printflow",
+  "name": "linecraft",
   "version": "0.1.0",
   "description": "High-performance terminal UI library for Node.js with Zig backend",
   "main": "lib/index.js",
