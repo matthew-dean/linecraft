@@ -1,0 +1,46 @@
+{
+  "name": "echokit",
+  "version": "0.1.0",
+  "description": "High-performance terminal UI library for Node.js with Zig backend",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "license": "MIT",
+  "scripts": {
+    "build:zig": "zig build",
+    "build:ts": "tsc",
+    "build": "pnpm build:zig && pnpm build:ts",
+    "dev": "pnpm build:zig && pnpm build:ts --watch",
+    "test": "zig build test",
+    "test:ansi": "zig build test:ansi",
+    "test:throttle": "zig build test:throttle",
+    "test:buffer": "zig build test:buffer",
+    "test:diff": "zig build test:diff",
+    "test:region": "zig build test:region",
+    "test:ts": "vitest",
+    "example:progress": "tsx examples/basic-progress.ts",
+    "example:spinner": "tsx examples/spinner.ts",
+    "example:multi": "tsx examples/multi-lane.ts"
+  },
+  "keywords": [
+    "terminal",
+    "tui",
+    "progress",
+    "spinner",
+    "ansi",
+    "zig"
+  ],
+  "dependencies": {
+    "ffi-napi": "^4.0.3",
+    "ref-napi": "^3.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
+
