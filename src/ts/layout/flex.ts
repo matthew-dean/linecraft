@@ -13,10 +13,7 @@ export function createFlex(
   options: FlexOptions = {},
   children: Renderable[] = []
 ): Renderable {
-  const direction = options.direction ?? 'row';
   const gap = options.gap ?? 0;
-  const justifyContent = options.justifyContent ?? 'start';
-  const alignItems = options.alignItems ?? 'stretch';
 
   // Return a plain object that implements Renderable
   return {
@@ -24,14 +21,10 @@ export function createFlex(
     flexShrink: options.flexShrink ?? 1,
     
     getPreferredWidth(): number {
-      if (direction === 'row') {
-        const childrenWidth = children.reduce((sum, child) => {
-          return sum + child.getPreferredWidth();
-        }, 0);
-        return childrenWidth + (gap * (children.length - 1));
-      } else {
-        return Math.max(...children.map(c => c.getPreferredWidth()), 0);
-      }
+      const childrenWidth = children.reduce((sum, child) => {
+        return sum + child.getPreferredWidth();
+      }, 0);
+      return childrenWidth + (gap * (children.length - 1));
     },
     
     getMinWidth(): number {
@@ -43,22 +36,11 @@ export function createFlex(
     },
     
     getHeight(): number {
-      if (direction === 'column') {
-        const childrenHeight = children.reduce((sum, child) => {
-          return sum + child.getHeight();
-        }, 0);
-        return childrenHeight + (gap * (children.length - 1));
-      } else {
-        return Math.max(...children.map(c => c.getHeight()), 0);
-      }
+      return Math.max(...children.map(c => c.getHeight()), 0);
     },
     
     render(x: number, y: number, width: number): void {
-      if (direction === 'row') {
-        renderRow(region, children, x, y, width, gap, alignItems);
-      } else {
-        renderColumn(region, children, x, y, width, gap, alignItems);
-      }
+      renderRow(region, children, x, y, width, gap);
     },
   };
 }
@@ -69,16 +51,12 @@ export class Flex {
   private options: FlexOptions;
   private renderable: Renderable;
   private children: Renderable[] = [];
-  private direction: 'row' | 'column' = 'row';
   private gap: number = 0;
-  private alignItems: 'start' | 'end' | 'center' | 'stretch' = 'stretch';
   
   constructor(region: TerminalRegion, options: FlexOptions = {}) {
     this.region = region;
     this.options = options;
-    this.direction = options.direction ?? 'row';
     this.gap = options.gap ?? 0;
-    this.alignItems = options.alignItems ?? 'stretch';
     this.renderable = createFlex(region, options, this.children);
   }
   
@@ -108,24 +86,38 @@ export class Flex {
   get flexShrink(): number { return this.renderable.flexShrink; }
 }
 
-// Helper functions for rendering (used by createFlex)
+/**
+ * Render flex items in a row direction.
+ * 
+ * Implements row-direction layout from CSS Flexbox spec:
+ * https://www.w3.org/TR/css-flexbox-1/#flex-direction-property
+ * 
+ * @param region - Terminal region to render to
+ * @param children - Flex items to render
+ * @param x - Starting x position
+ * @param y - Starting y position
+ * @param width - Available width for the flex container
+ * @param gap - Gap between items (row-gap equivalent)
+ */
 function renderRow(
   region: TerminalRegion,
   children: Renderable[],
   x: number,
   y: number,
   width: number,
-  gap: number,
-  alignItems: 'start' | 'end' | 'center' | 'stretch'
+  gap: number
 ): void {
-  // Calculate available space and flex distribution
+  // Collect flex item properties
+  // Spec: https://www.w3.org/TR/css-flexbox-1/#flex-items
   const preferredWidths = children.map(c => c.getPreferredWidth());
   const minWidths = children.map(c => c.getMinWidth());
   const maxWidths = children.map(c => c.getMaxWidth());
   const flexGrows = children.map(c => c.flexGrow);
   const flexShrinks = children.map(c => c.flexShrink);
 
-  // Distribute space
+  // Distribute space using CSS Flexbox algorithm
+  // Available width = container width - gaps between items
+  // Spec: https://www.w3.org/TR/css-flexbox-1/#gap
   const widths = distributeSpace(
     width - (gap * (children.length - 1)),
     preferredWidths,
@@ -135,83 +127,106 @@ function renderRow(
     flexShrinks
   );
 
-  // Calculate container height for alignment
-  const containerHeight = Math.max(...children.map(c => c.getHeight()), 0);
-
-  // Position children (col.render() handles merging with existing content)
+  // Position and render each child
+  // All items on a line have the same height, so no vertical alignment needed
   let currentX = x;
   for (let i = 0; i < children.length; i++) {
     const childWidth = widths[i];
-    const childHeight = children[i].getHeight();
-    const childY = alignChildY(y, childHeight, containerHeight, alignItems);
     
-    children[i].render(currentX, childY, childWidth);
-    currentX += childWidth + gap;
-  }
-}
-
-function renderColumn(
-  region: TerminalRegion,
-  children: Renderable[],
-  x: number,
-  y: number,
-  width: number,
-  gap: number,
-  alignItems: 'start' | 'end' | 'center' | 'stretch'
-): void {
-  let currentY = y;
-  const childWidth = Math.min(width, Math.max(...children.map(c => c.getPreferredWidth()), 0));
-  
-  for (const child of children) {
-    const childHeight = child.getHeight();
-    const childPreferredWidth = child.getPreferredWidth();
-    const childX = alignChildX(x, childWidth, childPreferredWidth, alignItems);
+    // Render child at calculated position and width
+    // col.render() handles merging with existing content
+    children[i].render(currentX, y, childWidth);
+    currentX += childWidth;
     
-    child.render(childX, currentY, childWidth);
-    currentY += childHeight + gap;
+    // Render gap between items (row-gap equivalent)
+    // Spec: https://www.w3.org/TR/css-flexbox-1/#propdef-gap
+    // Gap is rendered as spaces between items (not after the last item)
+    if (i < children.length - 1 && gap > 0) {
+      // Render gap as spaces at the current position
+      // We need to write spaces to the region to create visual gaps
+      const existingLine = region.getLine(y) || '';
+      const existingPlain = existingLine.replace(/\x1b\[[0-9;]*m/g, '');
+      const existingVisualWidth = existingPlain.length;
+      
+      // If we need to pad to create the gap
+      if (existingVisualWidth < currentX) {
+        const padding = currentX - existingVisualWidth;
+        const gapSpaces = ' '.repeat(gap);
+        const newLine = existingLine + ' '.repeat(padding) + gapSpaces;
+        region.setLine(y, newLine);
+      } else {
+        // Merge gap spaces into existing line
+        // Helper to find character position for visual column
+        const findCharPosForVisual = (line: string, targetVisual: number): number => {
+          let charPos = 0;
+          let visualPos = 0;
+          while (charPos < line.length && visualPos < targetVisual) {
+            if (line[charPos] === '\x1b') {
+              let ansiEnd = charPos + 1;
+              while (ansiEnd < line.length) {
+                if (line[ansiEnd] === 'm') {
+                  ansiEnd++;
+                  break;
+                }
+                if ((line[ansiEnd] >= '0' && line[ansiEnd] <= '9') || 
+                    line[ansiEnd] === ';' || 
+                    line[ansiEnd] === '[') {
+                  ansiEnd++;
+                } else {
+                  break;
+                }
+              }
+              charPos = ansiEnd;
+            } else {
+              charPos++;
+              visualPos++;
+            }
+          }
+          return charPos;
+        };
+        
+        const beforeEnd = findCharPosForVisual(existingLine, currentX);
+        let afterStart: number;
+        if (existingVisualWidth <= currentX + gap) {
+          afterStart = existingLine.length;
+        } else {
+          afterStart = findCharPosForVisual(existingLine, currentX + gap);
+        }
+        
+        const before = existingLine.slice(0, beforeEnd);
+        const after = existingLine.slice(afterStart);
+        const gapSpaces = ' '.repeat(gap);
+        const newLine = before + gapSpaces + after;
+        
+        // Only update if gap section changed
+        const existingGap = existingLine.slice(beforeEnd, afterStart);
+        if (existingGap !== gapSpaces) {
+          region.setLine(y, newLine);
+        }
+      }
+      
+      currentX += gap;
+    }
   }
 }
 
-function alignChildY(
-  y: number,
-  childHeight: number,
-  containerHeight: number,
-  alignItems: 'start' | 'end' | 'center' | 'stretch'
-): number {
-  switch (alignItems) {
-    case 'start':
-      return y;
-    case 'end':
-      return y + containerHeight - childHeight;
-    case 'center':
-      return y + Math.floor((containerHeight - childHeight) / 2);
-    case 'stretch':
-      return y;
-    default:
-      return y;
-  }
-}
 
-function alignChildX(
-  x: number,
-  containerWidth: number,
-  childWidth: number,
-  alignItems: 'start' | 'end' | 'center' | 'stretch'
-): number {
-  switch (alignItems) {
-    case 'start':
-      return x;
-    case 'end':
-      return x + containerWidth - childWidth;
-    case 'center':
-      return x + Math.floor((containerWidth - childWidth) / 2);
-    case 'stretch':
-      return x;
-    default:
-      return x;
-  }
-}
-
+/**
+ * Distribute available space among flex items according to CSS Flexbox algorithm.
+ * 
+ * Implements the "Resolving Flexible Lengths" algorithm from:
+ * https://www.w3.org/TR/css-flexbox-1/#resolve-flexible-lengths
+ * 
+ * This is based on Section 9.7 of the CSS Flexible Box Layout Module Level 1 spec.
+ * 
+ * @param availableWidth - Total available width for all items (after accounting for gaps)
+ * @param preferredWidths - Base/preferred width of each item (flex base size)
+ * @param minWidths - Minimum width constraint for each item (min-width)
+ * @param maxWidths - Maximum width constraint for each item (max-width)
+ * @param flexGrows - flex-grow factor for each item
+ * @param flexShrinks - flex-shrink factor for each item
+ * @returns Final width for each item after flex distribution
+ */
 function distributeSpace(
   availableWidth: number,
   preferredWidths: number[],
@@ -220,15 +235,21 @@ function distributeSpace(
   flexGrows: number[],
   flexShrinks: number[]
 ): number[] {
-  // Step 1: Start with base sizes (preferred widths)
+  // Step 1: Determine the flex base size and hypothetical main size
+  // Spec: https://www.w3.org/TR/css-flexbox-1/#flex-base-size
+  // Start with preferred widths as the base size
   let widths = [...preferredWidths];
   
-  // Step 2: Apply min/max constraints to base sizes
+  // Step 2: Clamp base sizes by min/max constraints
+  // Spec: https://www.w3.org/TR/css-flexbox-1/#min-size-auto
+  // Apply min-width and max-width constraints to base sizes
   for (let i = 0; i < widths.length; i++) {
     widths[i] = Math.max(minWidths[i], Math.min(maxWidths[i], widths[i]));
   }
 
-  // Step 3: Calculate available space for flex distribution
+  // Step 3: Calculate free space
+  // Spec: https://www.w3.org/TR/css-flexbox-1/#free-space
+  // Free space = available space - sum of base sizes
   const totalBase = widths.reduce((sum, w) => sum + w, 0);
   const flexSpace = availableWidth - totalBase;
 
@@ -236,47 +257,91 @@ function distributeSpace(
     return widths;
   }
 
-  // Step 4: Distribute flex space
+  // Step 4: Distribute free space
+  // Spec: https://www.w3.org/TR/css-flexbox-1/#resolve-flexible-lengths
   if (flexSpace > 0) {
-    // Extra space - distribute based on flexGrow
+    // 4a: Distribute positive free space (flex-grow)
+    // Spec: https://www.w3.org/TR/css-flexbox-1/#grow-factor
+    // Distribute extra space proportionally based on flex-grow factors
     const totalGrow = flexGrows.reduce((sum, g) => sum + g, 0);
     if (totalGrow > 0) {
+      // Calculate flex grow ratio: free space / sum of flex-grow factors
       const flexUnit = flexSpace / totalGrow;
       for (let i = 0; i < widths.length; i++) {
         if (flexGrows[i] > 0) {
+          // Add proportional share: base size + (flex-grow * flex unit)
           widths[i] = widths[i] + (flexGrows[i] * flexUnit);
         }
       }
     }
   } else {
-    // Not enough space - shrink based on flexShrink
+    // 4b: Distribute negative free space (flex-shrink)
+    // Spec: https://www.w3.org/TR/css-flexbox-1/#shrink-factor
+    // Shrink items proportionally based on flex-shrink factors, but respect min-width
+    // Calculate shrinkable space (only count space above min-width)
     const totalShrink = flexShrinks.reduce((sum, s, i) => {
-      return sum + (s > 0 ? widths[i] : 0);
+      // Only count items that can shrink (have flex-shrink > 0 and are above min-width)
+      return sum + (s > 0 && widths[i] > minWidths[i] ? widths[i] - minWidths[i] : 0);
     }, 0);
     
     if (totalShrink > 0) {
+      // Calculate shrink ratio: negative free space / total shrinkable space
       const shrinkUnit = Math.abs(flexSpace) / totalShrink;
       for (let i = 0; i < widths.length; i++) {
-        if (flexShrinks[i] > 0) {
-          widths[i] = widths[i] - (widths[i] * shrinkUnit);
+        if (flexShrinks[i] > 0 && widths[i] > minWidths[i]) {
+          // Shrink proportionally, but don't go below min-width
+          const shrinkable = widths[i] - minWidths[i];
+          const shrinkAmount = Math.min(shrinkable, shrinkable * shrinkUnit);
+          widths[i] = widths[i] - shrinkAmount;
         }
       }
     }
   }
 
-  // Step 5: Apply constraints again after flex distribution
+  // Step 5: Fix min/max violations
+  // Spec: https://www.w3.org/TR/css-flexbox-1/#min-max-violations
+  // After flex distribution, clamp again to ensure min/max constraints are respected
+  // This may cause total width to exceed available space, which we handle in Step 6
   for (let i = 0; i < widths.length; i++) {
     widths[i] = Math.max(minWidths[i], Math.min(maxWidths[i], Math.round(widths[i])));
+  }
+  
+  // Step 6: Handle overflow due to min-width constraints
+  // Spec: https://www.w3.org/TR/css-flexbox-1/#min-size-auto
+  // If min-width constraints cause total width to exceed available space,
+  // we must shrink items that can shrink (those above their min-width)
+  const totalWidth = widths.reduce((sum, w) => sum + w, 0);
+  if (totalWidth > availableWidth) {
+    const excess = totalWidth - availableWidth;
+    // Prioritize shrinking items with lower min-width (they can shrink more)
+    // This is a simplified approach - the full spec has more complex rules
+    const shrinkable = widths.map((w, i) => ({
+      index: i,
+      width: w,
+      min: minWidths[i],
+      canShrink: w > minWidths[i],
+      shrinkable: w - minWidths[i]
+    })).filter(item => item.canShrink).sort((a, b) => {
+      // Sort by min-width (lower min = can shrink more = lower priority to preserve)
+      if (a.min !== b.min) return a.min - b.min;
+      return a.shrinkable - b.shrinkable;
+    });
+    
+    // Shrink items in priority order until excess is eliminated
+    let remainingExcess = excess;
+    for (const item of shrinkable) {
+      if (remainingExcess <= 0) break;
+      const shrinkAmount = Math.min(remainingExcess, item.shrinkable);
+      widths[item.index] -= shrinkAmount;
+      remainingExcess -= shrinkAmount;
+    }
   }
 
   return widths;
 }
 
 export interface FlexOptions {
-  direction?: 'row' | 'column';
   gap?: number;
-  justifyContent?: 'start' | 'end' | 'center' | 'space-between' | 'space-around';
-  alignItems?: 'start' | 'end' | 'center' | 'stretch';
   minWidth?: number;
   maxWidth?: number;
   flexGrow?: number;

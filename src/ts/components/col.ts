@@ -19,8 +19,10 @@ export function createCol(
   // Calculate content width for default min (strip ANSI codes)
   const contentWidth = content.replace(/\x1b\[[0-9;]*m/g, '').length;
   
-  const minWidth = options.min ?? options.minWidth ?? contentWidth;
-  const maxWidth = options.max ?? options.maxWidth ?? Infinity;
+  // If width is specified, set both min and max to that value (fixed width)
+  const fixedWidth = options.width;
+  const minWidth = fixedWidth ?? options.min ?? options.minWidth ?? contentWidth;
+  const maxWidth = fixedWidth ?? options.max ?? options.maxWidth ?? Infinity;
   const flexGrow = options.flex ?? options.flexGrow ?? 0;
   const overflow = options.overflow ?? 'ellipsis-end';
 
@@ -192,6 +194,7 @@ export class Col {
 }
 
 export interface ColOptions {
+  width?: number; // Fixed width (sets both min and max to this value)
   flex?: number; // Flex grow ratio (default: 0)
   min?: number; // Minimum width (default: content width)
   max?: number; // Maximum width (default: Infinity)

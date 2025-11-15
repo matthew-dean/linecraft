@@ -5,7 +5,7 @@ export { getTerminalWidth, getTerminalHeight, isTTY, onResize } from './utils/te
 export { flex, col, component } from './api/flex.js';
 export type { FlexChild } from './api/flex.js';
 export { color } from './api/color.js';
-export { progressBar, spinner } from './components/index.js';
+export { createProgressBar as progressBar } from './components/progress-bar.js';
 export type {
   RegionOptions,
   LineContent,

@@ -1,3 +1,6 @@
+ignoredBuiltDependencies:
+  - node-pty
+
 onlyBuiltDependencies:
   - ffi-napi
   - ref-napi

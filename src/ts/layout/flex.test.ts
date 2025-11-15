@@ -1,14 +1,14 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Flex } from './flex.js';
 import { Col } from '../components/col.js';
-import { CapturableTerminal } from '../test-helpers/capturable-terminal.js';
+import { MockTerminalRegion } from '../test-helpers/mock-region.js';
 import type { TerminalRegion } from '../region.js';
 
 describe('Flex', () => {
   let region: TerminalRegion;
 
   beforeEach(() => {
-    region = new CapturableTerminal(80, 24) as unknown as TerminalRegion;
+    region = new MockTerminalRegion(80, 24) as unknown as TerminalRegion;
   });
 
   describe('flexbox math - basic', () => {
@@ -231,8 +231,8 @@ describe('Flex', () => {
   });
 
   describe('getPreferredWidth', () => {
-    it('should sum children widths plus gaps for row direction', () => {
-      const flex = new Flex(region, { gap: 2, direction: 'row' });
+    it('should sum children widths plus gaps', () => {
+      const flex = new Flex(region, { gap: 2 });
       const col1 = new Col(region, 'Hello');
       const col2 = new Col(region, 'World');
       
@@ -241,17 +241,6 @@ describe('Flex', () => {
       
       // 5 + 2 + 5 = 12
       expect(flex.getPreferredWidth()).toBe(12);
-    });
-
-    it('should return max child width for column direction', () => {
-      const flex = new Flex(region, { direction: 'column' });
-      const col1 = new Col(region, 'Short');
-      const col2 = new Col(region, 'Much Longer Text');
-      
-      flex.addChild(col1);
-      flex.addChild(col2);
-      
-      expect(flex.getPreferredWidth()).toBe(16); // "Much Longer Text".length
     });
   });
 });

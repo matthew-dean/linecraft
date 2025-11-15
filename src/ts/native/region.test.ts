@@ -8,12 +8,28 @@ describe('TerminalRegion', () => {
   beforeEach(() => {
     writeSyncSpy = vi.fn();
     const writeSpy = vi.fn();
+    const eventHandlers: Map<string, Set<Function>> = new Map();
     mockStdout = {
       writeSync: writeSyncSpy,
       write: writeSpy,
       isTTY: true,
       columns: 80,
       rows: 24,
+      on: (event: string, handler: Function) => {
+        if (!eventHandlers.has(event)) {
+          eventHandlers.set(event, new Set());
+        }
+        eventHandlers.get(event)!.add(handler);
+        return mockStdout;
+      },
+      off: (event: string, handler: Function) => {
+        eventHandlers.get(event)?.delete(handler);
+        return mockStdout;
+      },
+      removeListener: (event: string, handler: Function) => {
+        eventHandlers.get(event)?.delete(handler);
+        return mockStdout;
+      },
     } as unknown as NodeJS.WriteStream;
   });
 

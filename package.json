@@ -25,12 +25,7 @@
     "dev": "pnpm build:ts --watch",
     "test": "vitest",
     "test:ts": "vitest",
-    "example:progress": "tsx examples/basic-progress.ts",
-    "example:spinner": "tsx examples/spinner.ts",
-    "example:multi": "tsx examples/multi-lane.ts",
-    "example:region": "tsx examples/region-demo.ts",
-    "example:resize": "tsx examples/reactive-resize.ts",
-    "example:functional": "tsx examples/functional-components.ts"
+    "example": "node scripts/run-example.js"
   },
   "keywords": [
     "terminal",
@@ -39,7 +34,6 @@
     "spinner",
     "ansi"
   ],
-  "dependencies": {},
   "devDependencies": {
     "@types/node": "^20.0.0",
     "tsx": "^4.7.0",
@@ -50,4 +44,3 @@
     "node": ">=18.0.0"
   }
 }
-

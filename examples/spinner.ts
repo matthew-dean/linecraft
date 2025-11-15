@@ -1,9 +1,18 @@
-import { createRegion, createSpinner } from '../src/ts/index.js';
+import { createRegion, flex, col, color } from '../src/ts/index.js';
+import { createSpinner } from '../src/ts/index.js';
 import { waitForSpacebar } from '../src/ts/utils/wait-for-spacebar.js';
 
 async function main() {
-  const region = createRegion({ width: 80 });
+  const region = createRegion(); // Auto-resize enabled
   const spinner = createSpinner(region, 1);
+
+  // Use flex layout for spinner
+  region.set(
+    flex({ gap: 2 },
+      col({}, spinner.getText()),
+      col({ flex: 1 }, color('cyan', 'Processing...'))
+    )
+  );
 
   spinner.setText('Processing...');
   spinner.start();
@@ -12,10 +21,15 @@ async function main() {
   await new Promise(resolve => setTimeout(resolve, 3000));
 
   spinner.stop();
-  region.setLine(1, '✓ Done!');
-  await waitForSpacebar();
+  region.set(
+    flex({ gap: 2 },
+      col({}, color('green', '✓')),
+      col({ flex: 1 }, color('green', 'Done!'))
+    )
+  );
+  
+  await waitForSpacebar(region);
   region.destroy(true);
 }
 
 main().catch(console.error);
-

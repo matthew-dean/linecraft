@@ -10,79 +10,62 @@ async function main() {
 
   function updateAll() {
     region.set(
-      flex({ gap: 0, direction: 'column' },
+      flex({ gap: 0 },
         // Downloading
         flex({ gap: 2 },
           col({ min: 12, max: 12 }, color('cyan', 'Downloading')),
-          col({ flex: 1 }, progressBar({ 
+          progressBar(region, { 
             current: downloadProgress, 
             total: 100,
             width: 40,
             barColor: 'green',
             bracketColor: 'brightBlack',
-            percentColor: 'yellow'
-          }))
+            percentColor: 'yellow',
+            flex: 1
+          })
         ),
         // Extracting
         flex({ gap: 2 },
           col({ min: 12, max: 12 }, color('cyan', 'Extracting')),
-          col({ flex: 1 }, progressBar({ 
+          progressBar(region, { 
             current: extractProgress, 
             total: 100,
             width: 40,
             barColor: 'green',
             bracketColor: 'brightBlack',
-            percentColor: 'yellow'
-          }))
+            percentColor: 'yellow',
+            flex: 1
+          })
         ),
         // Installing
         flex({ gap: 2 },
           col({ min: 12, max: 12 }, color('cyan', 'Installing')),
-          col({ flex: 1 }, progressBar({ 
+          progressBar(region, { 
             current: installProgress, 
             total: 100,
             width: 40,
             barColor: 'green',
             bracketColor: 'brightBlack',
-            percentColor: 'yellow'
-          }))
+            percentColor: 'yellow',
+            flex: 1
+          })
         )
       )
     );
   }
 
   // Set up resize handler to re-render flex layout on resize
-  // The native region will update its width automatically, but we need to rebuild the flex layout
+  // Flex layout will automatically adapt to new width
   const resizeHandler = () => {
-    // Use requestAnimationFrame-like timing to ensure native region has updated its width
-    // and to batch resize events
     if ((resizeHandler as any).pending) {
       return; // Already scheduled
     }
     (resizeHandler as any).pending = true;
     setTimeout(() => {
       (resizeHandler as any).pending = false;
-      // Read terminal width directly - this is the source of truth
-      const terminalWidth = process.stdout.isTTY && process.stdout.columns 
-        ? process.stdout.columns 
-        : 80;
-      // Force sync region width - accessing it syncs with native region
-      // But we want to ensure it matches the terminal width
-      const regionWidth = region.width;
-      
-      // If region width doesn't match terminal width, there's a sync issue
-      // The native region should have updated, but if not, we'll still use the correct width
-      // because updateAll() will read region.width which should be synced
-      
-      // Clear all lines before rebuilding to ensure clean layout
-      // This prevents merge issues when width changes significantly
-      for (let i = 1; i <= region.height; i++) {
-        region.clearLine(i);
-      }
-      // Now rebuild with new width - updateAll() will use region.width which should be synced
-      // The flex layout will constrain to this width
+      // Flex layout will automatically use the new region.width
       updateAll();
-    }, 50); // Increased delay to ensure native region's resize handler has run first
+    }, 50);
   };
   process.stdout.on('resize', resizeHandler);
 
@@ -111,7 +94,7 @@ async function main() {
     })(),
   ]);
 
-  await waitForSpacebar();
+  await waitForSpacebar(region);
   
   // Clean up resize handler
   process.stdout.removeListener('resize', resizeHandler);
