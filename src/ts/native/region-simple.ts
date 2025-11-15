@@ -82,45 +82,9 @@ export class TerminalRegion {
 
       if (!this.widthExplicitlySet) {
         this.width = newWidth;
+        // On resize, just re-render everything
+        this.renderNow();
       }
-
-      // CRITICAL: On resize, we need to completely reset the region state
-      // The saved cursor position is invalid, and pendingFrame might be wrong size
-      if (this.isInitialized && !this.disableRendering) {
-        // CRITICAL: Ensure pendingFrame is exactly height lines
-        // Truncate if too long, pad if too short
-        if (this.pendingFrame.length > this.height) {
-          this.pendingFrame = this.pendingFrame.slice(0, this.height);
-        }
-        while (this.pendingFrame.length < this.height) {
-          this.pendingFrame.push('');
-        }
-        
-        // Clear previousFrame too so diff doesn't see stale data
-        this.previousFrame = Array(this.height).fill('');
-        
-        // Now clear the actual terminal region
-        // Use a simple approach: move to bottom, clear up
-        // First, try to get to a known position - move to very bottom
-        this.stdout.write(ansi.moveCursorTo(1, 9999));
-        
-        // Clear all lines in the region (from bottom up)
-        for (let i = 0; i < this.height; i++) {
-          this.stdout.write(ansi.moveCursorUp(1));
-          this.stdout.write(ansi.CLEAR_LINE);
-          this.stdout.write(ansi.MOVE_TO_START_OF_LINE);
-        }
-        
-        // We're now at the start of the first line of the region
-        // Move down by height to get to end of region
-        this.stdout.write(ansi.moveCursorDown(this.height));
-        
-        // Re-save cursor position (now we have a valid anchor)
-        this.stdout.write(ansi.SAVE_CURSOR);
-      }
-
-      // Re-render everything with clean state
-      this.renderNow();
     });
   }
 
@@ -275,12 +239,8 @@ export class TerminalRegion {
       this.renderBuffer.write(ansi.moveCursorUp(this.height));
     }
 
-    // CRITICAL: Only render exactly height lines, no more
-    // pendingFrame should already be exactly height lines, but enforce it here
-    const linesToRender = Math.min(this.height, this.pendingFrame.length);
-    
     // Render each line
-    for (let i = 0; i < linesToRender; i++) {
+    for (let i = 0; i < this.height; i++) {
       const content = this.pendingFrame[i] || '';
 
       // Clear the line
@@ -325,16 +285,19 @@ export class TerminalRegion {
       this.renderBuffer.write(ansi.MOVE_TO_START_OF_LINE);
 
       // Move down to next line (unless last line)
-      if (i < linesToRender - 1) {
+      if (i < this.height - 1) {
         this.renderBuffer.write(ansi.moveCursorDown(1));
       }
     }
 
-    // We're now at the start of the last rendered line
-    // Move down 1 to get to the line after the region (where saved position should be)
-    if (linesToRender > 0) {
-      this.renderBuffer.write(ansi.moveCursorDown(1));
-    }
+    // We're now at the start of the last line
+    // Move to end of region (start of last line + height - 1 moves down)
+    // Actually, we're already at start of last line, so we need to be at the END
+    // of the last line, which is after the region. So move down 1 more time?
+    // No wait - the saved position is at the END of the region (after the last line)
+    // So we need to move to the start of the line AFTER the region
+    // We're currently at start of last line, so move down 1 to get to line after region
+    this.renderBuffer.write(ansi.moveCursorDown(1));
 
     // Save cursor position (end of region) for next render
     this.renderBuffer.write(ansi.SAVE_CURSOR);
