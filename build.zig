@@ -7,7 +7,7 @@ pub fn build(b: *std.Build) void {
     // Create shared library for Node.js addon
     // In Zig 0.15.x, target and optimize must be set in createModule
     const lib = b.addLibrary(.{
-        .name = "echokit",
+        .name = "linecraft",
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/zig/renderer.zig"),
             .target = target,

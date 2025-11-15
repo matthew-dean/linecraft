@@ -30,10 +30,10 @@ export interface LineContent {
 }
 
 export interface RegionOptions {
-  x?: number; // Default: 0
-  y?: number; // Default: 0
-  width?: number; // Default: terminal width
+  width?: number; // If not specified, region auto-resizes with terminal
   height?: number; // Default: 1 (expands as needed)
+  stdout?: NodeJS.WriteStream; // Default: process.stdout
+  disableRendering?: boolean; // For tests - prevents actual rendering
 }
 
 export interface ProgressBarOptions {

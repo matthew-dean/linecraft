@@ -1,0 +1,3 @@
+onlyBuiltDependencies:
+  - ffi-napi
+  - ref-napi

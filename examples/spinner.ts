@@ -1,4 +1,5 @@
 import { createRegion, createSpinner } from '../src/ts/index.js';
+import { waitForSpacebar } from '../src/ts/utils/wait-for-spacebar.js';
 
 async function main() {
   const region = createRegion({ width: 80 });
@@ -12,8 +13,8 @@ async function main() {
 
   spinner.stop();
   region.setLine(1, '✓ Done!');
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  region.destroy();
+  await waitForSpacebar();
+  region.destroy(true);
 }
 
 main().catch(console.error);

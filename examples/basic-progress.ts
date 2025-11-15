@@ -1,4 +1,5 @@
 import { createRegion, createProgressBar } from '../src/ts';
+import { waitForSpacebar } from '../src/ts/utils/wait-for-spacebar.js';
 
 async function main() {
   const region = createRegion({ width: 80 });
@@ -13,8 +14,8 @@ async function main() {
   }
 
   progress.finish();
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  region.destroy();
+  await waitForSpacebar();
+  region.destroy(true);
 }
 
 main().catch(console.error);

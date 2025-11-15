@@ -1,8 +1,8 @@
-# EchoKit
+# Linecraft
 
 High-performance terminal UI library for Node.js with Zig backend.
 
-EchoKit provides a friendly TypeScript API while leveraging Zig's speed and efficiency for terminal operations like diffing, ANSI cursor movement, buffering, and throttling.
+Linecraft provides a friendly TypeScript API while leveraging Zig's speed and efficiency for terminal operations like diffing, ANSI cursor movement, buffering, and throttling.
 
 ## Features
 
@@ -15,15 +15,29 @@ EchoKit provides a friendly TypeScript API while leveraging Zig's speed and effi
 ## Installation
 
 ```bash
-pnpm install echokit
+pnpm install linecraft
 ```
+
+**Note for pnpm users:** Linecraft uses native dependencies (`ffi-napi`, `ref-napi`) that require build scripts. When installing, pnpm will prompt you to approve these build scripts. You can approve them by running:
+
+```bash
+pnpm approve-builds ffi-napi ref-napi
+```
+
+Then reinstall:
+
+```bash
+pnpm install
+```
+
+**Node.js Compatibility:** Linecraft requires Node.js 18-23. Node.js 24+ is not yet supported due to compatibility issues with `ffi-napi`.
 
 ## Quick Start
 
 ### Basic Progress Bar
 
 ```typescript
-import { createRegion, createProgressBar } from 'echokit';
+import { createRegion, createProgressBar } from 'linecraft';
 
 const region = createRegion({ width: 80 });
 const progress = createProgressBar(region, 1, {
@@ -43,7 +57,7 @@ region.destroy();
 ### Spinner
 
 ```typescript
-import { createRegion, createSpinner } from 'echokit';
+import { createRegion, createSpinner } from 'linecraft';
 
 const region = createRegion({ width: 80 });
 const spinner = createSpinner(region, 1);
@@ -61,7 +75,7 @@ region.destroy();
 ### Custom Layout
 
 ```typescript
-import { createRegion } from 'echokit';
+import { createRegion } from 'linecraft';
 
 const region = createRegion({ width: 80 });
 

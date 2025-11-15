@@ -1,4 +1,4 @@
-# Testing EchoKit
+# Testing Linecraft
 
 ## Running Tests
 

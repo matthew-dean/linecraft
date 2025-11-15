@@ -17,9 +17,10 @@ export class ProgressBar {
     this.lineNumber = lineNumber;
     this.label = options.label || '';
     this.width = options.width ?? 40;
-    this.completeChar = options.style?.complete ?? '█';
-    this.incompleteChar = options.style?.incomplete ?? '░';
-    this.brackets = options.style?.brackets ?? ['[', ']'];
+    // Use better Unicode characters: ━ (thick line) for filled, ─ (thin line) for empty, ☽ ☾ for brackets (facing each other)
+    this.completeChar = options.style?.complete ?? '━';
+    this.incompleteChar = options.style?.incomplete ?? '─';
+    this.brackets = options.style?.brackets ?? ['\u263E', '\u263D']; // ☾ ☽ (facing each other)
   }
 
   update(current: number, total: number): void {
@@ -39,7 +40,8 @@ export class ProgressBar {
     const empty = this.width - filled;
 
     const bar = this.completeChar.repeat(filled) + this.incompleteChar.repeat(empty);
-    const text = `${this.label} ${this.brackets[0]}${bar}${this.brackets[1]} ${percentage.toFixed(1)}%`;
+    // Add padding: space before and after the bar
+    const text = `${this.label} ${this.brackets[0]} ${bar} ${this.brackets[1]} ${percentage.toFixed(1)}%`;
 
     // Just update the line - Zig handles batching and rendering
     this.region.setLine(this.lineNumber, text);

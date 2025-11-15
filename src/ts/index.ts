@@ -1,6 +1,11 @@
 export { TerminalRegion } from './region.js';
 export { ProgressBar } from './components/progress-bar.js';
 export { Spinner } from './components/spinner.js';
+export { getTerminalWidth, getTerminalHeight, isTTY, onResize } from './utils/terminal.js';
+export { flex, col, component } from './api/flex.js';
+export type { FlexChild } from './api/flex.js';
+export { color } from './api/color.js';
+export { progressBar, spinner } from './components/index.js';
 export type {
   RegionOptions,
   LineContent,

@@ -1,38 +1,45 @@
 {
   "name": "linecraft",
   "version": "0.1.0",
-  "description": "High-performance terminal UI library for Node.js with Zig backend",
-  "main": "lib/index.js",
-  "types": "lib/index.d.ts",
+  "description": "High-performance terminal UI library for Node.js",
+  "type": "module",
+  "main": "./lib/index.js",
+  "types": "./lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "import": "./lib/index.js"
+    },
+    "./components": {
+      "types": "./lib/components/index.d.ts",
+      "import": "./lib/components/index.js"
+    }
+  },
+  "files": [
+    "lib/**/*"
+  ],
   "license": "MIT",
   "scripts": {
-    "build:zig": "zig build",
     "build:ts": "tsc",
-    "build": "pnpm build:zig && pnpm build:ts",
-    "dev": "pnpm build:zig && pnpm build:ts --watch",
-    "test": "zig build test",
-    "test:ansi": "zig build test:ansi",
-    "test:throttle": "zig build test:throttle",
-    "test:buffer": "zig build test:buffer",
-    "test:diff": "zig build test:diff",
-    "test:region": "zig build test:region",
+    "build": "pnpm build:ts",
+    "dev": "pnpm build:ts --watch",
+    "test": "vitest",
     "test:ts": "vitest",
     "example:progress": "tsx examples/basic-progress.ts",
     "example:spinner": "tsx examples/spinner.ts",
-    "example:multi": "tsx examples/multi-lane.ts"
+    "example:multi": "tsx examples/multi-lane.ts",
+    "example:region": "tsx examples/region-demo.ts",
+    "example:resize": "tsx examples/reactive-resize.ts",
+    "example:functional": "tsx examples/functional-components.ts"
   },
   "keywords": [
     "terminal",
     "tui",
     "progress",
     "spinner",
-    "ansi",
-    "zig"
+    "ansi"
   ],
-  "dependencies": {
-    "ffi-napi": "^4.0.3",
-    "ref-napi": "^3.0.3"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@types/node": "^20.0.0",
     "tsx": "^4.7.0",

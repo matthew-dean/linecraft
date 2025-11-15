@@ -23,9 +23,11 @@ export class Spinner {
   start(): void {
     if (this.isRunning) return;
     this.isRunning = true;
+    // Render immediately when starting
+    this.render();
     this.interval = setInterval(() => {
-      this.render();
       this.frameIndex = (this.frameIndex + 1) % this.frames.length;
+      this.render();
     }, this.intervalMs);
   }
 

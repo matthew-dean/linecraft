@@ -1,21 +1,46 @@
-import { native } from './native.js';
+import { TerminalRegion as NativeRegion, type RegionOptions as NativeRegionOptions } from './native/region.js';
 import { applyStyle } from './utils/colors.js';
-import type { RegionOptions, LineContent, TextStyle } from './types.js';
+import { getTerminalWidth } from './utils/terminal.js';
+import type { RegionOptions, LineContent } from './types.js';
+import { resolveFlexTree } from './api/flex.js';
+import { Flex } from './layout/flex.js';
 
+/**
+ * TerminalRegion - High-level API for terminal region management.
+ * 
+ * This is a wrapper around the native TypeScript implementation that adds:
+ * - Styling support (colors, bold, etc.)
+ * - Convenient getters for width/height
+ * - Same API as before for backward compatibility
+ */
 export class TerminalRegion {
-  private handle: number;
+  private region: NativeRegion;
   private _width: number;
-  private _height: number; // Current height (may expand)
+  private _height: number;
 
   constructor(options: RegionOptions = {}) {
-    const x = options.x ?? 0;
-    const y = options.y ?? 0;
-    this._width = options.width ?? (process.stdout.columns ?? 80);
-    this._height = options.height ?? 1; // Default to 1 line, expands as needed
-    this.handle = native.createRegion(x, y, this._width, this._height);
+    this._width = options.width ?? getTerminalWidth();
+    this._height = options.height ?? 1;
+
+    // Create the native region
+    // Only pass width if it was explicitly set by the user (to allow auto-resize)
+    const nativeOptions: NativeRegionOptions = {
+      height: this._height,
+      stdout: options.stdout,
+      disableRendering: options.disableRendering,
+    };
+    
+    // Only set width if user explicitly provided it (allows auto-resize to work)
+    if (options.width !== undefined) {
+      nativeOptions.width = options.width;
+    }
+    
+    this.region = new NativeRegion(nativeOptions);
   }
 
   get width(): number {
+    // Sync with native region width (important for auto-resize)
+    this._width = this.region.getWidth();
     return this._width;
   }
 
@@ -23,67 +48,90 @@ export class TerminalRegion {
     return this._height;
   }
 
+  getLine(lineNumber: number): string {
+    return this.region.getLine(lineNumber);
+  }
+
   setLine(lineNumber: number, content: string | LineContent): void {
     if (lineNumber < 1) {
       throw new Error('Line numbers start at 1');
     }
 
-    // Zig handles batching and expansion automatically
+    // Extract text and apply styling
     const text = typeof content === 'string' ? content : content.text;
-    // Apply styling if provided
     const styled = applyStyle(text, typeof content === 'object' ? content.style : undefined);
-    native.setLine(this.handle, lineNumber, styled);
-    // Zig will:
-    //   - Convert to 0-based internally
-    //   - Expand region if lineNumber > current height
-    //   - Buffer this update in pending_frame
-    //   - Check throttle
-    //   - Schedule render if needed (or render immediately if throttle allows)
 
-    // Update our height tracking if Zig expanded
-    if (lineNumber > this._height) {
-      this._height = lineNumber;
+    // Update the region
+    this.region.setLine(lineNumber, styled);
+
+    // Update height tracking if expanded
+    const newHeight = this.region.getHeight();
+    if (newHeight > this._height) {
+      this._height = newHeight;
     }
   }
 
-  set(content: string | LineContent[]): void {
+  set(content: string | LineContent[] | any): void {
+    // Check if it's a flex descriptor
+    if (typeof content === 'object' && content !== null && 'type' in content) {
+      // Resolve and render flex component
+      const component = resolveFlexTree(this, content);
+      if (component instanceof Flex) {
+        const width = this.width;
+        const height = component.getHeight();
+        if (height > this._height) {
+          this._height = height;
+        }
+        component.render(0, 1, width);
+      }
+      return;
+    }
+
+    // Original string/array handling
     if (typeof content === 'string') {
       // Single string with \n line breaks
-      native.set(this.handle, content);
+      this.region.set(content);
       // Update height based on line count
       this._height = content.split('\n').length;
-    } else {
-      // Array of LineContent
+    } else if (Array.isArray(content)) {
+      // Array of LineContent - apply styling to each
       const lines = content.map(c => 
         applyStyle(c.text, c.style)
       ).join('\n');
-      native.set(this.handle, lines);
+      this.region.set(lines);
       this._height = content.length;
     }
+
+    // Sync with actual region height
+    const newHeight = this.region.getHeight();
+    if (newHeight > this._height) {
+      this._height = newHeight;
+    }
   }
+
 
   clearLine(lineNumber: number): void {
     if (lineNumber < 1) {
       throw new Error('Line numbers start at 1');
     }
-    native.clearLine(this.handle, lineNumber);
+    this.region.clearLine(lineNumber);
   }
 
   clear(): void {
-    native.clearRegion(this.handle);
+    this.region.clear();
   }
 
   flush(): void {
     // Force immediate render of any pending updates (bypasses throttle)
-    native.flush(this.handle);
+    this.region.flush();
   }
 
   setThrottle(fps: number): void {
-    native.setThrottleFps(this.handle, fps);
+    this.region.setThrottleFps(fps);
   }
 
-  destroy(): void {
-    native.destroyRegion(this.handle);
+  destroy(clearFirst: boolean = false): void {
+    this.region.destroy(clearFirst);
   }
 }
 
