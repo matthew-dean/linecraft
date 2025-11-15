@@ -77,7 +77,9 @@ export class TerminalRegion {
       // Resolve and render flex component
       const component = resolveFlexTree(this, content);
       if (component instanceof Flex) {
-        const width = this.width;
+        // Always sync width before rendering to ensure we have the latest terminal width
+        // This is especially important for auto-resize scenarios
+        const width = this.width; // This getter syncs with native region
         const height = component.getHeight();
         if (height > this._height) {
           this._height = height;

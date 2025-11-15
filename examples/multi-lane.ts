@@ -62,22 +62,27 @@ async function main() {
     (resizeHandler as any).pending = true;
     setTimeout(() => {
       (resizeHandler as any).pending = false;
-      // Read terminal width directly to ensure we have the latest value
-      // The native region will also update, but we want to use the actual terminal width
+      // Read terminal width directly - this is the source of truth
       const terminalWidth = process.stdout.isTTY && process.stdout.columns 
         ? process.stdout.columns 
         : 80;
-      // Force sync region width with terminal width
-      // Accessing region.width will sync it, but we want to ensure it matches terminal
+      // Force sync region width - accessing it syncs with native region
+      // But we want to ensure it matches the terminal width
       const regionWidth = region.width;
+      
+      // If region width doesn't match terminal width, there's a sync issue
+      // The native region should have updated, but if not, we'll still use the correct width
+      // because updateAll() will read region.width which should be synced
+      
       // Clear all lines before rebuilding to ensure clean layout
       // This prevents merge issues when width changes significantly
       for (let i = 1; i <= region.height; i++) {
         region.clearLine(i);
       }
       // Now rebuild with new width - updateAll() will use region.width which should be synced
+      // The flex layout will constrain to this width
       updateAll();
-    }, 10); // Small delay to batch rapid resize events
+    }, 50); // Increased delay to ensure native region's resize handler has run first
   };
   process.stdout.on('resize', resizeHandler);
 
