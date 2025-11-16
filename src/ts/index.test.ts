@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createRegion, createProgressBar, createSpinner } from './index.js';
-import { TerminalRegion } from './region.js';
-import { ProgressBar } from './components/progress-bar.js';
-import { Spinner } from './components/spinner.js';
+import { createRegion, createProgressBar, createSpinner } from './index';
+import { TerminalRegion } from './region';
+import { ProgressBar } from './components/progress-bar';
+import { Spinner } from './components/spinner';
 
 describe('createRegion', () => {
   it('should create a TerminalRegion instance', () => {
@@ -39,16 +39,27 @@ describe('createProgressBar', () => {
   });
 
   it('should create a ProgressBar instance', () => {
-    const progressBar = createProgressBar(region, 1);
-    expect(progressBar).toBeInstanceOf(ProgressBar);
+    const progressBar = createProgressBar(region, {
+      current: 0,
+      total: 100,
+    });
+    // createProgressBar now returns a Renderable, not a ProgressBar instance
+    expect(progressBar).toBeDefined();
+    expect(progressBar).toHaveProperty('render');
+    expect(progressBar).toHaveProperty('getHeight');
   });
 
   it('should create a progress bar with options', () => {
-    const progressBar = createProgressBar(region, 1, {
+    const progressBar = createProgressBar(region, {
+      current: 50,
+      total: 100,
       label: 'Loading',
       width: 50,
     });
-    expect(progressBar).toBeInstanceOf(ProgressBar);
+    // createProgressBar now returns a Renderable, not a ProgressBar instance
+    expect(progressBar).toBeDefined();
+    expect(progressBar).toHaveProperty('render');
+    expect(progressBar).toHaveProperty('getHeight');
   });
 });
 

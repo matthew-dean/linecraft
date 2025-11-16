@@ -1,6 +1,6 @@
 // Simple test to verify flex layout and line management
-import { createRegion, flex, col, color } from '../src/ts/index.js';
-import { waitForSpacebar } from '../src/ts/utils/wait-for-spacebar.js';
+import { createRegion, flex, col, color } from '../src/ts/index';
+import { waitForSpacebar } from '../src/ts/utils/wait-for-spacebar';
 
 async function main() {
   console.log('Basic Flex Test\n');

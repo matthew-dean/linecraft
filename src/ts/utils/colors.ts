@@ -1,4 +1,4 @@
-import { Color, TextStyle } from '../types.js';
+import { Color, TextStyle } from '../types';
 
 const ANSI_COLORS: Record<Color, string> = {
   black: '30',

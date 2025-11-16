@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi, type MockedFunction } from 'vitest';
-import { Spinner } from './spinner.js';
-import { TerminalRegion } from '../region.js';
+import { Spinner } from './spinner';
+import { TerminalRegion } from '../region';
 
 // Mock the region
 const createMockRegion = () => {

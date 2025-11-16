@@ -8,7 +8,7 @@
  * kept separate from the main test suite.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { TerminalRegion } from './region.js';
+import { TerminalRegion } from './region';
 
 describe('TerminalRegion (Visual)', () => {
   let region: TerminalRegion;

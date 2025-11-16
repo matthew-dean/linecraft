@@ -1,7 +1,7 @@
 // Color function for text styling
 
-import { applyStyle } from '../utils/colors.js';
-import type { Color } from '../types.js';
+import { applyStyle } from '../utils/colors';
+import type { Color } from '../types';
 
 /**
  * Apply color to text

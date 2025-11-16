@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { TerminalRegion } from './region.js';
+import { TerminalRegion } from './region';
 
 describe('TerminalRegion', () => {
   let region: TerminalRegion;
@@ -127,6 +127,54 @@ describe('TerminalRegion', () => {
       region.set('Single line');
       expect(region.height).toBe(1);
     });
+
+    it('should do a full replace when called with same height', () => {
+      // Set initial content
+      region.set('Line 1\nLine 2\nLine 3');
+      expect(region.height).toBe(3);
+      
+      // Set new content with same height - should overwrite, not add
+      region.set('New 1\nNew 2\nNew 3');
+      expect(region.height).toBe(3); // Should still be 3, not 6
+      
+      // Verify content was replaced
+      region.flush();
+      expect(region.getLine(1)).toContain('New 1');
+      expect(region.getLine(2)).toContain('New 2');
+      expect(region.getLine(3)).toContain('New 3');
+    });
+
+    it('should do a full replace when height decreases', () => {
+      // Set initial content with 3 lines
+      region.set('Line 1\nLine 2\nLine 3');
+      expect(region.height).toBe(3);
+      
+      // Set new content with 2 lines - should replace and shrink
+      region.set('New 1\nNew 2');
+      expect(region.height).toBe(2); // Should shrink to 2
+      
+      // Verify content was replaced
+      region.flush();
+      expect(region.getLine(1)).toContain('New 1');
+      expect(region.getLine(2)).toContain('New 2');
+    });
+
+    it('should do a full replace when height increases', () => {
+      // Set initial content with 2 lines
+      region.set('Line 1\nLine 2');
+      expect(region.height).toBe(2);
+      
+      // Set new content with 4 lines - should replace and expand
+      region.set('New 1\nNew 2\nNew 3\nNew 4');
+      expect(region.height).toBe(4); // Should expand to 4
+      
+      // Verify content was replaced
+      region.flush();
+      expect(region.getLine(1)).toContain('New 1');
+      expect(region.getLine(2)).toContain('New 2');
+      expect(region.getLine(3)).toContain('New 3');
+      expect(region.getLine(4)).toContain('New 4');
+    });
   });
 
   describe('clearLine', () => {
@@ -167,6 +215,41 @@ describe('TerminalRegion', () => {
       region.setThrottle(30);
       // Should not throw
       expect(region).toBeDefined();
+    });
+  });
+
+  describe('add', () => {
+    it('should append content after existing content', () => {
+      // Set initial content
+      region.set('Line 1\nLine 2');
+      expect(region.height).toBe(2);
+      
+      // Add new content - should append
+      region.add('Line 3\nLine 4');
+      expect(region.height).toBe(4); // Should expand to 4
+      
+      // Verify both old and new content exist
+      region.flush();
+      expect(region.getLine(1)).toContain('Line 1');
+      expect(region.getLine(2)).toContain('Line 2');
+      expect(region.getLine(3)).toContain('Line 3');
+      expect(region.getLine(4)).toContain('Line 4');
+    });
+
+    it('should append multiple times', () => {
+      region.set('First');
+      expect(region.height).toBe(1);
+      
+      region.add('Second');
+      expect(region.height).toBe(2);
+      
+      region.add('Third');
+      expect(region.height).toBe(3);
+      
+      region.flush();
+      expect(region.getLine(1)).toContain('First');
+      expect(region.getLine(2)).toContain('Second');
+      expect(region.getLine(3)).toContain('Third');
     });
   });
 

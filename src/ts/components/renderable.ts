@@ -2,8 +2,8 @@
 // Only complex components (with wrapping, nested flex, etc.) need to implement this
 // Simple strings are handled directly by flex
 
-import type { TerminalRegion } from '../region.js';
-import { wrapText, truncateEnd, truncateStart, truncateMiddle } from '../utils/text.js';
+import type { TerminalRegion } from '../region';
+import { wrapText, truncateEnd, truncateStart, truncateMiddle } from '../utils/text';
 
 /**
  * Interface for complex components that need measurement logic

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { Col } from './col.js';
-import { TerminalRegion } from '../region.js';
+import { Col } from './col';
+import { TerminalRegion } from '../region';
 
 describe('Col', () => {
   let region: TerminalRegion;

@@ -1,29 +1,30 @@
-import type { TerminalRegion } from '../region.js';
+import type { TerminalRegion } from '../region';
 
 /**
  * Wait for spacebar press before continuing
  * Useful for testing examples interactively
  * 
- * Uses the region manager to write the prompt, ensuring auto-wrap stays disabled.
- * The prompt is written to a new line below the current region.
+ * Adds the prompt as part of the region by expanding it, ensuring everything
+ * is managed by the region and avoiding scrolling/positioning issues.
  */
 export function waitForSpacebar(
   region: TerminalRegion,
   message: string = 'Press SPACEBAR to exit...'
 ): Promise<void> {
   return new Promise((resolve) => {
-    // CRITICAL: Don't use setLine which expands the region height
-    // Instead, write directly to stdout below the region
-    // This prevents the region from expanding and causing rendering issues
-    
-    // Get the current height to know where to write
+    // CRITICAL: Add the prompt as part of the region
+    // This ensures everything is managed by the region and avoids scrolling issues
+    // Get current height and add blank line + message
     const currentHeight = region.height;
     
-    // Write directly to stdout (bypassing region management)
-    // This ensures we don't interfere with the region's height or rendering
-    process.stdout.write('\n'); // Blank line
-    process.stdout.write(message + '\n'); // Message
-    process.stdout.write('\x1b[s'); // Save cursor position (in case we need to restore)
+    // Add blank line
+    region.setLine(currentHeight + 1, '');
+    
+    // Add message
+    region.setLine(currentHeight + 2, message);
+    
+    // Flush to ensure it's rendered
+    region.flush();
     
     // Set stdin to raw mode to capture individual keypresses
     if (!process.stdin.isTTY) {

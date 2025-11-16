@@ -1,8 +1,8 @@
 // Base component system for terminal UI
 // Simplified - no parent/child wiring needed
 
-import { TerminalRegion } from '../region.js';
-import type { Renderable } from './renderable.js';
+import { TerminalRegion } from '../region';
+import type { Renderable } from './renderable';
 
 /**
  * Base class for terminal UI components

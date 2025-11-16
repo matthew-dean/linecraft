@@ -76,9 +76,10 @@ async function main() {
   const exampleFile = await findExample(pattern);
   
   // Run with tsx via pnpm exec (ensures we use the local tsx)
+  // Use shell: false to avoid deprecation warning about unescaped args
   const proc = spawn('pnpm', ['exec', 'tsx', exampleFile], {
     stdio: 'inherit',
-    shell: true,
+    shell: false,
   });
   
   proc.on('exit', (code) => {

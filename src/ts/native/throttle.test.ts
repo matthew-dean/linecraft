@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Throttle } from './throttle.js';
+import { Throttle } from './throttle';
 
 describe('Throttle', () => {
   describe('initialization', () => {

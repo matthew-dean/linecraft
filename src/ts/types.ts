@@ -51,3 +51,10 @@ export interface SpinnerOptions {
   interval?: number;
 }
 
+/**
+ * Base options for all components - includes common styling props
+ */
+export interface BaseComponentOptions {
+  color?: Color; // Text color
+}
+

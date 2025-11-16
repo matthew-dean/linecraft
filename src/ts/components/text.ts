@@ -1,8 +1,8 @@
 // Text component with overflow handling
 
-import { Component } from './base.js';
-import { truncateEnd, truncateStart, truncateMiddle, wrapText } from '../utils/text.js';
-import type { TerminalRegion } from '../region.js';
+import { Component } from './base';
+import { truncateEnd, truncateStart, truncateMiddle, wrapText } from '../utils/text';
+import type { TerminalRegion } from '../region';
 
 export type TextOverflow = 'none' | 'ellipsis-end' | 'ellipsis-start' | 'ellipsis-middle' | 'wrap';
 

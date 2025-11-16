@@ -1,17 +1,19 @@
 // Function-based API for flex layouts
 
-import { Flex } from '../layout/flex.js';
-import { Col } from '../components/col.js';
-import type { TerminalRegion } from '../region.js';
-import type { FlexOptions } from '../layout/flex.js';
-import type { ColOptions } from '../components/col.js';
-import type { FlexChild } from '../components/renderable.js';
+import { Flex } from '../layout/flex';
+import { Col } from '../components/col';
+import type { TerminalRegion } from '../region';
+import type { FlexOptions } from '../layout/flex';
+import type { ColOptions } from '../components/col';
+import type { FlexChild } from '../components/renderable';
+import { resolveDivider } from './divider';
+import type { DividerDescriptor } from './divider';
 
 // Re-export FlexChild for convenience
 export type { FlexChild };
 
 // Extended type that includes descriptors
-export type FlexChildWithDescriptors = FlexChild | ColDescriptor | FlexDescriptor;
+export type FlexChildWithDescriptors = FlexChild | ColDescriptor | FlexDescriptor | DividerDescriptor;
 
 /**
  * Descriptor for a flex container (resolved later with region)
@@ -91,6 +93,9 @@ export function resolveFlexTree(
           // Check if it's a descriptor
           if (child.type === 'col' || child.type === 'flex') {
             const resolved = resolveFlexTree(region, child as unknown as FlexDescriptor | ColDescriptor);
+            flexComponent.addChild(resolved);
+          } else if (child.type === 'divider') {
+            const resolved = resolveDivider(region, child as DividerDescriptor);
             flexComponent.addChild(resolved);
           } else {
             // Not a descriptor, pass through as-is

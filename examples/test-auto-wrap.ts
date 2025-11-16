@@ -1,5 +1,5 @@
-import { createRegion, flex, col, color } from '../src/ts/index.js';
-import { waitForSpacebar } from '../src/ts/utils/wait-for-spacebar.js';
+import { createRegion, flex, col, color } from '../src/ts/index';
+import { waitForSpacebar } from '../src/ts/utils/wait-for-spacebar';
 
 /**
  * Test to verify auto-wrap is disabled

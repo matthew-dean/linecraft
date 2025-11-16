@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi, type MockedFunction } from 'vitest';
-import { ProgressBar } from './progress-bar.js';
-import { TerminalRegion } from '../region.js';
+import { ProgressBar } from './progress-bar';
+import { TerminalRegion } from '../region';
 
 // Mock the region
 const createMockRegion = () => {

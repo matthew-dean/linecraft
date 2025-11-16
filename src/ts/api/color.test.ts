@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { color } from './color.js';
+import { color } from './color';
 
 describe('color', () => {
   it('should apply red color', () => {

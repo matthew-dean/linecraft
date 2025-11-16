@@ -2,7 +2,7 @@
  * Simple mock TerminalRegion for unit tests
  * Just tracks setLine calls - no actual terminal emulation
  */
-import type { TerminalRegion } from '../region.js';
+import type { TerminalRegion } from '../region';
 
 export class MockTerminalRegion implements Partial<TerminalRegion> {
   private lines: Map<number, string> = new Map();

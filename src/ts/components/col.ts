@@ -2,9 +2,11 @@
 // Handles text content with overflow and flex properties
 // Just a function that returns a Renderable object - no class needed!
 
-import type { TerminalRegion } from '../region.js';
-import type { Renderable } from './renderable.js';
-import { truncateEnd, truncateStart, truncateMiddle, wrapText } from '../utils/text.js';
+import type { TerminalRegion } from '../region';
+import type { Renderable } from './renderable';
+import type { BaseComponentOptions } from '../types';
+import { truncateEnd, truncateStart, truncateMiddle, wrapText } from '../utils/text';
+import { applyStyle } from '../utils/colors';
 
 export type TextOverflow = 'none' | 'ellipsis-end' | 'ellipsis-start' | 'ellipsis-middle' | 'wrap';
 
@@ -21,10 +23,14 @@ export function createCol(
   
   // If width is specified, set both min and max to that value (fixed width)
   const fixedWidth = options.width;
-  const minWidth = fixedWidth ?? options.min ?? options.minWidth ?? contentWidth;
-  const maxWidth = fixedWidth ?? options.max ?? options.maxWidth ?? Infinity;
-  const flexGrow = options.flex ?? options.flexGrow ?? 0;
+  const minWidth = fixedWidth ?? options.min ?? contentWidth;
+  const maxWidth = fixedWidth ?? options.max ?? Infinity;
+  const flexGrow = options.flex ?? 0;
   const overflow = options.overflow ?? 'ellipsis-end';
+  const bg = options.bg ?? options.fill; // Support both 'bg' and 'fill' for backward compatibility
+  
+  // Apply color to content if specified (from BaseComponentOptions)
+  const finalContent = options.color ? applyStyle(content, { color: options.color }) : content;
 
   // Return a plain object that implements Renderable
   return {
@@ -46,24 +52,24 @@ export function createCol(
     getHeight(): number {
       if (overflow === 'wrap') {
         const width = undefined; // Will be set during render
-        return wrapText(content.replace(/\x1b\[[0-9;]*m/g, ''), width ?? contentWidth).length;
+        return wrapText(finalContent.replace(/\x1b\[[0-9;]*m/g, ''), width ?? contentWidth).length;
       }
       return 1;
     },
     
     render(x: number, y: number, width: number): void {
-      let text = content;
-      const textWidth = content.replace(/\x1b\[[0-9;]*m/g, '').length;
+      let text = finalContent;
+      const textWidth = finalContent.replace(/\x1b\[[0-9;]*m/g, '').length;
       
       // Handle overflow
       if (overflow === 'ellipsis-end' && textWidth > width) {
-        text = truncateEnd(content.replace(/\x1b\[[0-9;]*m/g, ''), width);
+        text = truncateEnd(finalContent.replace(/\x1b\[[0-9;]*m/g, ''), width);
       } else if (overflow === 'ellipsis-start' && textWidth > width) {
-        text = truncateStart(content.replace(/\x1b\[[0-9;]*m/g, ''), width);
+        text = truncateStart(finalContent.replace(/\x1b\[[0-9;]*m/g, ''), width);
       } else if (overflow === 'ellipsis-middle' && textWidth > width) {
-        text = truncateMiddle(content.replace(/\x1b\[[0-9;]*m/g, ''), width);
+        text = truncateMiddle(finalContent.replace(/\x1b\[[0-9;]*m/g, ''), width);
       } else if (overflow === 'wrap') {
-        const lines = wrapText(content.replace(/\x1b\[[0-9;]*m/g, ''), width);
+        const lines = wrapText(finalContent.replace(/\x1b\[[0-9;]*m/g, ''), width);
         for (let i = 0; i < lines.length; i++) {
           // For wrap, we need to handle x position too
           const existingLine = region.getLine(y + i) || '';
@@ -75,11 +81,19 @@ export function createCol(
         return;
       }
 
-      // Pad to width
-      const plainText = text.replace(/\x1b\[[0-9;]*m/g, '');
-      const padding = width - plainText.length;
-      if (padding > 0) {
-        text = text + ' '.repeat(padding);
+      // If bg is specified, fill the column width with the background character, then append content
+      if (bg) {
+        const plainText = text.replace(/\x1b\[[0-9;]*m/g, '');
+        const bgWidth = Math.max(0, width - plainText.length);
+        const bgStr = bg.repeat(bgWidth);
+        text = bgStr + text;
+      } else {
+        // Pad to width with spaces
+        const plainText = text.replace(/\x1b\[[0-9;]*m/g, '');
+        const padding = width - plainText.length;
+        if (padding > 0) {
+          text = text + ' '.repeat(padding);
+        }
       }
       
       // Get existing line and merge at x position
@@ -193,14 +207,13 @@ export class Col {
   }
 }
 
-export interface ColOptions {
+export interface ColOptions extends BaseComponentOptions {
   width?: number; // Fixed width (sets both min and max to this value)
   flex?: number; // Flex grow ratio (default: 0)
   min?: number; // Minimum width (default: content width)
   max?: number; // Maximum width (default: Infinity)
   overflow?: TextOverflow;
-  minWidth?: number; // Alias for min (for compatibility)
-  maxWidth?: number; // Alias for max (for compatibility)
-  flexGrow?: number; // Alias for flex (for compatibility)
+  bg?: string; // Background character to fill the column width (content is appended after bg)
+  fill?: string; // Deprecated: use 'bg' instead (kept for backward compatibility)
 }
 

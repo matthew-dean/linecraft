@@ -8,11 +8,11 @@
 // 5. Truncate content to width before writing
 // 6. Use diff to only update changed lines
 
-import { diffFrames, type DiffOp } from './diff.js';
-import * as ansi from './ansi.js';
-import { RenderBuffer } from './buffer.js';
-import { Throttle } from './throttle.js';
-import { getTerminalWidth, onResize } from '../utils/terminal.js';
+import { diffFrames, type DiffOp } from './diff';
+import * as ansi from './ansi';
+import { RenderBuffer } from './buffer';
+import { Throttle } from './throttle';
+import { getTerminalWidth, onResize } from '../utils/terminal';
 
 export interface RegionOptions {
   width?: number;

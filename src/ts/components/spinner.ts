@@ -1,5 +1,5 @@
-import { TerminalRegion } from '../region.js';
-import type { SpinnerOptions } from '../types.js';
+import { TerminalRegion } from '../region';
+import type { SpinnerOptions } from '../types';
 
 const DEFAULT_SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 

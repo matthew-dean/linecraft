@@ -1,9 +1,9 @@
-import type { TerminalRegion } from '../region.js';
-import type { Renderable } from './renderable.js';
-import { flex, col, resolveFlexTree } from '../api/flex.js';
-import { createCol } from './col.js';
-import { color } from '../api/color.js';
-import type { Color } from '../types.js';
+import type { TerminalRegion } from '../region';
+import type { Renderable } from './renderable';
+import { flex, col, resolveFlexTree } from '../api/flex';
+import { createCol } from './col';
+import { color } from '../api/color';
+import type { Color } from '../types';
 
 export interface ProgressBarComponentOptions {
   current: number;
@@ -38,8 +38,9 @@ export function createProgressBar(
   
   const completeChar = options.completeChar ?? '━';
   const incompleteChar = options.incompleteChar ?? '─';
-  const leftBracket = options.brackets?.[0] ?? '\u2282';
-  const rightBracket = options.brackets?.[1] ?? '\u2283';
+  // Use moon brackets: ☾ (U+263E) and ☽ (U+263D) - facing each other
+  const leftBracket = options.brackets?.[0] ?? '\u263E'; // ☾
+  const rightBracket = options.brackets?.[1] ?? '\u263D'; // ☽
   
   const bracketColor = options.bracketColor ?? 'brightBlack';
   
@@ -47,10 +48,10 @@ export function createProgressBar(
   
   if (options.label) {
     const labelColor = options.labelColor ?? 'white';
-    children.push(col({ width: options.label.length + 1 }, color(labelColor, options.label)));
+    children.push(col({ width: options.label.length + 1, color: labelColor }, options.label));
   }
   
-  children.push(col({ width: 1 }, color(bracketColor, leftBracket)));
+  children.push(col({ width: 1, color: bracketColor }, leftBracket));
   
   // Bar column - calculates bar width dynamically based on available space
   const barCol: Renderable = {
@@ -73,11 +74,12 @@ export function createProgressBar(
   };
   children.push(barCol);
   
-  children.push(col({ width: 1 }, color(bracketColor, rightBracket)));
+  children.push(col({ width: 1, color: bracketColor }, rightBracket));
   // Percentage column needs fixed width to prevent truncation when terminal is narrow
-  children.push(col({ width: 6 }, color(options.percentColor ?? 'brightBlack', percent.toFixed(1) + '%')));
+  children.push(col({ width: 6, color: options.percentColor ?? 'brightBlack' }, percent.toFixed(1) + '%'));
   
-  const flexComponent = resolveFlexTree(region, flex({ gap: 0 }, ...children));
+  // Default gap of 1 between bar and percent for visual spacing
+  const flexComponent = resolveFlexTree(region, flex({ gap: 1 }, ...children));
   
   // Default to flex: 1 so progress bar is flexible by default
   const flexGrow = options.flex ?? options.flexGrow ?? 1;
@@ -112,7 +114,7 @@ export class ProgressBar {
     this.width = options.width ?? 40;
     this.completeChar = options.style?.complete ?? '━';
     this.incompleteChar = options.style?.incomplete ?? '─';
-    this.brackets = options.style?.brackets ?? ['\u2282', '\u2283']; // ⊂ ⊃
+    this.brackets = options.style?.brackets ?? ['\u263E', '\u263D']; // ☾ ☽
   }
 
   update(current: number, total: number): void {

@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Flex } from './flex.js';
-import { Col } from '../components/col.js';
-import { MockTerminalRegion } from '../test-helpers/mock-region.js';
-import type { TerminalRegion } from '../region.js';
+import { Flex } from './flex';
+import { Col } from '../components/col';
+import { MockTerminalRegion } from '../test-helpers/mock-region';
+import type { TerminalRegion } from '../region';
 
 describe('Flex', () => {
   let region: TerminalRegion;

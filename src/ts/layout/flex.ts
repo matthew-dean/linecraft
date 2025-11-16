@@ -1,9 +1,13 @@
 // Flexbox-like layout system for terminal components
 // Just functions that return Renderable objects - no classes needed!
 
-import type { TerminalRegion } from '../region.js';
-import type { Renderable, FlexChild } from '../components/renderable.js';
-import { flattenChildren, toRenderable } from '../components/renderable.js';
+import type { TerminalRegion } from '../region';
+import type { Renderable, FlexChild } from '../components/renderable';
+import { flattenChildren, toRenderable } from '../components/renderable';
+import { resolveFlexTree } from '../api/flex';
+import { resolveDivider } from '../api/divider';
+import type { FlexDescriptor, ColDescriptor } from '../api/flex';
+import type { DividerDescriptor } from '../api/divider';
 
 /**
  * Create a flex container - just a function that returns a Renderable!
@@ -61,16 +65,40 @@ export class Flex {
   }
   
   /**
-   * Add a child - accepts string, Renderable, or array (for functional components)
+   * Add a child - accepts string, Renderable, array, or descriptors (flex, col, divider)
    */
-  addChild(child: FlexChild): void {
+  addChild(child: FlexChild | FlexDescriptor | ColDescriptor | DividerDescriptor): void {
     // Flatten arrays
     const flat = Array.isArray(child) ? flattenChildren(child) : [child];
     
     // Convert to Renderables
     for (const item of flat) {
-      const renderable = toRenderable(this.region, item);
-      this.children.push(renderable);
+      // Check if it's a descriptor that needs resolving
+      if (typeof item === 'object' && item !== null && 'type' in item) {
+        if (item.type === 'flex' || item.type === 'col') {
+          // Resolve flex/col descriptor
+          const resolved = resolveFlexTree(this.region, item as FlexDescriptor | ColDescriptor);
+          this.children.push(resolved);
+        } else if (item.type === 'divider') {
+          // Resolve divider descriptor
+          const resolved = resolveDivider(this.region, item as DividerDescriptor);
+          this.children.push(resolved);
+        } else {
+          // Not a descriptor, use toRenderable
+          const renderable = toRenderable(this.region, item as string | Renderable);
+          this.children.push(renderable);
+        }
+      } else if (item instanceof Flex) {
+        // Flex instance - create a fresh renderable that uses the current children array
+        // This ensures we always have the latest children, even if item.renderable was recreated
+        // We access item.children directly (via a getter) to ensure we get the current array
+        const flexRenderable = createFlex(this.region, item.options, (item as any).children);
+        this.children.push(flexRenderable);
+      } else {
+        // String or Renderable - use toRenderable
+        const renderable = toRenderable(this.region, item as string | Renderable);
+        this.children.push(renderable);
+      }
     }
     
     // Recreate renderable with updated children

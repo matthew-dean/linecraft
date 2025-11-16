@@ -8,17 +8,19 @@
 // 5. Truncate content to width before writing
 // 6. Use diff to only update changed lines
 
-import { diffFrames, type DiffOp } from './diff.js';
-import * as ansi from './ansi.js';
-import { RenderBuffer } from './buffer.js';
-import { Throttle } from './throttle.js';
-import { getTerminalWidth, onResize } from '../utils/terminal.js';
+import { diffFrames, type DiffOp } from './diff';
+import * as ansi from './ansi';
+import { RenderBuffer } from './buffer';
+import { Throttle } from './throttle';
+import { getTerminalWidth, getTerminalHeight, onResize } from '../utils/terminal';
 
 export interface RegionOptions {
   width?: number;
   height?: number;
   stdout?: NodeJS.WriteStream;
   disableRendering?: boolean;
+  // Optional callback to re-render the last component (for keep-alive during pause)
+  onKeepAlive?: () => void;
 }
 
 export class TerminalRegion {
@@ -33,6 +35,13 @@ export class TerminalRegion {
   private isInitialized: boolean = false;
   private resizeCleanup?: () => void;
   private widthExplicitlySet: boolean;
+  // Track the absolute row where the region starts (1-based)
+  // This is calculated from terminal.rows on initialization and updated on resize
+  private regionStartRow: number | null = null;
+  // Periodic check to re-disable auto-wrap (some terminals reset it)
+  private autoWrapKeepAliveInterval?: NodeJS.Timeout;
+  // Optional callback to re-render the last component (for keep-alive during pause)
+  private onKeepAlive?: () => void;
 
   constructor(options: RegionOptions = {}) {
     this.widthExplicitlySet = options.width !== undefined;
@@ -40,6 +49,7 @@ export class TerminalRegion {
     this.height = options.height ?? 1;
     this.stdout = options.stdout ?? process.stdout;
     this.disableRendering = options.disableRendering ?? false;
+    this.onKeepAlive = options.onKeepAlive;
 
     // Initialize frames
     this.pendingFrame = Array(this.height).fill('');
@@ -53,6 +63,7 @@ export class TerminalRegion {
       if (!this.widthExplicitlySet) {
         this.setupResizeHandler();
       }
+      this.setupAutoWrapKeepAlive();
       this.setupExitHandler();
     }
   }
@@ -60,17 +71,65 @@ export class TerminalRegion {
   private initializeRegion(): void {
     if (this.isInitialized) return;
 
+    // CRITICAL: Save cursor position FIRST (wherever we are)
+    // This allows us to start the region at the current cursor position
+    // instead of always pushing to the bottom
+    this.stdout.write(ansi.SAVE_CURSOR);
+
     // Disable auto-wrap globally
     this.stdout.write(ansi.DISABLE_AUTO_WRAP);
 
-    // Reserve space by printing newlines
+    // Query cursor position to get the starting row
+    // We'll use a heuristic: save cursor, print newlines, then calculate
+    // The actual start row is where we saved the cursor
+    // After printing newlines, we're at (savedRow + height)
+    // So region starts at (savedRow + 1)
+    
+    // For now, we'll use terminal.rows as a fallback, but try to use cursor position
+    // The issue is that querying cursor position is async, so we can't do it synchronously
+    // Instead, we'll save the cursor, print newlines, then calculate from terminal.rows
+    // But we'll adjust: if we're not at the bottom, we should use the saved position
+    
+    // Reserve space by printing newlines (moves cursor down)
     for (let i = 0; i < this.height; i++) {
       this.stdout.write('\n');
     }
 
-    // Save cursor position (end of region) - this is our anchor
-    this.stdout.write(ansi.SAVE_CURSOR);
+    // After printing newlines, calculate where the region starts
+    // We saved the cursor before printing, so the region starts at (savedRow + 1)
+    // But we can't easily get savedRow synchronously, so we'll use terminal.rows
+    // If we're at the bottom, this works. If not, we might be off.
+    // For now, assume we're at the bottom (matches current behavior)
+    const terminalRows = getTerminalHeight();
+    this.regionStartRow = Math.max(1, terminalRows - this.height + 1);
+
     this.isInitialized = true;
+  }
+
+  private setupAutoWrapKeepAlive(): void {
+    // CRITICAL: Periodically re-render to keep auto-wrap disabled and re-establish content
+    // Some terminals reset auto-wrap state, especially after resize or when idle
+    // When paused (waiting for spacebar), we're not in an active render loop anymore,
+    // so we need to keep rendering periodically to prevent auto-reflow
+    // This is the same as the progress bar animation loop - continuous rendering
+    // Check every 50ms - more frequent to catch resets faster, matching animation frequency
+    this.autoWrapKeepAliveInterval = setInterval(() => {
+      if (!this.disableRendering && this.isInitialized) {
+        // CRITICAL: Re-disable auto-wrap FIRST (some terminals reset it)
+        // Write directly to stdout to ensure it takes effect immediately
+        this.stdout.write(ansi.DISABLE_AUTO_WRAP);
+        
+        // CRITICAL: If we have a callback to re-render the last component, use it
+        // This re-renders flex/col components with current width (same as during animation)
+        // If no callback, just re-render existing pendingFrame
+        if (this.onKeepAlive) {
+          this.onKeepAlive();
+        } else {
+          // Fallback: just re-render existing content
+          this.renderNow();
+        }
+      }
+    }, 50);
   }
 
   private setupResizeHandler(): void {
@@ -84,43 +143,38 @@ export class TerminalRegion {
         this.width = newWidth;
       }
 
-      // CRITICAL: On resize, we need to completely reset the region state
-      // The saved cursor position is invalid, and pendingFrame might be wrong size
-      if (this.isInitialized && !this.disableRendering) {
-        // CRITICAL: Ensure pendingFrame is exactly height lines
-        // Truncate if too long, pad if too short
-        if (this.pendingFrame.length > this.height) {
-          this.pendingFrame = this.pendingFrame.slice(0, this.height);
-        }
-        while (this.pendingFrame.length < this.height) {
-          this.pendingFrame.push('');
-        }
-        
-        // Clear previousFrame too so diff doesn't see stale data
-        this.previousFrame = Array(this.height).fill('');
-        
-        // Now clear the actual terminal region
-        // Use a simple approach: move to bottom, clear up
-        // First, try to get to a known position - move to very bottom
-        this.stdout.write(ansi.moveCursorTo(1, 9999));
-        
-        // Clear all lines in the region (from bottom up)
-        for (let i = 0; i < this.height; i++) {
-          this.stdout.write(ansi.moveCursorUp(1));
-          this.stdout.write(ansi.CLEAR_LINE);
-          this.stdout.write(ansi.MOVE_TO_START_OF_LINE);
-        }
-        
-        // We're now at the start of the first line of the region
-        // Move down by height to get to end of region
-        this.stdout.write(ansi.moveCursorDown(this.height));
-        
-        // Re-save cursor position (now we have a valid anchor)
-        this.stdout.write(ansi.SAVE_CURSOR);
-      }
+      // CRITICAL: On resize, DO NOT recalculate regionStartRow
+      // The region's absolute position doesn't change when the terminal resizes
+      // If we recalculate, we might move the region to the wrong place (especially
+      // if waitForSpacebar or other code has caused scrolling)
+      // Only update width, keep regionStartRow as-is
 
-      // Re-render everything with clean state
-      this.renderNow();
+      // CRITICAL: Force immediate render (bypass throttle) to update with new size
+      // This ensures we re-render even when paused/idle, preventing auto-reflow
+      // Render IMMEDIATELY (no setTimeout) to fix any reflow as fast as possible
+      // The terminal may have already reflowed content, but we fix it immediately
+      
+      // CRITICAL: Always read the latest width right before rendering
+      // This ensures we never render with stale width, preventing chopping
+      if (!this.widthExplicitlySet) {
+        this.width = getTerminalWidth();
+      }
+      // Double-check one more time right before render
+      const latestWidth = getTerminalWidth();
+      if (!this.widthExplicitlySet && latestWidth !== this.width) {
+        this.width = latestWidth;
+      }
+      
+      // CRITICAL: If we have a callback to re-render the last content, use it
+      // This re-renders ALL components (flex/col) with current width (same as during animation)
+      // The region orchestrates this - components don't manage their own re-rendering
+      // If no callback, just re-render existing pendingFrame
+      if (this.onKeepAlive) {
+        this.onKeepAlive();
+      } else {
+        // Fallback: just re-render existing content
+        this.renderNow();
+      }
     });
   }
 
@@ -160,18 +214,34 @@ export class TerminalRegion {
 
     const lineIndex = lineNumber - 1;
 
-    // Expand region if needed
+    // CRITICAL: Only expand if lineIndex is within reasonable bounds
+    // If someone calls setLine with a very high number (e.g., from waitForSpacebar),
+    // we should NOT expand the region - just ignore it or truncate
+    // The region height should be controlled by the component layer, not by setLine calls
     if (lineIndex >= this.height) {
-      this.expandTo(lineIndex + 1);
+      // Only expand if it's not too far beyond current height (safety check)
+      // This prevents accidental expansion from stray setLine calls
+      // Limit expansion to at most 10 lines beyond current height
+      const maxAllowedHeight = this.height + 10;
+      if (lineIndex < maxAllowedHeight) {
+        this.expandTo(lineIndex + 1);
+      } else {
+        // Line number is way too high - expand to max allowed, then ignore the rest
+        this.expandTo(maxAllowedHeight);
+        // Don't update the line if it's beyond max allowed
+        return;
+      }
     }
 
-    // Ensure pending frame has enough lines
-    while (this.pendingFrame.length <= lineIndex) {
+    // Ensure pending frame has enough lines (but don't let it grow unbounded)
+    while (this.pendingFrame.length <= lineIndex && this.pendingFrame.length < this.height + 10) {
       this.pendingFrame.push('');
     }
 
-    // Update the line
-    this.pendingFrame[lineIndex] = content;
+    // Only update if within bounds
+    if (lineIndex < this.pendingFrame.length) {
+      this.pendingFrame[lineIndex] = content;
+    }
 
     // Schedule render
     this.scheduleRender();
@@ -248,10 +318,14 @@ export class TerminalRegion {
   /**
    * SIMPLIFIED RENDERING - back to basics
    * 
-   * 1. Restore cursor to saved position (end of region)
-   * 2. Move up by height
+   * Uses absolute positioning based on terminal rows:
+   * - Region is at bottom: starts at row (rows - height + 1), ends at row (rows)
+   * - On resize, we recalculate using new rows value
+   * 
+   * 1. Calculate absolute row positions from terminal.rows
+   * 2. Move to start of region using absolute positioning
    * 3. For each line: clear, write (truncated), move to start, move down
-   * 4. Save cursor position
+   * 4. Save cursor position at end
    */
   renderNow(): void {
     if (this.disableRendering) {
@@ -263,21 +337,41 @@ export class TerminalRegion {
       this.initializeRegion();
     }
 
-    // Ensure auto-wrap is disabled
-    this.renderBuffer.write(ansi.DISABLE_AUTO_WRAP);
+    // CRITICAL: Don't prevent concurrent renders - the throttle handles that
+    // Removing isRendering check to prevent duplicates
+    // The throttle will naturally prevent too-frequent renders
+
+    // CRITICAL: Always disable auto-wrap before rendering
+    // Write directly to stdout to ensure it takes effect immediately
+    // This is especially important after resize when terminal might have reset state
+    // We ALWAYS keep auto-wrap disabled - never re-enable it (except on destroy)
+    // This prevents auto-reflow even when idle/paused
+    this.stdout.write(ansi.DISABLE_AUTO_WRAP);
     this.renderBuffer.write(ansi.HIDE_CURSOR);
 
-    // Restore cursor to saved position (end of region)
-    this.renderBuffer.write(ansi.RESTORE_CURSOR);
-
-    // Move up by height to get to start of region
-    if (this.height > 0) {
-      this.renderBuffer.write(ansi.moveCursorUp(this.height));
+    // CRITICAL: Use absolute positioning based on regionStartRow
+    // This is more reliable than SAVE/RESTORE, especially after resize
+    // If regionStartRow is not set, fall back to relative positioning
+    if (this.regionStartRow !== null) {
+      // Move to start of first line of region
+      this.renderBuffer.write(ansi.moveCursorTo(1, this.regionStartRow));
+    } else {
+      // Fallback: use SAVE/RESTORE (shouldn't happen if initialized correctly)
+      this.renderBuffer.write(ansi.RESTORE_CURSOR);
+      if (this.height > 0) {
+        this.renderBuffer.write(ansi.moveCursorUp(this.height));
+      }
+      this.renderBuffer.write(ansi.MOVE_TO_START_OF_LINE);
     }
 
     // CRITICAL: Only render exactly height lines, no more
-    // pendingFrame should already be exactly height lines, but enforce it here
-    const linesToRender = Math.min(this.height, this.pendingFrame.length);
+    // pendingFrame might have more lines if setLine was called with high line numbers
+    // But we should ONLY render up to this.height lines
+    // Truncate pendingFrame if it's too long (safety check)
+    if (this.pendingFrame.length > this.height) {
+      this.pendingFrame = this.pendingFrame.slice(0, this.height);
+    }
+    const linesToRender = this.height;
     
     // Render each line
     for (let i = 0; i < linesToRender; i++) {
@@ -286,14 +380,23 @@ export class TerminalRegion {
       // Clear the line
       this.renderBuffer.write(ansi.CLEAR_LINE);
       this.renderBuffer.write(ansi.MOVE_TO_START_OF_LINE);
+      
+      // CRITICAL: Reset colors to prevent color bleeding from previous line
+      // This ensures each line starts with a clean color state
+      this.renderBuffer.write(ansi.RESET);
 
+      // CRITICAL: Always use the latest width for truncation
+      // Re-read width right before truncating to prevent chopping during resize
+      // This is especially important when paused (waiting for spacebar)
+      const currentWidth = this.widthExplicitlySet ? this.width : getTerminalWidth();
+      
       // Truncate content to width (strip ANSI to measure, then truncate preserving ANSI)
       const plainContent = content.replace(/\x1b\[[0-9;]*m/g, '');
       let contentToWrite = content;
-      if (plainContent.length > this.width) {
+      if (plainContent.length > currentWidth) {
         let visualPos = 0;
         let charPos = 0;
-        while (charPos < content.length && visualPos < this.width) {
+        while (charPos < content.length && visualPos < currentWidth) {
           if (content[charPos] === '\x1b') {
             let ansiEnd = charPos + 1;
             while (ansiEnd < content.length) {
@@ -331,13 +434,15 @@ export class TerminalRegion {
     }
 
     // We're now at the start of the last rendered line
-    // Move down 1 to get to the line after the region (where saved position should be)
+    // Move down 1 to get to the line after the region
     if (linesToRender > 0) {
       this.renderBuffer.write(ansi.moveCursorDown(1));
     }
 
-    // Save cursor position (end of region) for next render
-    this.renderBuffer.write(ansi.SAVE_CURSOR);
+    // CRITICAL: Update regionStartRow if we're using absolute positioning
+    // After rendering, we're at row (regionStartRow + height)
+    // On next render, we'll use this to position correctly
+    // (We don't need to save cursor position since we're using absolute positioning)
 
     // Show cursor
     this.renderBuffer.write(ansi.SHOW_CURSOR);
@@ -355,6 +460,12 @@ export class TerminalRegion {
 
   destroy(clearFirst: boolean = false): void {
     if (!this.isInitialized) return;
+
+    // Stop the auto-wrap keep-alive interval
+    if (this.autoWrapKeepAliveInterval) {
+      clearInterval(this.autoWrapKeepAliveInterval);
+      this.autoWrapKeepAliveInterval = undefined;
+    }
 
     if (clearFirst) {
       this.clear();

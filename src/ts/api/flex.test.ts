@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { flex, col, resolveFlexTree } from './flex.js';
-import { TerminalRegion } from '../region.js';
-import { Flex } from '../layout/flex.js';
-import { Col } from '../components/col.js';
+import { flex, col, resolveFlexTree } from './flex';
+import { TerminalRegion } from '../region';
+import { Flex } from '../layout/flex';
+import { Col } from '../components/col';
 
 describe('flex API', () => {
   let region: TerminalRegion;

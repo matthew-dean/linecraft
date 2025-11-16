@@ -1,5 +1,5 @@
-import { createRegion, flex, col, color } from '../src/ts/index.js';
-import { waitForSpacebar } from '../src/ts/utils/wait-for-spacebar.js';
+import { createRegion, flex, col, color } from '../src/ts/index';
+import { waitForSpacebar } from '../src/ts/utils/wait-for-spacebar';
 
 async function main() {
   console.log('Flex Layout Demo - Line Management\n');

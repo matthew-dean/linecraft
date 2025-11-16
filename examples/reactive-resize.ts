@@ -6,8 +6,8 @@
  * Try resizing your terminal window while this demo is running!
  */
 
-import { createRegion, flex, col, color } from '../src/ts/index.js';
-import { waitForSpacebar } from '../src/ts/utils/wait-for-spacebar.js';
+import { createRegion, flex, col, color } from '../src/ts/index';
+import { waitForSpacebar } from '../src/ts/utils/wait-for-spacebar';
 
 async function main() {
   console.log('Reactive Flex Resize Demo');
