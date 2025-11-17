@@ -36,8 +36,11 @@ export function truncateMiddle(text: string, maxWidth: number): string {
   if (maxWidth <= 3) {
     return '.'.repeat(maxWidth);
   }
-  const start = Math.floor((maxWidth - 3) / 2);
-  const end = text.length - (maxWidth - 3 - start);
+  // Calculate how many characters we can show on each side
+  // Total: start + 3 (ellipsis) + end = maxWidth
+  const availableChars = maxWidth - 3; // Characters available for text (excluding ellipsis)
+  const start = Math.floor(availableChars / 2);
+  const end = text.length - (availableChars - start);
   return text.slice(0, start) + '...' + text.slice(end);
 }
 

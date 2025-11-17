@@ -1,6 +1,6 @@
 // Comprehensive example demonstrating all grid features
 
-import { region, grid, style, progressBar } from '../src/index';
+import { region, grid, style, progressBar, fill } from '../src/index';
 import { waitForSpacebar } from '../src/utils/wait-for-spacebar';
 
 async function main() {
@@ -12,18 +12,12 @@ async function main() {
       style({ color: 'cyan' }, 'Fixed 20'),
       style({ color: 'green' }, 'Fixed 30'),
       style({ color: 'yellow' }, 'Flexible')
-    )
-  );
-
-  await waitForSpacebar(r);
-  // Demonstrates separator line: fills each column with separator characters
-  // Note: spaceBetween only fills gaps between columns, so for full-width separators
-  // we fill each column individually with repeat()
-  r.add(
+    ),
+    // Visual indicator: show column widths using fill
     grid({ template: [20, 30, '1*'] },
-      style({ color: 'brightBlack' }, '─'.repeat(20)),
-      style({ color: 'brightBlack' }, '─'.repeat(30)),
-      style({ color: 'brightBlack' }, '─'.repeat(30))
+      fill({ color: 'brightRed', char: '─' }),
+      fill({ color: 'brightGreen', char: '─' }),
+      fill({ color: 'brightYellow', char: '─' })
     )
   );
 
@@ -35,58 +29,78 @@ async function main() {
       style({ color: 'red' }, 'Flex 1'),
       style({ color: 'blue' }, 'Flex 2'),
       style({ color: 'magenta' }, 'Flex 1')
+    ),
+    // Visual indicator: show proportional widths
+    grid({ template: ['1*', '2*', '1*'] },
+      fill({ color: 'brightRed', char: '█' }),
+      fill({ color: 'brightBlue', char: '█' }),
+      fill({ color: 'brightMagenta', char: '█' })
     )
   );
 
   await waitForSpacebar(r);
-  // Demonstrates flex ratios visually: middle column gets 2x the space of outer columns
-  // The block characters fill their allocated space, showing the proportional distribution
-  r.add(
-    grid({ template: ['1*', '2*', '1*'] },
-      style({ color: 'brightBlack' }, '█'.repeat(20)),
-      style({ color: 'brightBlack' }, '█'.repeat(40)),
-      style({ color: 'brightBlack' }, '█'.repeat(20))
-    )
-  );
 
-  // Section 3: Column gap
+  // Section 3: Column gap - make it visible
   r.add(
     grid({ template: [20, 20], columnGap: 3 },
       style({ color: 'cyan' }, 'Column 1'),
       style({ color: 'green' }, 'Column 2')
+    ),
+    // Visual indicator: show column widths
+    grid({ template: [20, 20], columnGap: 3 },
+      fill({ color: 'brightCyan', char: '─' }),
+      fill({ color: 'brightGreen', char: '─' })
     )
   );
 
   await waitForSpacebar(r);
 
-  // Section 4: SpaceBetween with character
+  // Section 4: SpaceBetween - fills gaps between columns with a character
   r.add(
-    grid({ template: [20, '1*', 20], columnGap: 2, spaceBetween: '─' },
+    grid({ template: [20, '1*', 20], columnGap: 2, spaceBetween: { char: '─', color: 'brightBlack' } },
       style({ color: 'yellow' }, 'Left'),
-      style({ color: 'brightBlack' }, 'Middle'),
+      style({ color: 'brightBlack' }, ''),
       style({ color: 'yellow' }, 'Right')
+    ),
+    // Visual indicator
+    grid({ template: [20, '1*', 20], columnGap: 2 },
+      fill({ color: 'brightYellow', char: '─' }),
+      fill({ color: 'brightBlack', char: '─' }),
+      fill({ color: 'brightYellow', char: '─' })
     )
   );
 
   await waitForSpacebar(r);
 
-  // Section 5: SpaceBetween with color
+  // Section 5: SpaceBetween with different character
   r.add(
-    grid({ template: [20, '1*', 20], columnGap: 2, spaceBetween: { char: '·', color: 'brightBlack' } },
+    grid({ template: [20, '1*', 20], columnGap: 2, spaceBetween: { char: '·', color: 'brightCyan' } },
       style({ color: 'cyan' }, 'Left'),
-      style({ color: 'brightBlack' }, 'Middle'),
+      style({ color: 'brightBlack' }, ''),
       style({ color: 'cyan' }, 'Right')
+    ),
+    // Visual indicator
+    grid({ template: [20, '1*', 20], columnGap: 2 },
+      fill({ color: 'brightCyan', char: '─' }),
+      fill({ color: 'brightCyan', char: '─' }),
+      fill({ color: 'brightCyan', char: '─' })
     )
   );
 
   await waitForSpacebar(r);
 
-  // Section 6: Justify space-between
+  // Section 6: Justify space-between - left/right items with flexing middle
   r.add(
     grid({ template: [15, '1*', 15], justify: 'space-between' },
       style({ color: 'green' }, 'Left Item'),
       style({ color: 'brightBlack' }, 'Flexing Middle'),
       style({ color: 'green' }, 'Right Item')
+    ),
+    // Visual indicator
+    grid({ template: [15, '1*', 15], justify: 'space-between' },
+      fill({ color: 'brightGreen', char: '─' }),
+      fill({ color: 'brightBlack', char: '─' }),
+      fill({ color: 'brightGreen', char: '─' })
     )
   );
 
@@ -94,10 +108,16 @@ async function main() {
 
   // Section 7: Overflow ellipsis
   r.add(
-    grid({ template: [15, 15, 15] },
+    grid({ template: ['1*', '1*', '1*'] },
       style({ color: 'red', overflow: 'ellipsis-end' }, 'This is a very long text that will be truncated'),
       style({ color: 'blue', overflow: 'ellipsis-start' }, 'This is a very long text that will be truncated'),
       style({ color: 'magenta', overflow: 'ellipsis-middle' }, 'This is a very long text that will be truncated')
+    ),
+    // Visual indicator
+    grid({ template: ['1*', '1*', '1*'] },
+      fill({ color: 'brightRed', char: '─' }),
+      fill({ color: 'brightBlue', char: '─' }),
+      fill({ color: 'brightMagenta', char: '─' })
     )
   );
 
@@ -111,12 +131,51 @@ async function main() {
         color: 'green', 
         when: (ctx) => ctx.availableWidth > 50 
       }, 'Only if width > 50')
+    ),
+    // Visual indicator
+    grid({ template: [20, '1*'] },
+      fill({ color: 'brightCyan', char: '─' }),
+      fill({ color: 'brightGreen', char: '─' })
     )
   );
 
   await waitForSpacebar(r);
 
-  // Section 9: Progress bar in grid
+  // Section 9: Text alignment (left, center, right)
+  r.add(
+    grid({ template: ['1*', '1*', '1*'] },
+      style({ color: 'cyan', align: 'left' }, 'Left'),
+      style({ color: 'green', align: 'center' }, 'Center'),
+      style({ color: 'yellow', align: 'right' }, 'Right')
+    ),
+    // Visual indicator
+    grid({ template: ['1*', '1*', '1*'] },
+      fill({ color: 'brightCyan', char: '─' }),
+      fill({ color: 'brightGreen', char: '─' }),
+      fill({ color: 'brightYellow', char: '─' })
+    )
+  );
+
+  await waitForSpacebar(r);
+
+  // Section 10: Alignment with short text
+  r.add(
+    grid({ template: [30, 30, 30] },
+      style({ color: 'red', align: 'left' }, 'L'),
+      style({ color: 'blue', align: 'center' }, 'C'),
+      style({ color: 'magenta', align: 'right' }, 'R')
+    ),
+    // Visual indicator
+    grid({ template: [30, 30, 30] },
+      fill({ color: 'brightRed', char: '─' }),
+      fill({ color: 'brightBlue', char: '─' }),
+      fill({ color: 'brightMagenta', char: '─' })
+    )
+  );
+
+  await waitForSpacebar(r);
+
+  // Section 11: Progress bar in grid
   r.add(
     grid({ template: [20, '1*'] },
       style({ color: 'cyan' }, 'Installing...'),
@@ -127,30 +186,46 @@ async function main() {
         bracketColor: 'brightBlack',
         percentColor: 'yellow'
       })
+    ),
+    // Visual indicator
+    grid({ template: [20, '1*'] },
+      fill({ color: 'brightCyan', char: '─' }),
+      fill({ color: 'brightGreen', char: '─' })
     )
   );
 
   await waitForSpacebar(r);
 
-  // Section 10: Multi-line content
+  // Section 12: Multi-line content
   r.add(
     grid({ template: [20, '1*'] },
       style({ color: 'yellow' }, 'Single line'),
       style({ color: 'blue' }, [
         'Line 1 of multi-line',
         'Line 2 of multi-line',
-        'Line 3 of multi-line'
+        'Line 3 of multi-line',
+        'This is a very long line and should auto-wrap to the next line and stuff.'
       ])
+    ),
+    // Visual indicator (only for first line since multi-line)
+    grid({ template: [20, '1*'] },
+      fill({ color: 'brightYellow', char: '─' }),
+      fill({ color: 'brightBlue', char: '─' })
     )
   );
 
   await waitForSpacebar(r);
 
-  // Section 11: Minmax
+  // Section 13: Minmax
   r.add(
-    grid({ template: [{ min: 40, width: '2*' }, '1*'] },
-      style({ color: 'red' }, 'Minmax (min 40, flex 2)'),
+    grid({ template: [{ min: 20, width: '2*' }, '1*'] },
+      style({ color: 'red' }, 'Minmax (min 20, flex 2)'),
       style({ color: 'blue' }, 'Flex 1')
+    ),
+    // Visual indicator
+    grid({ template: [{ min: 20, width: '2*' }, '1*'] },
+      fill({ color: 'brightRed', char: '─' }),
+      fill({ color: 'brightBlue', char: '─' })
     )
   );
 
@@ -159,4 +234,3 @@ async function main() {
 }
 
 main().catch(console.error);
-

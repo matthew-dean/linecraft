@@ -1,9 +1,11 @@
-export { TerminalRegion } from './region';
+export { TerminalRegion, SectionReference } from './region';
 export { getTerminalWidth, getTerminalHeight, isTTY, onResize } from './utils/terminal';
 // Grid system
 export { grid, style } from './api/grid';
 export type { GridOptions } from './layout/grid';
 export type { StyleOptions } from './components/style';
+export { fill } from './components/fill';
+export type { FillOptions } from './components/fill';
 export { color } from './api/color';
 // progressBar is exported below as a function
 export { showPrompt } from './components/index';

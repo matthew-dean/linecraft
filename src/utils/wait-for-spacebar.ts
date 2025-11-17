@@ -10,7 +10,7 @@ import { logToFile } from './debug-log';
  */
 export function waitForSpacebar(
   region: TerminalRegion,
-  message: string = 'Press SPACEBAR to exit...'
+  message: string = 'Press SPACEBAR to continue...'
 ): Promise<void> {
   return new Promise((resolve) => {
     // DEBUG: Log when waitForSpacebar is called

@@ -54,7 +54,6 @@ export class RegionRenderer {
   private hasRendered: boolean = false; // Track if we've rendered at least once
   private isRendering: boolean = false; // Prevent concurrent renders
   private resizeJustHappened: boolean = false; // Track if resize happened to re-initialize cursor
-  private queriedCursorPosition: { row: number; col: number } | null = null; // Queried position after resize
   private static logFileCleared: boolean = false; // Track if log file has been cleared for this process
 
   private onKeepAlive?: () => void;
@@ -161,13 +160,13 @@ export class RegionRenderer {
           return;
         }
         
-        // CRITICAL: Don't re-disable auto-wrap on resize if we're about to destroy
-        // Some terminals/shells (like zsh) may insert lines on resize if auto-wrap is disabled
-        // We only disable auto-wrap during active rendering, not after program finishes
-        // Re-disable auto-wrap on resize (some terminals reset state on resize)
-        // BUT: Only if we're actively rendering (autoWrapDisabled should only be true during active use)
-        if (!this.disableRendering && this.autoWrapDisabled && this.isInitialized) {
+        // CRITICAL: Always re-disable auto-wrap on resize if region is initialized
+        // Some terminals reset auto-wrap state on resize, so we must re-disable it
+        // This ensures content doesn't reflow automatically when terminal resizes
+        // Write directly to stdout since this happens outside of render cycle
+        if (!this.disableRendering && this.isInitialized) {
           this.stdout.write(ansi.DISABLE_AUTO_WRAP);
+          this.autoWrapDisabled = true;
         }
         
         // Only auto-resize if width wasn't explicitly set by the user
@@ -186,16 +185,23 @@ export class RegionRenderer {
           }
         }
         
-        // CRITICAL: Mark that resize happened - cursor position may be invalid
-        // We'll re-initialize cursor position on next render
+        // SIMPLE APPROACH: On resize, clear screen and start at top
+        // We can't rely on cursor position after resize, so take over completely
+        this.logToFile(`[resize handler] Resize detected - clearing screen and resetting to top`);
         this.resizeJustHappened = true;
+        
+        // Clear the entire terminal screen
+        this.stdout.write(ansi.ERASE_SCREEN);
+        this.stdout.write(ansi.moveCursorTo(1, 1));
+        
+        // Reset region position to top of terminal
+        this.startRow = 1;
+        this.visibleRegionTopRow = 1;
         this.savedCursorPosition = false;
         
-        // CRITICAL: Trigger re-render via high-level API to update content with new width
-        // This prevents content from being rendered over (like spacebar prompt)
-        // The old code was a single class, so it didn't need this callback
-        // But our split architecture needs to notify the high-level API to re-render
+        // Trigger re-render
         if (this.onKeepAlive) {
+          this.logToFile(`[resize handler] Calling onKeepAlive() to trigger re-render at top of screen`);
           this.onKeepAlive();
         }
       };
@@ -213,16 +219,13 @@ export class RegionRenderer {
           return;
         }
         
-        // CRITICAL: Don't re-disable auto-wrap on resize if we're about to destroy
-        // Some terminals/shells (like zsh) may insert lines on resize if auto-wrap is disabled
-        // We only disable auto-wrap during active rendering, not after program finishes
-        // The isInitialized check above should prevent this, but be extra safe
-        // Re-disable auto-wrap on resize (some terminals reset state on resize)
-        // This ensures content doesn't reflow automatically
+        // CRITICAL: Always re-disable auto-wrap on resize if region is initialized
+        // Some terminals reset auto-wrap state on resize, so we must re-disable it
+        // This ensures content doesn't reflow automatically when terminal resizes
         // Write directly to stdout since this happens outside of render cycle
-        // BUT: Only if we're actively rendering (autoWrapDisabled should only be true during active use)
-        if (!this.disableRendering && this.autoWrapDisabled && this.isInitialized) {
+        if (!this.disableRendering && this.isInitialized) {
           this.stdout.write(ansi.DISABLE_AUTO_WRAP);
+          this.autoWrapDisabled = true;
         }
         
         // Only auto-resize if width wasn't explicitly set by the user
@@ -242,35 +245,23 @@ export class RegionRenderer {
           }
         }
         
-        // CRITICAL: Mark that resize happened - cursor position may be invalid
-        // We'll query the actual cursor position and recalibrate
-        // NOTE: Don't clear savedCursorPosition - we'll handle it in renderNow()
-        // by not restoring it when resizeJustHappened=true
-        this.logToFile(`[resize handler] SETTING resizeJustHappened=true`);
+        // SIMPLE APPROACH: On resize, clear screen and start at top
+        // We can't rely on cursor position after resize, so take over completely
+        this.logToFile(`[resize handler] Resize detected - clearing screen and resetting to top`);
         this.resizeJustHappened = true;
-        // DON'T clear savedCursorPosition - it might still be valid, and we'll handle
-        // the resize case in renderNow() by not restoring it
         
-        // CRITICAL: Query cursor position after resize to use actual position instead of saved
-        // The saved position becomes invalid when terminal scrolls
-        // NOTE: Disabled for now - the polling interferes with stdin (causes hang)
-        // this.queryCursorPositionAfterResize();
+        // Clear the entire terminal screen
+        this.stdout.write(ansi.ERASE_SCREEN);
+        this.stdout.write(ansi.moveCursorTo(1, 1));
         
-        // Also poll multiple times for debugging
-        // NOTE: Disabled for now - the polling interferes with stdin (causes hang)
-        // this.pollCursorPositionAfterResize();
+        // Reset region position to top of terminal
+        this.startRow = 1;
+        this.visibleRegionTopRow = 1;
+        this.savedCursorPosition = false;
         
-        // CRITICAL: Trigger re-render via high-level API to update content with new width
-        // This prevents content from being rendered over (like spacebar prompt)
-        // The old code was a single class, so it didn't need this callback
-        // But our split architecture needs to notify the high-level API to re-render
-        // NOTE: Disabled cursor position querying for now - it was causing issues
-        // The queried position might be at the bottom of the screen, not where the region actually is
-        // if (this.onKeepAlive) {
-        //   this.onKeepAlive();
-        // }
-        // TODO: Re-enable cursor querying once we figure out how to use it correctly
+        // Trigger re-render
         if (this.onKeepAlive) {
+          this.logToFile(`[resize handler] Calling onKeepAlive() to trigger re-render at top of screen`);
           this.onKeepAlive();
         }
       });
@@ -296,58 +287,90 @@ export class RegionRenderer {
     // CRITICAL: Query cursor position BEFORE printing newlines
     // This establishes where the region starts in terminal space
     // We query BEFORE rendering so stdin is restored before waitForSpacebar
+    // Try to query even if TTY check suggests it might not work - queryCursorPosition will handle errors
     let queriedRow: number | null = null;
-    if (process.stdin.isTTY && process.stdout.isTTY) {
-      const queryStartTime = Date.now();
-      try {
-        this.logToFile(`[initializeRegion] QUERYING cursor position before printing newlines (timestamp: ${new Date().toISOString()})...`);
-        const pos = await queryCursorPosition(500);
-        const queryEndTime = Date.now();
-        const queryDuration = queryEndTime - queryStartTime;
-        queriedRow = pos.row;
-        // CRITICAL: Start two lines BELOW the cursor to avoid overwriting the prompt and PNPM output
-        // The cursor is at the prompt line, and there may be PNPM output on the line above or at the cursor
-        // So we start the region two lines below to be safe
-        this.startRow = pos.row + 2;
-        this.logToFile(`[initializeRegion] ✓ GOT cursor position back: row=${pos.row}, col=${pos.col}, setting startRow=${this.startRow} (two lines below cursor to avoid overwriting prompt and PNPM output, query took ${queryDuration}ms, timestamp: ${new Date().toISOString()})`);
-        // CRITICAL: At this point, queryCursorPosition has cleaned up and restored stdin
-        // stdin should be in a clean state for waitForSpacebar
-      } catch (err) {
-        const queryEndTime = Date.now();
-        const queryDuration = queryEndTime - queryStartTime;
-        // Query failed - estimate from terminal height
-        const terminalHeight = process.stdout.isTTY && process.stdout.rows ? process.stdout.rows : 24;
-        this.startRow = terminalHeight - this.height + 1;
-        this.logToFile(`[initializeRegion] ✗ Cursor query FAILED after ${queryDuration}ms: ${err instanceof Error ? err.message : String(err)}, estimating startRow=${this.startRow} (timestamp: ${new Date().toISOString()})`);
-      }
-    } else {
-      // Not a TTY - estimate
-      const terminalHeight = process.stdout.isTTY && process.stdout.rows ? process.stdout.rows : 24;
-      this.startRow = terminalHeight - this.height + 1;
-      this.logToFile(`[initializeRegion] Not a TTY, estimating startRow=${this.startRow} (timestamp: ${new Date().toISOString()})`);
+    const queryStartTime = Date.now();
+    try {
+      this.logToFile(`[initializeRegion] QUERYING cursor position before printing newlines (stdin.isTTY=${process.stdin.isTTY}, stdout.isTTY=${process.stdout.isTTY}, timestamp: ${new Date().toISOString()})...`);
+      const pos = await queryCursorPosition(500);
+      const queryEndTime = Date.now();
+      const queryDuration = queryEndTime - queryStartTime;
+      queriedRow = pos.row;
+      // CRITICAL: Start the region at the cursor position
+      // The cursor is at the prompt line, so we start the region at that same row
+      // BUT: Cap startRow to ensure it fits within the terminal viewport
+      const terminalHeight = this.getTerminalHeight();
+      const desiredStartRow = pos.row;
+      // CRITICAL: Ensure startRow doesn't exceed terminal height
+      // If the cursor is already near the bottom, start from a position that allows the region to fit
+      // We need at least `this.height` lines, so startRow should be at most (terminalHeight - this.height + 1)
+      const maxStartRow = Math.max(1, terminalHeight - this.height + 1);
+      this.startRow = Math.min(desiredStartRow, maxStartRow);
+      this.logToFile(`[initializeRegion] ✓ GOT cursor position back: row=${pos.row}, col=${pos.col}, desiredStartRow=${desiredStartRow}, maxStartRow=${maxStartRow}, setting startRow=${this.startRow} (capped to fit in viewport, query took ${queryDuration}ms, timestamp: ${new Date().toISOString()})`);
+      // CRITICAL: At this point, queryCursorPosition has cleaned up and restored stdin
+      // stdin should be in a clean state for waitForSpacebar
+    } catch (err) {
+      const queryEndTime = Date.now();
+      const queryDuration = queryEndTime - queryStartTime;
+      // Query failed - use a reasonable default (start a few lines from top to avoid overwriting command output)
+      // We can't know the exact cursor position, so use a conservative estimate
+      this.startRow = 3; // Start at row 3 to leave room for command output
+      this.logToFile(`[initializeRegion] ✗ Cursor query FAILED after ${queryDuration}ms: ${err instanceof Error ? err.message : String(err)}, using fallback startRow=${this.startRow} (timestamp: ${new Date().toISOString()})`);
     }
     
     this.isInitialized = true;
 
     // CRITICAL: Position to startRow before printing newlines
-    // We queried the cursor position and set startRow = queriedRow + 2
+    // We queried the cursor position and set startRow = queriedRow (or capped if needed)
     // After query cleanup, the cursor should still be at approximately the queried position
-    // So we need to move down (startRow - queriedRow) = 2 lines to get to startRow
+    // So we need to move down (startRow - queriedRow) lines to get to startRow (if startRow > queriedRow)
     if (queriedRow !== null) {
       const linesToMoveDown = this.startRow - queriedRow;
       if (linesToMoveDown > 0) {
         this.stdout.write(ansi.moveCursorDown(linesToMoveDown));
         this.logToFile(`[initializeRegion] Moved down ${linesToMoveDown} lines to position at startRow=${this.startRow} (queriedRow=${queriedRow})`);
+      } else if (linesToMoveDown === 0) {
+        this.logToFile(`[initializeRegion] Already at startRow=${this.startRow} (queriedRow=${queriedRow}), no movement needed`);
       }
     }
     
-    // Reserve space by printing newlines (this moves cursor down)
+    // Reserve space by printing newlines (this moves cursor down AND scrolls the terminal)
     // Each newline reserves one line for the region
-    // The region starts where the cursor is BEFORE printing newlines (which is now at startRow)
-    // After printing newlines, we're at the line after the region
+    //
+    // CRITICAL: Predict scrolling by tracking logical cursor position
+    // Scrolling happens when we print a newline while cursor is on the last visible row
+    // We predict it, we don't detect it - treat terminal as a 2D framebuffer
+    //
+    // Get CURRENT terminal height just before writing newlines
+    // (not initial height, in case terminal was resized)
+    const terminalHeight = this.getTerminalHeight();
+    const initialStartRow = this.startRow; // Where we start printing newlines (from cursor query)
+    let scrolls = 0;
+    let currentRow = initialStartRow;
+    
+    // For each newline we print, predict if it will cause a scroll
+    // Rule: When logical cursor line index >= terminal rows, we've overflowed and forced a scroll
     for (let i = 0; i < this.height; i++) {
+      // Check BEFORE printing: if we're at or past the bottom row, newline will cause scroll
+      if (currentRow >= terminalHeight) {
+        // We're at the last visible row (or past it), printing newline will cause scroll
+        // After scroll: content moves up by 1 row, cursor stays at terminalHeight
+        scrolls++;
+        currentRow = terminalHeight; // Cursor stays at bottom after scroll
+      } else {
+        // We're not at bottom yet, newline just moves cursor down
+        currentRow++;
+      }
       this.stdout.write('\n');
     }
+    
+    // After printing all newlines, adjust startRow based on scrolling
+    // Each scroll moves the original content up by 1 row in the viewport
+    // So: startRow = initialStartRow - scrolls
+    // This keeps startRow based on the cursor query, just adjusted for scrolling
+    const oldStartRow = this.startRow;
+    this.startRow = initialStartRow - scrolls;
+    this.logToFile(`[initializeRegion] After printing ${this.height} newlines: initialStartRow=${initialStartRow} (from cursor query), currentTerminalHeight=${terminalHeight}, scrolls=${scrolls}, adjusted startRow=${this.startRow} (was ${oldStartRow}, region moved UP ${scrolls} rows due to scrolling)`);
 
     // After printing newlines, cursor is at the start of the line after the region
     // But we want to save at the START of the LAST line (to match where we save after rendering)
@@ -364,77 +387,6 @@ export class RegionRenderer {
     this.savedCursorPosition = true;
   }
 
-  /**
-   * Query cursor position after resize and store it for use in rendering
-   * This helps us position correctly when the saved cursor position is invalid
-   */
-  private async queryCursorPositionAfterResize(): Promise<void> {
-    if (this.disableRendering || !process.stdin.isTTY || !process.stdout.isTTY) {
-      return; // Can't query if not a TTY
-    }
-
-    try {
-      // Query cursor position after a small delay to let resize settle
-      await new Promise(resolve => setTimeout(resolve, 50));
-      const pos = await queryCursorPosition(500);
-      this.queriedCursorPosition = pos;
-      this.logToFile(`[cursor query] After resize - queried cursor at row=${pos.row}, col=${pos.col}`);
-    } catch (err) {
-      this.logToFile(`[cursor query] Failed to query cursor position: ${err instanceof Error ? err.message : String(err)}`);
-      this.queriedCursorPosition = null;
-    }
-  }
-
-  /**
-   * Poll cursor position multiple times after resize to understand if it's moving
-   * This helps debug cursor position inconsistencies on resize
-   */
-  private pollCursorPositionAfterResize(): void {
-    if (this.disableRendering || !process.stdin.isTTY || !process.stdout.isTTY) {
-      return; // Can't poll if not a TTY
-    }
-
-    let pollCount = 0;
-    const maxPolls = 10; // Poll 10 times over ~1 second
-    const pollInterval = 100; // 100ms between polls
-    
-    const poll = async () => {
-      try {
-        const pos = await queryCursorPosition(500); // 500ms timeout per poll
-        pollCount++;
-        this.logToFile(`[cursor poll ${pollCount}/${maxPolls}] After resize - cursor at row=${pos.row}, col=${pos.col}`);
-        
-        // After first few polls, trigger a redraw, then continue polling
-        // This helps us see if the cursor position changes after redraw
-        if (pollCount === 3 && this.onKeepAlive) {
-          this.logToFile(`[cursor poll] Triggering redraw after 3 polls (cursor was at row=${pos.row}, col=${pos.col})`);
-          this.onKeepAlive();
-          // Wait a bit for redraw to complete, then continue polling
-          setTimeout(() => {
-            if (pollCount < maxPolls) {
-              setTimeout(poll, pollInterval);
-            }
-          }, 100); // Give redraw more time to complete
-        } else if (pollCount < maxPolls) {
-          setTimeout(poll, pollInterval);
-        } else {
-          this.logToFile(`[cursor poll] Finished polling after ${maxPolls} attempts`);
-        }
-      } catch (err) {
-        pollCount++;
-        this.logToFile(`[cursor poll ${pollCount}/${maxPolls}] Failed to query cursor position: ${err instanceof Error ? err.message : String(err)}`);
-        if (pollCount < maxPolls) {
-          setTimeout(poll, pollInterval);
-        }
-      }
-    };
-
-    // Start polling after a small delay to let resize settle
-    setTimeout(() => {
-      this.logToFile(`[cursor poll] Starting cursor position polling after resize`);
-      poll();
-    }, 10);
-  }
 
   private logToFile(message: string): void {
     logToFileUtil(message);
@@ -518,19 +470,24 @@ export class RegionRenderer {
     // CRITICAL: With auto-wrap disabled, the cursor stays on the same line after writing
     // So if we rendered 1 line, we're on line 1 (at the end), and we move up 0 lines
     // If we rendered N lines, we're on line N (at the end), and we move up (N - 1) lines
+    // FIXED: Use (linesToRender - 1) as per the working fix
     const linesToMoveUp = linesToRender > 1 ? linesToRender - 1 : 0;
     this.logToFile(`[moveToTopLeftAndSave] linesToRender=${linesToRender}, moving up ${linesToMoveUp} lines to get to top-left (after rendering, cursor is at end of last line)`);
     if (linesToMoveUp > 0) {
       this.renderBuffer.write(ansi.moveCursorUp(linesToMoveUp));
     }
-    this.renderBuffer.write(ansi.MOVE_TO_START_OF_LINE);
-    this.renderBuffer.write(ansi.SAVE_CURSOR);
-    this.savedCursorPosition = true;
-    if (context) {
-      this.logToFile(`[renderNow] Saved cursor at top-left ${context}`);
-    } else {
-      this.logToFile(`[renderNow] Saved cursor at top-left of region (linesToRender=${linesToRender})`);
-    }
+        this.renderBuffer.write(ansi.MOVE_TO_START_OF_LINE);
+        // CRITICAL: Flush buffer BEFORE saving cursor so all movements are executed
+        this.renderBuffer.flush();
+        // Write SAVE_CURSOR directly to stdout (not buffer) so it executes immediately
+        // NOTE: Verification queries disabled - they interfere with stdin
+        this.stdout.write(ansi.SAVE_CURSOR);
+        this.savedCursorPosition = true;
+        if (context) {
+          this.logToFile(`[renderNow] Saved cursor at top-left ${context} (will verify with query)`);
+        } else {
+          this.logToFile(`[renderNow] Saved cursor at top-left of region (linesToRender=${linesToRender}, will verify with query)`);
+        }
   }
 
   /**
@@ -594,6 +551,31 @@ export class RegionRenderer {
       // Only print newlines if the region still fits in viewport
       const shouldReserveLines = oldHeight < terminalHeight && this.lastRenderedHeight < newHeight;
       this.logToFile(`[expandTo] oldHeight=${oldHeight} newHeight=${newHeight} lastRenderedHeight=${this.lastRenderedHeight} terminalHeight=${terminalHeight} shouldReserveLines=${shouldReserveLines} disableRendering=${this.disableRendering}`);
+      
+      // CRITICAL: Predict scrolling correctly
+      // Scroll happens ONLY when we write a newline at row = terminalHeight
+      // The region ends at: startRow + oldHeight - 1
+      // If the region ends at terminalHeight, writing a newline causes scrolling
+      if (this.startRow !== null && shouldReserveLines) {
+        const oldStartRow = this.startRow;
+        const regionEndRow = oldStartRow + oldHeight - 1;
+        
+        if (regionEndRow >= terminalHeight) {
+          // Region ends at or past bottom - writing newline will cause scrolling
+          // After scroll, keep region at bottom
+          this.startRow = terminalHeight - newHeight + 1;
+          this.logToFile(`[expandTo] Updated startRow from ${oldStartRow} to ${this.startRow} (regionEndRow=${regionEndRow} >= terminalHeight=${terminalHeight}, scroll will happen)`);
+        } else {
+          // Region doesn't reach bottom - no scroll, startRow stays the same
+          this.logToFile(`[expandTo] Keeping startRow=${oldStartRow} (regionEndRow=${regionEndRow} < terminalHeight=${terminalHeight}, no scroll)`);
+        }
+      } else if (this.startRow !== null && !shouldReserveLines) {
+        // Not reserving lines (region already exceeds viewport) - just recalculate
+        const oldStartRow = this.startRow;
+        this.startRow = terminalHeight - newHeight + 1;
+        this.logToFile(`[expandTo] Updated startRow from ${oldStartRow} to ${this.startRow} (region height changed from ${oldHeight} to ${newHeight} lines, terminalHeight=${terminalHeight}, no newlines written)`);
+      }
+      
       if (shouldReserveLines) {
         this.logToFile(`[expandTo] WRITING ${additionalLines} newlines (reserving space even though disableRendering may be ${this.disableRendering})`);
         for (let i = 0; i < additionalLines; i++) {
@@ -663,6 +645,36 @@ export class RegionRenderer {
     this.pendingFrame[lineIndex] = content;
 
     // Schedule render
+    this.scheduleRender();
+  }
+
+  /**
+   * Update multiple lines at once (used by SectionReference)
+   * This method updates the pendingFrame and schedules a single render
+   */
+  updateLines(updates: Array<{ lineNumber: number; content: string }>): void {
+    if (updates.length === 0) {
+      return;
+    }
+
+    // Update all lines in pendingFrame
+    for (const { lineNumber, content } of updates) {
+      if (lineNumber < 1) {
+        throw new Error('Line numbers start at 1');
+      }
+
+      const lineIndex = lineNumber - 1;
+
+      // Ensure pending frame has enough lines
+      while (this.pendingFrame.length <= lineIndex) {
+        this.pendingFrame.push('');
+      }
+
+      // Update the line
+      this.pendingFrame[lineIndex] = content;
+    }
+
+    // Schedule a single render for all updates
     this.scheduleRender();
   }
 
@@ -737,6 +749,7 @@ export class RegionRenderer {
       this.copyPendingToPrevious();
       return;
     }
+    
 
     // CRITICAL: Prevent concurrent renders
     // If we're already rendering, skip this render (the current render will show the latest state)
@@ -767,6 +780,21 @@ export class RegionRenderer {
         this.autoWrapDisabled = true;
       }
 
+      // CRITICAL: Check if pendingFrame is empty but previousFrame has content
+      // This happens when a subsequent render is triggered but components haven't been re-rendered
+      // In this case, we need to call onKeepAlive() to re-render all components
+      const pendingFrameIsEmpty = this.pendingFrame.length > 0 && this.pendingFrame.every(line => line === '');
+      const previousFrameHasContent = this.previousFrame.length > 0 && this.previousFrame.some(line => line !== '');
+      
+      if (pendingFrameIsEmpty && previousFrameHasContent && this.onKeepAlive && this.hasRendered) {
+        this.logToFile(`[renderNow] pendingFrame is empty but previousFrame has content - calling onKeepAlive() to re-render components`);
+        this.onKeepAlive();
+        // CRITICAL: Return early - onKeepAlive() will trigger a fresh render cycle
+        // Don't continue with this render as it would use stale positioning
+        this.isRendering = false;
+        return;
+      }
+      
       // CRITICAL: Check if content has actually changed before rendering
       // This prevents unnecessary re-renders that cause duplicates
       const { contentChanged, heightChanged } = this.hasContentChanged();
@@ -815,520 +843,402 @@ export class RegionRenderer {
       const terminalHeight = this.getTerminalHeight();
       const regionExceedsViewport = this.height > terminalHeight;
       
-      // CRITICAL: On first render (!hasRendered), we're already at the end of the region from initializeRegion().
-      // On resize (resizeJustHappened), we need to restore to saved position to get back to the region.
-      // On subsequent normal renders, restore to saved position UNLESS region exceeds viewport.
-      // When region exceeds viewport, the saved position is in scrollback, and restoring
-      // then moving up would cause us to write outside the region.
-      if (!this.hasRendered) {
-        // First render - we're at the start of the last line from initializeRegion()
-        // CRITICAL: We know the region starts at startRow (absolute terminal row)
-        // After initialization, we're at startRow + height (the line after the region)
-        // We need to position to startRow to begin rendering
-        this.logToFile(`[renderNow] First render - region starts at terminal row ${this.startRow}, currently at row ${this.startRow !== null ? this.startRow + this.height : 'unknown'} (after initialization)`);
-        
-        // CRITICAL: Only write a newline at the bottom if the region exceeds viewport
-        // If region fits in viewport, just move up to the first line and paint
-        // The newline-at-bottom logic is only needed when expanding past viewport
-        if (regionExceedsViewport) {
-          // Region exceeds viewport: we need to render only the visible lines (last terminalHeight lines)
-          // Calculate which lines are visible
-          const visibleStartLineIndex = this.height - terminalHeight;
-          this.logToFile(`[renderNow] First render - region exceeds viewport, rendering only visible lines (startLineIndex=${visibleStartLineIndex}, linesToRender=${terminalHeight})`);
-          // Write newline at bottom first to scroll everything up
-          // This ensures we're not overwriting anything above the region
-          this.renderBuffer.write('\n');
-          // After writing newline, we're at startRow + height (one line below the region)
-          // We want to position to startRow + visibleStartLineIndex (start of visible region)
-          // So we need to move up: (startRow + height) - (startRow + visibleStartLineIndex) = height - visibleStartLineIndex = terminalHeight
-          if (terminalHeight > 0) {
-            this.renderBuffer.write(ansi.moveCursorUp(terminalHeight));
-          }
-          this.renderBuffer.write(ansi.MOVE_TO_START_OF_LINE);
-          this.logToFile(`[renderNow] After positioning, cursor should be at terminal row ${this.startRow !== null ? this.startRow + visibleStartLineIndex : 'unknown'} (start of visible region)`);
-        } else {
-          // Region fits in viewport: just move up to the first line and paint
-          // We're at the start of the last line (after initialization), so move up (height-1) lines to get to first line
-          // This should position us at startRow
-          this.logToFile(`[renderNow] First render - region fits in viewport, moving up to first line and painting`);
-          this.logToFile(`[renderNow] Currently at start of last line (line ${this.height}), moving up ${this.height > 1 ? this.height - 1 : 0} lines to get to first line`);
-          if (this.height > 1) {
-            this.renderBuffer.write(ansi.moveCursorUp(this.height - 1));
-          }
-          this.renderBuffer.write(ansi.MOVE_TO_START_OF_LINE);
-          this.logToFile(`[renderNow] After positioning, cursor should be at terminal row ${this.startRow} (start of region)`);
-        }
-        // Don't save cursor here - we'll save it at the top-left after rendering
-        // This ensures the saved position is at the top-left, not at the end
-      } else if (this.resizeJustHappened) {
-        // After resize - DON'T restore cursor position because it might be invalid
-        // The terminal may have scrolled or the viewport changed, making the saved
-        // position wrong. Instead, we'll position from the current location or use
-        // relative movements. The actual positioning will happen in the region-exceeds-viewport
-        // or region-fits logic below.
-        this.logToFile(`[renderNow] After resize - NOT restoring cursor (position may be invalid, will recalculate)`);
-        // Don't restore cursor - let the positioning logic below handle it
-        // This prevents writing content in the wrong place
-        // CRITICAL: Mark that we just had a resize so positioning logic knows not to restore cursor
-        // We'll reset this flag after positioning is done
-        // CRITICAL: On resize, we need to re-initialize positioning, but DON'T reset lastRenderedHeight
-        // We need to keep the previous height so we can correctly calculate if height increased
-        // Only write newlines if height actually increased from before resize
-        // NOTE: Don't reset resizeJustHappened yet - we need it for the positioning logic below
-        } else {
-          // Subsequent renders
-          // CRITICAL: Don't use RESTORE_CURSOR - it's unreliable (saved position doesn't match actual position)
-          // For region-fits case: the region is always at the bottom of the terminal
-          // So we can position by moving to the bottom, then moving up (height) lines
-          if (regionExceedsViewport) {
-            // For region-exceeds-viewport, we'll handle positioning in the rendering loop
-            this.logToFile(`[renderNow] Subsequent render - region exceeds viewport, positioning handled in rendering loop`);
-          } else {
-            // Region fits: position from bottom of terminal
-            // The region is at the bottom, so move to bottom, then up (height) lines to top of region
-            this.logToFile(`[renderNow] Subsequent render - region fits, positioning from bottom of terminal`);
-            // Move to bottom: write newline to go to next line, then move up 1 to get to last line
-            // Actually, better: use absolute positioning to go to (terminalHeight, 1), then move up (height) lines
-            // But we don't have terminal height easily available here...
-            // Simpler: just don't restore, and let the rendering logic position from current location
-            // The rendering loop will handle positioning correctly
-            this.renderBuffer.write(ansi.MOVE_TO_START_OF_LINE);
-          }
-        }
+      // Track current terminal row as we render (helps detect bottom of viewport)
+      // CRITICAL: After positioning cursor, currentTerminalRow will be set to the position we just moved to
+      let currentTerminalRow: number | null = null;
       
-      // CRITICAL: If height changed, we need to adjust the saved position
-      // But when region exceeds viewport, minimize cursor movements to allow scrolling
-      if (this.lastRenderedHeight !== this.height && this.lastRenderedHeight > 0) {
-        const heightDiff = this.height - this.lastRenderedHeight;
-        const regionExceedsViewport = this.height > terminalHeight;
+      // Simple positioning logic:
+      // 1. First render: position at startRow and render
+      // 2. Resize: position at row 1 (already cleared) and render
+      // 3. Subsequent renders: position at startRow and render
+      if (this.resizeJustHappened) {
+        // After resize - screen was already cleared by resize handler, just position at top
+        // startRow is already set to 1 by the resize handler
+        this.logToFile(`[renderNow] After resize - screen cleared, positioning at top (startRow=${this.startRow})`);
         
-        if (heightDiff > 0) {
-          // Height increased: move down to new end using cursor movement (not newlines)
-          // But if region exceeds viewport, only move if necessary for visible rendering
-          if (!regionExceedsViewport || this.lastRenderedHeight < terminalHeight) {
-            // Only move cursor if we're still within viewport or just exceeded it
-            this.renderBuffer.write(ansi.moveCursorDown(heightDiff));
-            // Re-save the corrected position
-            this.renderBuffer.write(ansi.SAVE_CURSOR);
-          }
-          // If region already exceeded viewport, don't move cursor - let rendering handle it
-        } else if (heightDiff < 0) {
-          // Height decreased: move up to new end
-          this.renderBuffer.write(ansi.moveCursorUp(-heightDiff));
-          // Re-save the corrected position
-          this.renderBuffer.write(ansi.SAVE_CURSOR);
+        if (this.startRow !== null) {
+          // Position at top of screen (already cleared by resize handler)
+          this.renderBuffer.write(ansi.moveCursorTo(1, this.startRow));
+          this.visibleRegionTopRow = this.startRow;
+          this.renderBuffer.flush();
+        } else {
+          // Fallback: position at row 1
+          this.logToFile(`[renderNow] After resize - WARNING: startRow is null, using row 1 as fallback`);
+          this.startRow = 1;
+          this.visibleRegionTopRow = 1;
+          this.renderBuffer.write(ansi.moveCursorTo(1, 1));
+          this.renderBuffer.flush();
         }
+      } else {
+        // First render or subsequent render - same logic: position at startRow and render
+        if (this.startRow === null) {
+          throw new Error('startRow is null - this should not happen');
+        }
+        
+        if (regionExceedsViewport) {
+          // Region exceeds viewport - calculate which lines are visible
+          // If top has scrolled off (startRow <= 1), show last terminalHeight lines starting at row 1
+          // Otherwise, show lines starting from startRow
+          if (this.startRow <= 1) {
+            // Top has scrolled off - position at row 1, show last terminalHeight lines
+            const startLineIndex = this.height - terminalHeight;
+            this.logToFile(`[renderNow] Region top scrolled off - positioning at row 1, showing last ${terminalHeight} lines (startLineIndex=${startLineIndex})`);
+            this.renderBuffer.write(ansi.moveCursorTo(1, 1));
+            currentTerminalRow = 1;
+            this.visibleRegionTopRow = 1;
+          } else {
+            // Top hasn't scrolled off yet - position at startRow, show visible lines from start
+            const visibleLinesFromStart = terminalHeight - this.startRow + 1;
+            this.logToFile(`[renderNow] Region top visible - positioning at startRow=${this.startRow}, showing ${visibleLinesFromStart} lines`);
+            this.renderBuffer.write(ansi.moveCursorTo(1, this.startRow));
+            currentTerminalRow = this.startRow;
+            this.visibleRegionTopRow = this.startRow;
+          }
+        } else {
+          // Region fits - position at startRow
+          this.logToFile(`[renderNow] Positioning at startRow=${this.startRow}`);
+          this.renderBuffer.write(ansi.moveCursorTo(1, this.startRow));
+          currentTerminalRow = this.startRow;
+          this.visibleRegionTopRow = this.startRow;
+        }
+        
+        this.renderBuffer.flush();
       }
       
-      // Calculate which lines to render:
-      // - If region fits in viewport: render all lines (0 to height-1)
-      // - If region exceeds viewport: render only visible lines (the last terminalHeight lines)
-      //   BUT: Only use startLineIndex > 0 AFTER we've actually scrolled (visibleRegionTopRow is set)
-      //   Before scrolling, even if region exceeds viewport, we should render from line 0
+      // CRITICAL: Shared rendering logic - runs for both first render and subsequent renders
+      // Calculate which lines to render
       let startLineIndex = 0;
       let linesToRender = Math.min(this.pendingFrame.length, this.height);
       
       if (regionExceedsViewport) {
-        // Region exceeds viewport: ALWAYS render only the visible lines (last terminalHeight lines)
-        // We should never render from line 0 when the region exceeds the viewport
-        // The visible portion is always the last terminalHeight lines of the region
-        startLineIndex = this.height - terminalHeight;
-        linesToRender = terminalHeight;
-        this.logToFile(`[renderNow] Region exceeds viewport: height=${this.height} terminalHeight=${terminalHeight} startLineIndex=${startLineIndex} linesToRender=${linesToRender} (rendering only visible lines)`);
+        // When region exceeds viewport, calculate which lines are visible
+        // The region starts at startRow and has height lines
+        // The viewport is rows 1 to terminalHeight
+        // Calculate how many lines fit in the viewport starting from startRow
+        if (this.startRow === null) {
+          // Fallback: show the last terminalHeight lines if startRow is not set
+          startLineIndex = this.height - terminalHeight;
+          linesToRender = terminalHeight;
+        } else {
+          const visibleLinesFromStart = Math.max(0, terminalHeight - this.startRow + 1);
+          if (visibleLinesFromStart >= this.height) {
+            // All lines fit in viewport, show all starting from line 0
+            startLineIndex = 0;
+            linesToRender = this.height;
+          } else if (this.startRow <= 1) {
+            // Region starts at or above top of viewport, show the last terminalHeight lines
+            startLineIndex = this.height - terminalHeight;
+            linesToRender = terminalHeight;
+          } else {
+            // Region starts below top of viewport, show lines that fit from the start
+            startLineIndex = 0;
+            linesToRender = visibleLinesFromStart;
+          }
+        }
+        if (!this.hasRendered) {
+          this.logToFile(`[renderNow] First render - region exceeds viewport, rendering only visible lines (startRow=${this.startRow}, startLineIndex=${startLineIndex}, linesToRender=${linesToRender})`);
+        }
       }
       
-      // CRITICAL: Only write newlines when the region GROWS (height increases)
-      // This is "dynamic allocation" of lines - we only create new lines when needed
-      // If height stays the same or decreases, we just update existing lines without newlines
-      // On first render, initializeRegion() already created the lines, so no newlines needed
-      // After resize, compare against previous height to see if we need newlines
-      // CRITICAL: Only consider height increased if we've rendered before AND height is strictly greater
-      // This prevents writing newlines on resize when height hasn't actually changed
+      // Calculate newline logic
       const heightIncreased = this.hasRendered && this.lastRenderedHeight > 0 && this.height > this.lastRenderedHeight;
       const newLinesCount = heightIncreased ? this.height - this.lastRenderedHeight : 0;
-      
-      // CRITICAL: Defensive check - never write newlines if height didn't actually increase
-      // This is a safety measure to prevent duplicates on resize
-      // If newLinesCount is 0, we MUST NOT write any newlines, period
       const shouldWriteNewlines = newLinesCount > 0 && heightIncreased;
       
-      this.logToFile(`[renderNow] hasRendered=${this.hasRendered} height=${this.height} lastRenderedHeight=${this.lastRenderedHeight} heightIncreased=${heightIncreased} newLinesCount=${newLinesCount} shouldWriteNewlines=${shouldWriteNewlines} resizeJustHappened=${this.resizeJustHappened}`);
+      this.logToFile(`[renderNow] hasRendered=${this.hasRendered} height=${this.height} lastRenderedHeight=${this.lastRenderedHeight} heightIncreased=${heightIncreased} newLinesCount=${newLinesCount} shouldWriteNewlines=${shouldWriteNewlines}`);
       
-      // CRITICAL: When region exceeds viewport, we need to render the visible lines
-      // Since we're only writing newlines for NEW lines, we need to position correctly
-      // BUT: If startLineIndex === 0, we haven't scrolled yet, so use "region fits" positioning
-      if (regionExceedsViewport && startLineIndex > 0) {
-        // Region exceeds viewport AND we've scrolled: render only the visible lines (last terminalHeight lines)
-        // CRITICAL: The saved cursor position is at the top-left of the VISIBLE region (not the entire region)
-        // The visible region starts at startLineIndex, so we need to restore and we're already at the right place
-        
-        // Track current terminal row to detect when we're at the bottom of the viewport
-        // Use visibleRegionTopRow if we have it (tracked from previous renders), otherwise estimate
-        let currentTerminalRow: number | null = null;
+      // CRITICAL: When region exceeds viewport and we're adding a new line at bottom:
+      // Write the top line that will scroll out BEFORE the loop (so it's in scrollback)
+      const lastLineIndex = startLineIndex + linesToRender - 1;
+      const isLastLineNew = shouldWriteNewlines && lastLineIndex === (this.height - 1);
+      const willScroll = regionExceedsViewport && isLastLineNew && startLineIndex > 0;
+      
+      if (willScroll) {
+        const topLineIndex = startLineIndex;
+        const topLineContent = this.pendingFrame[topLineIndex] || '';
+        this.logToFile(`[renderNow] ===== WILL_SCROLL BLOCK START =====`);
+        this.logToFile(`[renderNow] About to write newline at bottom - first writing top line ${topLineIndex + 1} that will scroll out`);
+        this.logToFile(`[renderNow] BEFORE positioning: currentTerminalRow=${currentTerminalRow}, visibleRegionTopRow=${this.visibleRegionTopRow}, terminalHeight=${terminalHeight}`);
+        // CRITICAL: Ensure we're positioned at the top of the visible region before writing
+        // The cursor should already be there from positioning logic, but verify and fix if needed
+        // ALWAYS reposition to be absolutely sure we're at the correct position
         if (this.visibleRegionTopRow !== null) {
-          // We know the terminal row of the top of the visible region from previous renders
+          this.logToFile(`[renderNow] MOVING cursor to row ${this.visibleRegionTopRow} (visibleRegionTopRow)`);
+          this.renderBuffer.write(ansi.moveCursorTo(1, this.visibleRegionTopRow));
           currentTerminalRow = this.visibleRegionTopRow;
-          this.logToFile(`[renderNow] Using tracked visibleRegionTopRow=${this.visibleRegionTopRow}`);
+          // CRITICAL: Flush to ensure cursor movement is executed before writing
+          this.logToFile(`[renderNow] FLUSHING buffer after cursor move (buffer size before flush: ${this.renderBuffer.size})`);
+          this.renderBuffer.flush();
+          this.logToFile(`[renderNow] AFTER flush: currentTerminalRow=${currentTerminalRow} (should be ${this.visibleRegionTopRow})`);
         } else {
-          // Estimate: if we're rendering the last terminalHeight lines, the top of visible region
-          // is at terminal row (terminalHeight - linesToRender + 1)
-          currentTerminalRow = terminalHeight - linesToRender + 1;
-          this.logToFile(`[renderNow] Estimating currentTerminalRow=${currentTerminalRow} (terminalHeight=${terminalHeight} - linesToRender=${linesToRender} + 1)`);
+          this.logToFile(`[renderNow] ERROR: visibleRegionTopRow is null! Cannot position cursor!`);
         }
-        
-        if (this.resizeJustHappened && this.savedCursorPosition) {
-          // After resize, restore saved cursor position (at top-left of visible region)
-          this.logToFile(`[renderNow] After resize - RESTORING cursor in region-exceeds-viewport path (at top-left of visible region, startLineIndex=${startLineIndex})`);
-          this.renderBuffer.write(ansi.RESTORE_CURSOR);
-          // CRITICAL: Clear the line after restoring to prevent duplicates
+        // Write the top line that will scroll out at the top of the visible region
+        // CRITICAL: Before writing, clear the line above (where region line 0 was from previous render)
+        // This prevents region line 1 from appearing at the bottom after scroll
+        if (startLineIndex > 0 && currentTerminalRow !== null && currentTerminalRow > 1) {
+          this.logToFile(`[renderNow] Clearing line above (row ${currentTerminalRow - 1}) before writing top line to prevent region line 1 from appearing at bottom`);
+          this.renderBuffer.write(ansi.moveCursorTo(1, currentTerminalRow - 1));
           this.clearCurrentLine();
-          // After resize, we don't know the exact position, so estimate
-          if (currentTerminalRow === null) {
-            currentTerminalRow = terminalHeight - linesToRender + 1;
+          // Move back to where we were
+          this.renderBuffer.write(ansi.moveCursorTo(1, currentTerminalRow));
+        }
+        const topContentToWrite = this.truncateContent(topLineContent, this.width);
+        this.logToFile(`[renderNow] ABOUT TO WRITE top line content at currentTerminalRow=${currentTerminalRow}`);
+        this.logToFile(`[renderNow] Top line content (first 50 chars): "${topContentToWrite.substring(0, 50)}..."`);
+        this.clearCurrentLine();
+        this.renderBuffer.write(topContentToWrite);
+        // CRITICAL: Reset ANSI codes to prevent color bleed
+        this.renderBuffer.write(ansi.RESET);
+        this.logToFile(`[renderNow] WROTE top line content, currentTerminalRow=${currentTerminalRow}`);
+        // CRITICAL: Move to the bottom of the viewport BEFORE writing newline
+        // This ensures the top line we just wrote stays at the top, and the newline scrolls correctly
+        this.logToFile(`[renderNow] BEFORE moving to bottom: currentTerminalRow=${currentTerminalRow}, terminalHeight=${terminalHeight}`);
+        if (currentTerminalRow !== null) {
+          const linesToBottom = terminalHeight - currentTerminalRow;
+          this.logToFile(`[renderNow] Moving cursor DOWN ${linesToBottom} lines to reach bottom`);
+          if (linesToBottom > 0) {
+            this.renderBuffer.write(ansi.moveCursorDown(linesToBottom));
+            currentTerminalRow = terminalHeight;
           }
-          // Update tracked position
-          this.visibleRegionTopRow = currentTerminalRow;
-        } else if (this.savedCursorPosition) {
-          // Normal case: restore cursor (at top-left of visible region)
-          this.logToFile(`[renderNow] RESTORING cursor (region exceeds viewport, at top-left of visible region, startLineIndex=${startLineIndex})`);
-          this.renderBuffer.write(ansi.RESTORE_CURSOR);
-          // CRITICAL: Clear the line after restoring to prevent duplicates
-          // RESTORE_CURSOR might restore to a position with existing content
-          this.clearCurrentLine();
-          // Update tracked position if we have it, otherwise use estimate
-          if (this.visibleRegionTopRow === null) {
-            this.visibleRegionTopRow = currentTerminalRow;
+        }
+        this.logToFile(`[renderNow] Writing newline at bottom (currentTerminalRow=${currentTerminalRow})`);
+        this.renderBuffer.write('\n');
+        this.renderBuffer.write(ansi.MOVE_TO_START_OF_LINE);
+        if (currentTerminalRow !== null) {
+          currentTerminalRow = currentTerminalRow + 1;
+        }
+        this.logToFile(`[renderNow] After newline: currentTerminalRow=${currentTerminalRow} (scrolled)`);
+        // CRITICAL: After writing newline at bottom, terminal scrolled
+        // We need to move back to the top of the visible region to start the loop
+        // The top line we just wrote is now one line up (scrolled), so visibleRegionTopRow moved up by 1
+        if (this.visibleRegionTopRow !== null) {
+          const newTopRow = this.visibleRegionTopRow - 1;
+          this.visibleRegionTopRow = newTopRow;
+          this.logToFile(`[renderNow] After scroll, moving back to top of visible region at row ${newTopRow} (was ${this.visibleRegionTopRow + 1})`);
+          this.renderBuffer.write(ansi.moveCursorTo(1, newTopRow));
+          currentTerminalRow = newTopRow;
+          this.logToFile(`[renderNow] Positioned at newTopRow=${newTopRow}, currentTerminalRow=${currentTerminalRow}`);
+        }
+        this.logToFile(`[renderNow] ===== WILL_SCROLL BLOCK END =====`);
+      }
+      
+      // Unified rendering loop for both region-fits and region-exceeds-viewport
+      const loopStart = willScroll ? 1 : 0;
+      let actuallyWroteNewlineAtBottom = willScroll; // Set to true if we already wrote newline in willScroll block
+      let wroteNewlineForLastLine = false; // Track if we wrote newline for last line (region-fits case)
+      this.logToFile(`[renderNow] ===== MAIN RENDERING LOOP START =====`);
+      this.logToFile(`[renderNow] loopStart=${loopStart}, linesToRender=${linesToRender}, startLineIndex=${startLineIndex}, currentTerminalRow=${currentTerminalRow}`);
+      if (startLineIndex > 0) {
+        this.logToFile(`[renderNow] WARNING: startLineIndex=${startLineIndex} > 0, so region line 0 (first line) will NOT be rendered in this loop!`);
+        this.logToFile(`[renderNow] Region line 0 content: "${(this.pendingFrame[0] || '').substring(0, 50)}..."`);
+        // CRITICAL: Clear the bottom line of the viewport BEFORE rendering
+        // Region line 1 might have scrolled to the bottom, so clear it there
+        const bottomRow = terminalHeight;
+        this.logToFile(`[renderNow] CRITICAL: Clearing bottom line of viewport (row ${bottomRow}) BEFORE rendering to remove leftover region line 1`);
+        const savedRow = currentTerminalRow;
+        this.renderBuffer.write(ansi.moveCursorTo(1, bottomRow));
+        this.clearCurrentLine();
+        // Move back
+        if (savedRow !== null) {
+          this.renderBuffer.write(ansi.moveCursorTo(1, savedRow));
+          currentTerminalRow = savedRow;
+        }
+        this.renderBuffer.flush();
+      }
+      for (let i = loopStart; i < linesToRender; i++) {
+        const lineIndex = startLineIndex + i;
+        const content = this.pendingFrame[lineIndex] || '';
+        const isLastLine = (i === linesToRender - 1);
+        this.logToFile(`[renderNow] LOOP iteration i=${i}, lineIndex=${lineIndex} (region line ${lineIndex + 1}), currentTerminalRow=${currentTerminalRow}`);
+        // CRITICAL: Check if this line is one of the new lines: lineIndex >= (this.height - newLinesCount)
+        // Only write newline if region is expanding (shouldWriteNewlines is true)
+        const isNewLine = shouldWriteNewlines && lineIndex >= (this.height - newLinesCount);
+        
+        // CRITICAL: Always clear the line BEFORE writing
+        // This prevents any leftover content from causing duplicates
+        this.clearCurrentLine();
+        
+        // CRITICAL: For region-exceeds-viewport with new line at bottom, write newline FIRST to trigger scroll
+        // For region-fits, write content first, then newline (normal order)
+        const isNewLineAtBottom = isNewLine && isLastLine;
+        if (isNewLineAtBottom && regionExceedsViewport) {
+          // Region exceeds viewport: write newline FIRST to trigger scroll, then query cursor
+          // CRITICAL: Only query cursor if we're actually at the bottom of the viewport (will trigger scrolling)
+          const isAtBottomOfViewport = currentTerminalRow !== null && currentTerminalRow === terminalHeight;
+          
+          this.logToFile(`[renderNow] WRITING newline FIRST for new line ${lineIndex + 1} at bottom (region expanding${isAtBottomOfViewport ? ', will trigger scroll' : ''})`);
+          this.renderBuffer.write('\n');
+          if (currentTerminalRow !== null) {
+            currentTerminalRow = currentTerminalRow + 1;
+          }
+          actuallyWroteNewlineAtBottom = true;
+          
+          if (isAtBottomOfViewport) {
+            // CRITICAL: Flush buffer to ensure newline is written before querying
+            this.renderBuffer.flush();
+            // CRITICAL: Query cursor position to confirm terminal has finished scrolling
+            // Terminal scrolling may be asynchronous, so we need to wait for it to complete
+            this.logToFile(`[renderNow] At bottom of viewport - querying cursor to confirm scroll completed...`);
+            try {
+              const pos = await queryCursorPosition(500);
+              this.logToFile(`[renderNow] ✓ Cursor query after newline: row=${pos.row}, col=${pos.col} (expected row=${terminalHeight + 1} if scroll occurred)`);
+              
+              if (pos.row === terminalHeight + 1) {
+                // Scroll happened - move up one to get back to the last visible line
+                this.renderBuffer.write(ansi.moveCursorUp(1));
+                this.visibleRegionTopRow = terminalHeight - (linesToRender - 1);
+                this.logToFile(`[renderNow] Scroll confirmed - updated visibleRegionTopRow=${this.visibleRegionTopRow}`);
+              } else {
+                this.logToFile(`[renderNow] WARNING: Scroll did not occur (cursor at row=${pos.row}, expected ${terminalHeight + 1})`);
+                this.visibleRegionTopRow = terminalHeight - (linesToRender - 1);
+              }
+            } catch (err) {
+              this.logToFile(`[renderNow] ✗ Cursor query failed: ${err instanceof Error ? err.message : String(err)}, proceeding anyway`);
+              this.renderBuffer.write(ansi.moveCursorUp(1));
+              this.visibleRegionTopRow = terminalHeight - (linesToRender - 1);
+            }
           } else {
-            currentTerminalRow = this.visibleRegionTopRow;
+            // Not at bottom of viewport - just move up to get back to the line
+            this.renderBuffer.write(ansi.moveCursorUp(1));
+            this.logToFile(`[renderNow] Not at bottom of viewport (currentTerminalRow was ${currentTerminalRow !== null ? currentTerminalRow - 1 : 'null'}), moved up 1 to get back to line`);
           }
-        } else {
-          // No saved position - position from current location
-          // Move to start of current line, then move up to get to first visible line
-          this.renderBuffer.write(ansi.MOVE_TO_START_OF_LINE);
-          if (linesToRender > 1) {
-            this.renderBuffer.write(ansi.moveCursorUp(linesToRender - 1));
-          }
-          this.renderBuffer.write(ansi.MOVE_TO_START_OF_LINE);
-          // We don't know the absolute position, so we can't track it
-          currentTerminalRow = null;
-          this.visibleRegionTopRow = null;
         }
         
-        this.logToFile(`[renderNow] Region exceeds viewport: height=${this.height} terminalHeight=${terminalHeight} startLineIndex=${startLineIndex} linesToRender=${linesToRender} currentTerminalRow=${currentTerminalRow ?? 'unknown'} visibleRegionTopRow=${this.visibleRegionTopRow ?? 'null'}`);
+        // CRITICAL: Trust the grid layout system - it should ensure content fits within width
+        const contentToWrite = this.truncateContent(content, this.width);
         
-        // CRITICAL: When region exceeds viewport and we're adding a new line:
-        // 1. First, write the top line that will scroll out (so it's in scrollback)
-        // 2. Then write the newline at the bottom (this scrolls everything up)
-        // 3. Then render the new line content
-        // This ensures the top line is written to scrollback before it scrolls out
+        // Write content (truncated only if significantly too long)
+        const isFirstLine = lineIndex === 0;
+        const terminalRowForLog = currentTerminalRow !== null ? `terminal row ${currentTerminalRow}` : 'terminal row unknown';
+        this.logToFile(`[renderNow] WRITING content for line ${lineIndex + 1} (region line ${lineIndex + 1}/${this.height}, visible line ${i + 1}/${linesToRender}, ${terminalRowForLog}, startLineIndex=${startLineIndex}, isFirstLine=${isFirstLine}): "${contentToWrite.substring(0, 50)}${contentToWrite.length > 50 ? '...' : ''}"`);
+        this.renderBuffer.write(contentToWrite);
         
-        // CRITICAL: Before writing a newline at the bottom, we need to ensure the top line is written
-        // The top line that will scroll out is at startLineIndex (the top of the visible region)
-        // We're already at the top, so we can write it right here before the loop
-        const lastLineIndex = startLineIndex + linesToRender - 1;
-        const isLastLineNew = shouldWriteNewlines && lastLineIndex === (this.height - 1);
-        const willScroll = isLastLineNew;
+        // CRITICAL: Reset ANSI codes after writing content to prevent color bleed to next line
+        // This ensures that any active color/style codes are reset before moving to the next line
+        this.renderBuffer.write(ansi.RESET);
         
-        if (willScroll) {
-          // We're about to write a newline at the bottom, which will scroll the top line out
-          // First, write the top line that will scroll out (so it's in scrollback)
-          const topLineIndex = startLineIndex;
-          const topLineContent = this.pendingFrame[topLineIndex] || '';
-          this.logToFile(`[renderNow] About to write newline at bottom - first writing top line ${topLineIndex + 1} that will scroll out`);
-          // We're already at the top of the visible region, so write it here
-          this.clearCurrentLine();
-          const topContentToWrite = this.truncateContent(topLineContent, this.width);
-          this.renderBuffer.write(topContentToWrite);
-          // Move to the second line (i=1) where we'll start the loop
+        // CRITICAL: Write newline ONLY for new lines when region is expanding
+        // After resize, we're re-rendering existing lines - NO newlines should be written
+        // Only write newlines when height actually increased (shouldWriteNewlines is true)
+        if (isNewLine && !isLastLine && shouldWriteNewlines) {
+          // New line, not at bottom: write newline normally
+          this.logToFile(`[renderNow] WRITING newline for line ${lineIndex + 1} (new line, region expanding, not at bottom)`);
+          this.renderBuffer.write('\n');
+          if (currentTerminalRow !== null) {
+            currentTerminalRow = currentTerminalRow + 1;
+          }
+        } else if (isNewLineAtBottom && !regionExceedsViewport && shouldWriteNewlines) {
+          // New line at bottom, region fits: write newline after content (normal order)
+          this.logToFile(`[renderNow] WRITING newline for last line ${lineIndex + 1} (new line, region expanding, region fits)`);
+          this.renderBuffer.write('\n');
+          if (currentTerminalRow !== null) {
+            currentTerminalRow = currentTerminalRow + 1;
+          }
+          wroteNewlineForLastLine = true;
+        } else if (!isLastLine && !isNewLine) {
+          // Not the last line and not a new line: move to next line (NO newline)
           this.renderBuffer.write(ansi.moveCursorDown(1));
           this.renderBuffer.write(ansi.MOVE_TO_START_OF_LINE);
-          // We moved down 1 line, so update currentTerminalRow
           if (currentTerminalRow !== null) {
             currentTerminalRow = currentTerminalRow + 1;
           }
         }
-        
-        // Render from top to bottom
-        // CRITICAL: We need to clear each line before writing because we might be updating existing lines
-        // If we wrote the top line before the loop (to ensure it's in scrollback), start from i=1
-        const loopStart = willScroll ? 1 : 0;
-        let actuallyWroteNewlineAtBottom = false;
-        for (let i = loopStart; i < linesToRender; i++) {
-          const lineIndex = startLineIndex + i;
-          const content = this.pendingFrame[lineIndex] || '';
-          const isLastLine = (i === linesToRender - 1);
-          // CRITICAL: Check if this line is one of the new lines: lineIndex >= (this.height - newLinesCount)
-          // Only write newline if region is expanding (shouldWriteNewlines is true)
-          const isNewLine = shouldWriteNewlines && lineIndex >= (this.height - newLinesCount);
-          
-          // Track current terminal row: we're at the row for line i
-          // If we started at loopStart, we're at currentTerminalRow + (i - loopStart)
-          // But we need to account for the fact that we're already at a certain row when we start
-          // Actually, we should track it as: start row + (i - loopStart) for the current line
-          // But we don't know the start row exactly... let's track it incrementally
-          // When we render line i, we're at row: initialRow + (i - loopStart)
-          // But we already updated currentTerminalRow if we wrote the top line, so it's already correct
-          // We just need to update it as we move down in the loop
-          if (i > loopStart && currentTerminalRow !== null) {
-            // We moved down from the previous line
-            currentTerminalRow = currentTerminalRow + 1;
-          }
-          
-          // CRITICAL: Always clear the line BEFORE writing
-          // This prevents any leftover content from causing duplicates
-          this.clearCurrentLine();
-          
-          // CRITICAL: For new lines at the bottom of viewport, write newline FIRST to trigger scroll,
-          // then query cursor to confirm scroll completed (only if we're actually at the bottom),
-          // then write content
-          // This ensures content is written after scrolling is complete
-          if (isNewLine && isLastLine) {
-            // CRITICAL: Only query cursor if we're actually at the bottom of the viewport (will trigger scrolling)
-            // Check if we're at the bottom BEFORE writing the newline
-            // If currentTerminalRow === terminalHeight, writing a newline will take us past the bottom and trigger scrolling
-            const isAtBottomOfViewport = currentTerminalRow !== null && currentTerminalRow === terminalHeight;
-            
-            // New line at the bottom: write newline first to trigger scroll
-            this.logToFile(`[renderNow] WRITING newline FIRST for new line ${lineIndex + 1} at bottom (region expanding${isAtBottomOfViewport ? ', will trigger scroll' : ''})`);
-            this.renderBuffer.write('\n');
-            // Update currentTerminalRow after newline
-            if (currentTerminalRow !== null) {
-              currentTerminalRow = currentTerminalRow + 1;
-            }
-            actuallyWroteNewlineAtBottom = true;
-            
-            if (isAtBottomOfViewport) {
-              // CRITICAL: Flush buffer to ensure newline is written before querying
-              this.renderBuffer.flush();
-              // CRITICAL: Query cursor position to confirm terminal has finished scrolling
-              // Terminal scrolling may be asynchronous, so we need to wait for it to complete
-              // After writing newline at the bottom, we should be at row terminalHeight + 1 (below viewport)
-              this.logToFile(`[renderNow] At bottom of viewport - querying cursor to confirm scroll completed...`);
-              try {
-                const pos = await queryCursorPosition(500);
-                this.logToFile(`[renderNow] ✓ Cursor query after newline: row=${pos.row}, col=${pos.col} (expected row=${terminalHeight + 1} if scroll occurred)`);
-                
-                // CRITICAL: After writing newline at the bottom, the terminal should scroll
-                // If we're at row terminalHeight + 1, the scroll happened and we're below the viewport
-                // If we're still at row terminalHeight, the scroll didn't happen (maybe we weren't at absolute bottom)
-                if (pos.row === terminalHeight + 1) {
-                  // Scroll happened - we're below the viewport
-                  // Move up one to get back to the last visible line
-                  this.renderBuffer.write(ansi.moveCursorUp(1));
-                  // CRITICAL: After scrolling, update visibleRegionTopRow
-                  // The visible region spans linesToRender lines, so the top is at terminalHeight - (linesToRender - 1)
-                  this.visibleRegionTopRow = terminalHeight - (linesToRender - 1);
-                  this.logToFile(`[renderNow] Scroll confirmed - updated visibleRegionTopRow=${this.visibleRegionTopRow}`);
-                } else {
-                  // Scroll didn't happen - we're still at the last line of the viewport
-                  // This might happen if we weren't at the absolute bottom of the terminal
-                  // Just move up to get back to the line (we're already there, but be safe)
-                  this.logToFile(`[renderNow] WARNING: Scroll did not occur (cursor at row=${pos.row}, expected ${terminalHeight + 1})`);
-                  // Don't move up - we're already at the last line
-                  // Update visibleRegionTopRow assuming we're at the last line
-                  this.visibleRegionTopRow = terminalHeight - (linesToRender - 1);
-                }
-              } catch (err) {
-                this.logToFile(`[renderNow] ✗ Cursor query failed: ${err instanceof Error ? err.message : String(err)}, proceeding anyway`);
-                // Fallback: assume scroll happened and move up
-                this.renderBuffer.write(ansi.moveCursorUp(1));
-                this.visibleRegionTopRow = terminalHeight - (linesToRender - 1);
-              }
-            } else {
-              // Not at bottom of viewport - just move up to get back to the line
-              this.renderBuffer.write(ansi.moveCursorUp(1));
-              this.logToFile(`[renderNow] Not at bottom of viewport (currentTerminalRow was ${currentTerminalRow !== null ? currentTerminalRow - 1 : 'null'}), moved up 1 to get back to line`);
-            }
-          }
-          
-          // CRITICAL: Trust the grid layout system - it should ensure content fits within width
-          // The grid layout calculates column widths based on availableWidth and ensures content fits
-          // Truncation here would cut off content (like progress bar percentages) unnecessarily
-          // Only truncate if content is significantly longer (more than 2 chars) as a safety measure
-          // This accounts for potential rounding errors or edge cases
-          const contentToWrite = this.truncateContent(content, this.width);
-          
-          // Write content (truncated only if significantly too long)
-          const isFirstLine = lineIndex === 0;
-          this.logToFile(`[renderNow] WRITING content for line ${lineIndex + 1} (region line ${lineIndex + 1}/${this.height}, visible line ${i + 1}/${linesToRender}, startLineIndex=${startLineIndex}, isFirstLine=${isFirstLine}): "${contentToWrite.substring(0, 50)}${contentToWrite.length > 50 ? '...' : ''}"`);
-          this.renderBuffer.write(contentToWrite);
-          
-          // CRITICAL: Write newline for new lines that are NOT at the bottom
-          // For new lines at the bottom, we already wrote the newline above
-          if (isNewLine && !isLastLine) {
-            this.logToFile(`[renderNow] WRITING newline for line ${lineIndex + 1} (new line, region expanding, not at bottom)`);
-            this.renderBuffer.write('\n');
-            // Update currentTerminalRow after newline
-            if (currentTerminalRow !== null) {
-              currentTerminalRow = currentTerminalRow + 1;
-            }
-            // For non-last lines, the newline already moved us to the next line, so we're good
-          } else if (!isLastLine && !isNewLine) {
-            // Not the last line and not a new line: move to next line
-            this.renderBuffer.write(ansi.moveCursorDown(1));
-            this.renderBuffer.write(ansi.MOVE_TO_START_OF_LINE);
-          }
-          // After rendering last line, we're at the end of the last line
-          // We'll move to top-left after the loop
-        }
-        
-        // After rendering, move to top-left of VISIBLE region and save that position
-        // This ensures we always know where the visible region starts for the next render
-        const lastRenderedLineIndex = startLineIndex + linesToRender - 1;
-        const isLastLineOfRegion = lastRenderedLineIndex === (this.height - 1);
-        this.logToFile(`[renderNow] After rendering loop: lastRenderedLineIndex=${lastRenderedLineIndex} (region line ${lastRenderedLineIndex + 1}/${this.height}), isLastLineOfRegion=${isLastLineOfRegion}, actuallyWroteNewlineAtBottom=${actuallyWroteNewlineAtBottom}, terminalHeight=${terminalHeight}`);
-        
-        // CRITICAL: After writing a newline at the bottom, the terminal scrolled
-        // The top of the visible region has moved up by one line
-        // So we need to adjust how many lines we move up to get to the top-left
-        // If we wrote a newline, we're at the end of the last rendered line
-        // The top of the visible region is now (linesToRender - 1) lines up (because it scrolled)
-        // So we should move up (linesToRender - 1) lines, not linesToRender lines
-        if (actuallyWroteNewlineAtBottom) {
-          // We wrote a newline at the bottom, terminal scrolled
-          // We're at the end of the last rendered line (which is now below the viewport after scroll)
-          // The top of the visible region moved up by 1 line due to the scroll
-          // So if we were at row X, we're now at row X+1, and the top moved from row Y to row Y+1
-          // We need to move up (linesToRender - 1) lines to get to the new top-left
-          this.logToFile(`[renderNow] Wrote newline at bottom of viewport (viewport line ${linesToRender}/${linesToRender}) - terminal scrolled, top of visible region moved up 1 line`);
-          this.logToFile(`[renderNow] Moving up ${linesToRender - 1} lines to get to top-left (accounting for scroll)`);
-          if (linesToRender > 1) {
-            this.renderBuffer.write(ansi.moveCursorUp(linesToRender - 1));
-          }
-          this.renderBuffer.write(ansi.MOVE_TO_START_OF_LINE);
-          // CRITICAL: Flush buffer BEFORE saving cursor so all movements are executed
+        // After rendering last line, we're at the end of the last line
+        // We'll move to top-left after the loop
+      }
+      
+      // CRITICAL: Flush buffer after writing all content to ensure it's visible
+      // This is especially important for the first render
+      this.renderBuffer.flush();
+      
+      // After rendering, move to top-left of VISIBLE region and save that position
+      // This ensures we always know where the visible region starts for the next render
+      const lastRenderedLineIndex = startLineIndex + linesToRender - 1;
+      const isLastLineOfRegion = lastRenderedLineIndex === (this.height - 1);
+      this.logToFile(`[renderNow] After rendering loop: lastRenderedLineIndex=${lastRenderedLineIndex} (region line ${lastRenderedLineIndex + 1}/${this.height}), isLastLineOfRegion=${isLastLineOfRegion}, actuallyWroteNewlineAtBottom=${actuallyWroteNewlineAtBottom}, terminalHeight=${terminalHeight}`);
+      
+      // CRITICAL: After writing a newline at the bottom, the terminal scrolled
+      // The top of the visible region has moved up by one line
+      // So we need to adjust how many lines we move up to get to the top-left
+      // If we wrote a newline, we're at the end of the last rendered line
+      // The top of the visible region is now (linesToRender - 1) lines up (because it scrolled)
+      // So we should move up (linesToRender - 1) lines, not linesToRender lines
+      // CRITICAL: Use absolute positioning to get to top-left after rendering
+      // We know where the top-left should be, so position there directly instead of using relative movements
+      if (actuallyWroteNewlineAtBottom) {
+        // We wrote a newline at the bottom, terminal scrolled
+        // The visibleRegionTopRow moved up by 1 line due to the scroll
+        if (this.visibleRegionTopRow !== null) {
+          const newVisibleRegionTopRow = this.visibleRegionTopRow - 1;
+          this.visibleRegionTopRow = newVisibleRegionTopRow;
+          this.logToFile(`[renderNow] Wrote newline at bottom - terminal scrolled, visibleRegionTopRow moved from ${this.visibleRegionTopRow + 1} to ${newVisibleRegionTopRow}`);
+          // Use absolute positioning to top-left of visible region
+          this.renderBuffer.write(ansi.moveCursorTo(1, newVisibleRegionTopRow));
           this.renderBuffer.flush();
-          // Write SAVE_CURSOR directly to stdout (not buffer) so it executes immediately
           this.stdout.write(ansi.SAVE_CURSOR);
           this.savedCursorPosition = true;
-          this.logToFile(`[renderNow] Saved cursor at top-left of visible region (startLineIndex=${startLineIndex + 1} after scroll)`);
+          this.logToFile(`[renderNow] Saved cursor at top-left of visible region (row ${newVisibleRegionTopRow}, absolute position)`);
         } else {
-          // No newline written, normal case - move up (linesToRender - 1) lines
-          this.logToFile(`[renderNow] No newline written at bottom - normal case, moving up ${linesToRender - 1} lines`);
-          this.moveToTopLeftAndSave(linesToRender, `of visible region (startLineIndex=${startLineIndex})`);
+          this.logToFile(`[renderNow] WARNING: visibleRegionTopRow is null, cannot position to top-left`);
+        }
+      } else if (wroteNewlineForLastLine) {
+        // Wrote newline for last line (region-fits case) - terminal scrolled
+        // Use absolute positioning to startRow (top of region)
+        if (this.startRow !== null) {
+          this.logToFile(`[renderNow] Wrote newline for last line (region-fits) - positioning to startRow=${this.startRow}`);
+          this.renderBuffer.write(ansi.moveCursorTo(1, this.startRow));
+          this.renderBuffer.flush();
+          this.stdout.write(ansi.SAVE_CURSOR);
+          this.savedCursorPosition = true;
+          this.visibleRegionTopRow = this.startRow;
+          this.logToFile(`[renderNow] Saved cursor at top-left of region (row ${this.startRow}, absolute position)`);
+        } else {
+          this.logToFile(`[renderNow] WARNING: startRow is null, cannot position to top-left`);
         }
       } else {
-        // Region fits in viewport
-        // CRITICAL: Don't use RESTORE_CURSOR - it's unreliable
-        // Use relative positioning from current cursor location
-        // We're at the start of the last line of the region (after initialization or previous render)
-        // Move up (height-1) lines to get to the top of the region
-        this.logToFile(`[renderNow] Region fits - using relative positioning from current location (moving up ${this.height > 1 ? this.height - 1 : 0} lines)`);
-        this.renderBuffer.write(ansi.MOVE_TO_START_OF_LINE);
-        if (this.height > 1) {
-          this.renderBuffer.write(ansi.moveCursorUp(this.height - 1));
+        // No newline written, normal case - use absolute positioning
+        if (regionExceedsViewport && this.visibleRegionTopRow !== null) {
+          // Region exceeds viewport - position to top of visible region
+          this.logToFile(`[renderNow] No newline written - positioning to visibleRegionTopRow=${this.visibleRegionTopRow} (absolute)`);
+          this.renderBuffer.write(ansi.moveCursorTo(1, this.visibleRegionTopRow));
+          this.renderBuffer.flush();
+          this.stdout.write(ansi.SAVE_CURSOR);
+          this.savedCursorPosition = true;
+          this.logToFile(`[renderNow] Saved cursor at top-left of visible region (row ${this.visibleRegionTopRow}, absolute position)`);
+        } else if (!regionExceedsViewport && this.startRow !== null) {
+          // Region fits - position to startRow
+          this.logToFile(`[renderNow] No newline written - positioning to startRow=${this.startRow} (absolute)`);
+          this.renderBuffer.write(ansi.moveCursorTo(1, this.startRow));
+          this.renderBuffer.flush();
+          this.stdout.write(ansi.SAVE_CURSOR);
+          this.savedCursorPosition = true;
+          this.logToFile(`[renderNow] Saved cursor at top-left of region (row ${this.startRow}, absolute position)`);
+        } else {
+          this.logToFile(`[renderNow] WARNING: Cannot determine top-left position (regionExceedsViewport=${regionExceedsViewport}, visibleRegionTopRow=${this.visibleRegionTopRow}, startRow=${this.startRow})`);
         }
-        
-        // Now render each visible line, one at a time
-        // CRITICAL: Only write newlines for NEW lines (when height increased)
-        // For existing lines, just update them with cursor movement
-        this.logToFile(`[renderNow] Starting to write content to buffer (${linesToRender} lines, startRow=${this.startRow}, timestamp: ${new Date().toISOString()})`);
-        for (let i = 0; i < linesToRender; i++) {
-          const lineIndex = startLineIndex + i;
-          const content = this.pendingFrame[lineIndex] || '';
-          
-          // CRITICAL: Always clear the line BEFORE writing
-          // This prevents any leftover content from causing duplicates
-          this.clearCurrentLine();
-          
-          // CRITICAL: Trust the grid layout system - it should ensure content fits within width
-          // The grid layout calculates column widths based on availableWidth and ensures content fits
-          // Truncation here would cut off content (like progress bar percentages) unnecessarily
-          // Only truncate if content is significantly longer (more than 2 chars) as a safety measure
-          // This accounts for potential rounding errors or edge cases
-          const contentToWrite = this.truncateContent(content, this.width);
-          
-          // Write content (truncated only if significantly too long)
-          const plainContentLength = this.stripAnsi(contentToWrite).length;
-          this.logToFile(`[renderNow] WRITING content for line ${lineIndex + 1}: "${contentToWrite.substring(0, 50)}${contentToWrite.length > 50 ? '...' : ''}"`);
-          this.logToFile(`[renderNow] Content length: ${plainContentLength} chars, region width: ${this.width}, terminal width: ${getTerminalWidth() + 1} (region width is terminal_width - 1)`);
-          // Check if content contains newline (shouldn't happen, but let's log it)
-          if (contentToWrite.includes('\n')) {
-            this.logToFile(`[renderNow] WARNING: Content for line ${lineIndex + 1} contains newline character!`);
-          }
-          // Check if content fills the entire width (shouldn't happen, but let's log it)
-          if (plainContentLength >= this.width) {
-            this.logToFile(`[renderNow] WARNING: Content for line ${lineIndex + 1} fills or exceeds region width! Length: ${plainContentLength}, Width: ${this.width}`);
-          }
-          this.renderBuffer.write(contentToWrite);
-          this.logToFile(`[renderNow] After writing line ${lineIndex + 1}, cursor should be at END of line ${lineIndex + 1}`);
-          
-          // CRITICAL: Only write newline if this is a NEW line (region grew)
-          // For existing lines, just move cursor down without newline
-          // Check if this line is one of the new lines: lineIndex >= (this.height - newLinesCount)
-          const isNewLine = shouldWriteNewlines && lineIndex >= (this.height - newLinesCount);
-          
-          if (i < linesToRender - 1) {
-            // Not the last line: move to next line
-            if (isNewLine) {
-              // This is one of the new lines: write newline to create it
-              this.logToFile(`[renderNow] WRITING newline for line ${lineIndex + 1} (new line, region expanding)`);
-              this.renderBuffer.write('\n');
-            } else {
-              // This is an existing line: just move cursor down
-              this.logToFile(`[renderNow] Moving cursor DOWN 1 line from line ${lineIndex + 1} to line ${lineIndex + 2}`);
-              this.renderBuffer.write(ansi.moveCursorDown(1));
-              this.renderBuffer.write(ansi.MOVE_TO_START_OF_LINE);
-              this.logToFile(`[renderNow] After moving down, cursor should be at START of line ${lineIndex + 2}`);
-            }
-          } else {
-            // Last line of visible region
-            if (isNewLine) {
-              // The last line is a new line: always write newline when region is expanding
-              this.logToFile(`[renderNow] WRITING newline for last line ${lineIndex + 1} (new line, region expanding)`);
-              this.renderBuffer.write('\n');
-              // After newline, if we're at the bottom of viewport, terminal scrolled
-              // Move up one to get back to the last visible line
-              if (regionExceedsViewport) {
-                this.renderBuffer.write(ansi.moveCursorUp(1));
-                // CRITICAL: Flush buffer to ensure terminal has finished scrolling before we continue
-                // Terminal scrolling may be asynchronous, so we need to wait for it to complete
-                this.renderBuffer.flush();
-                this.logToFile(`[renderNow] After writing newline for last line, moved up 1 to get back to last line (terminal scrolled, flushed buffer to ensure scroll completed)`);
-                // CRITICAL: After scrolling, set visibleRegionTopRow so next render uses startLineIndex > 0
-                const estimatedTopRow = terminalHeight - this.height + 1;
-                this.visibleRegionTopRow = estimatedTopRow;
-                this.logToFile(`[renderNow] After scrolling, estimated visibleRegionTopRow=${this.visibleRegionTopRow} (terminalHeight=${terminalHeight} - height=${this.height} + 1)`);
-              }
-            } else {
-              // Last line, but not a new line
-              this.logToFile(`[renderNow] Last line ${lineIndex + 1} is not new, cursor is at END of line (no newline written)`);
-            }
-            // After rendering last line, we're at the end of the last line
-            // We'll move to top-left after the loop
+      }
+      
+      // CRITICAL: Move the VISIBLE cursor to the line AFTER the region (below it)
+      // This prevents user input from overwriting the region content
+      // We saved the position at top-left for our internal tracking, but the visible cursor should be out of the way
+      this.stdout.write(ansi.moveCursorDown(linesToRender));
+      this.stdout.write(ansi.MOVE_TO_START_OF_LINE);
+      this.stdout.write(ansi.SHOW_CURSOR);
+      this.logToFile(`[renderNow] Moved visible cursor DOWN ${linesToRender} lines to position AFTER region (so user input won't interfere)`);
+      
+      // Track visible region top row for first render
+      if (!this.hasRendered) {
+        if (regionExceedsViewport && this.startRow !== null) {
+          this.visibleRegionTopRow = this.startRow + startLineIndex;
+          this.logToFile(`[renderNow] First render - region exceeds viewport, set visibleRegionTopRow=${this.visibleRegionTopRow}`);
+        } else if (!regionExceedsViewport && this.startRow !== null) {
+          // For region-fits case, visibleRegionTopRow should be startRow (already set earlier, but ensure it's correct)
+          if (this.visibleRegionTopRow !== this.startRow) {
+            this.visibleRegionTopRow = this.startRow;
+            this.logToFile(`[renderNow] First render - region fits, set visibleRegionTopRow=${this.visibleRegionTopRow}`);
           }
         }
-        
-        // After rendering, move to top-left of region
-        // CRITICAL: Flush buffer FIRST so all cursor movements are executed
-        // Then save the cursor position at the actual location
-        this.logToFile(`[renderNow] About to moveToTopLeftAndSave: linesToRender=${linesToRender}, we should be at END of last line`);
-        
-        // Move to top-left and save cursor position (for our internal tracking)
-        const linesToMoveUp = linesToRender > 1 ? linesToRender - 1 : 0;
-        this.logToFile(`[moveToTopLeftAndSave] linesToRender=${linesToRender}, moving up ${linesToMoveUp} lines to get to top-left (after rendering, cursor is at end of last line)`);
-        if (linesToMoveUp > 0) {
-          this.renderBuffer.write(ansi.moveCursorUp(linesToMoveUp));
-        }
-        this.renderBuffer.write(ansi.MOVE_TO_START_OF_LINE);
-        
-        // Flush buffer NOW so cursor movements are executed
-        this.logToFile(`[renderNow] FLUSHING buffer to stdout (startRow=${this.startRow}, timestamp: ${new Date().toISOString()})`);
-        this.renderBuffer.flush();
-        
-        // NOW save the cursor position at top-left (after all movements are executed)
-        // Write directly to stdout (not buffer) so it executes immediately
-        this.stdout.write(ansi.SAVE_CURSOR);
-        this.savedCursorPosition = true;
-        this.logToFile(`[renderNow] Saved cursor at top-left of region (linesToRender=${linesToRender}, startRow=${this.startRow})`);
-        
-        // CRITICAL: Move the VISIBLE cursor to the line AFTER the region (below it)
-        // This prevents user input from overwriting the region content
-        // We saved the position at top-left for our internal tracking, but the visible cursor should be out of the way
-        this.stdout.write(ansi.moveCursorDown(linesToRender));
-        this.stdout.write(ansi.MOVE_TO_START_OF_LINE);
-        this.stdout.write(ansi.SHOW_CURSOR);
-        this.logToFile(`[renderNow] Moved visible cursor DOWN ${linesToRender} lines to position AFTER region (so user input won't interfere)`);
       }
       
       // Handle deletions (lines that were in previousFrame but not in pendingFrame)
@@ -1505,6 +1415,19 @@ export class RegionRenderer {
 
   getHeight(): number {
     return this.height;
+  }
+
+  async getStartRow(): Promise<number | null> {
+    // If startRow is not set yet, wait for initialization to complete
+    if (this.startRow === null && this.initializationPromise) {
+      await this.initializationPromise;
+    }
+    // CRITICAL: Flush any pending operations (like expandTo updating startRow) before returning
+    // This ensures we return the current startRow after all updates are applied
+    if (this.renderScheduled || this.pendingFrame.length > 0) {
+      await this.flush();
+    }
+    return this.startRow;
   }
 }
 

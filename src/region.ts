@@ -6,6 +6,70 @@ import { resolveGrid, type GridDescriptor } from './api/grid';
 import { type GridComponent } from './layout/grid';
 
 /**
+ * Reference to a section of lines in the region that can be updated
+ */
+export class SectionReference {
+  constructor(
+    private region: TerminalRegion,
+    private startLine: number,
+    private height: number
+  ) {}
+
+  /**
+   * Update the content of this section
+   */
+  update(content: string | string[] | LineContent[]): void {
+    const renderer = (this.region as any).renderer;
+    const wasRenderingDisabled = renderer.disableRendering;
+    renderer.disableRendering = true;
+
+    let lines: string[] = [];
+    if (typeof content === 'string') {
+      lines = content.split('\n');
+    } else if (Array.isArray(content)) {
+      lines = content.map(item => {
+        if (typeof item === 'string') {
+          return item;
+        } else {
+          const text = item.text;
+          return applyStyle(text, item.style);
+        }
+      });
+    }
+
+    const linesToUpdate = Math.min(lines.length, this.height);
+    
+    // Prepare updates for the renderer
+    const updates: Array<{ lineNumber: number; content: string }> = [];
+    for (let i = 0; i < linesToUpdate; i++) {
+      const lineNumber = this.startLine + i;
+      const styled = lines[i];
+      
+      updates.push({ lineNumber, content: styled });
+      
+      // Track in regionLines
+      const region = this.region as any;
+      while (region.regionLines.length < this.startLine + i) {
+        region.regionLines.push({ type: 'static', lineNumber: region.regionLines.length + 1 });
+      }
+      region.regionLines[this.startLine + i - 1] = {
+        type: 'static',
+        content: styled,
+        lineNumber: this.startLine + i
+      };
+    }
+
+    renderer.disableRendering = wasRenderingDisabled;
+    
+    // Use renderer's method to update lines and schedule render
+    // The renderer manages when to actually render (throttling, batching, etc.)
+    if (linesToUpdate > 0 && !wasRenderingDisabled) {
+      renderer.updateLines(updates);
+    }
+  }
+}
+
+/**
  * TerminalRegion - High-level API for terminal region management
  * 
  * This is the public API that wraps the low-level RegionRenderer.
@@ -62,17 +126,15 @@ export class TerminalRegion {
     return this.renderer.getLine(lineNumber);
   }
 
+  async getStartRow(): Promise<number | null> {
+    return this.renderer.getStartRow();
+  }
+
   /**
-   * Set a single line (1-based line numbers)
-   * 
-   * Note: With auto-wrap disabled globally, we manage all wrapping ourselves.
-   * This method sets a single line - if content needs to wrap, it should
-   * be handled by the component layer (grid, style, etc.) before calling this.
-   * Content that exceeds the region width will be truncated by the terminal.
-   * 
-   * The region will automatically expand if lineNumber exceeds current height.
+   * Internal method to set a single line (used by components and SectionReference)
+   * @internal
    */
-  setLine(lineNumber: number, content: string | LineContent): void {
+  setLineInternal(lineNumber: number, content: string | LineContent): void {
     if (lineNumber < 1) {
       throw new Error('Line numbers start at 1');
     }
@@ -102,6 +164,21 @@ export class TerminalRegion {
 
     // Update the renderer (this will expand the renderer if needed)
     this.renderer.setLine(lineNumber, styled);
+    
+    // CRITICAL: Sync region height with renderer height after setLine
+    // This ensures _height matches renderer.height, preventing height mismatches
+    const renderer = this.renderer as any;
+    if (renderer.height > this._height) {
+      this._height = renderer.height;
+    }
+  }
+
+  /**
+   * @deprecated Use add() which returns a LineReference with update() method
+   * Set a single line (1-based line numbers)
+   */
+  setLine(lineNumber: number, content: string | LineContent): void {
+    this.setLineInternal(lineNumber, content);
   }
 
   /**
@@ -262,8 +339,9 @@ export class TerminalRegion {
   /**
    * Add content to the region, appending it after existing content.
    * This is useful for adding multiple sections without overwriting previous content.
+   * Returns a SectionReference that can be used to update the content later.
    */
-  add(content: string | LineContent[] | any, ...additionalLines: any[]): void {
+  add(content: string | LineContent[] | any, ...additionalLines: any[]): SectionReference {
     // Check if we have multiple grid descriptors
     const allContent = additionalLines.length > 0 
       ? [content, ...additionalLines]
@@ -340,7 +418,7 @@ export class TerminalRegion {
       renderer.disableRendering = wasRenderingDisabled;
       // Note: flush() is async but we don't await here - caller should await if needed
       void this.renderer.flush();
-      return;
+      return new SectionReference(this, startLine, totalHeight);
     }
     
     // Single grid descriptor
@@ -397,7 +475,7 @@ export class TerminalRegion {
       renderer.disableRendering = wasRenderingDisabled;
       // Note: flush() is async but we don't await here - caller should await if needed
       void this.renderer.flush();
-      return;
+      return new SectionReference(this, startLine, height);
     }
 
     // String/array handling - append after existing content
@@ -405,44 +483,101 @@ export class TerminalRegion {
       const lines = content.split('\n');
       const startLine = this._height + 1;
       
-      // CRITICAL: Disable auto-rendering during line setting to batch updates
-      // setLine() will expand the region automatically, but we want to batch renders
+      // CRITICAL: Directly update pendingFrame without scheduling renders
+      // We don't want add() to trigger any rendering - only update() should render
       const renderer = this.renderer as any;
       const wasRenderingDisabled = renderer.disableRendering;
       renderer.disableRendering = true;
       
-      // Set all lines (setLine() will expand region automatically)
+      // Expand renderer if needed
+      const endLine = startLine + lines.length - 1;
+      if (endLine > renderer.height) {
+        renderer.expandTo(endLine);
+        renderer.height = endLine;
+      }
+      
+      // Directly update pendingFrame without going through setLine() (which schedules renders)
       for (let i = 0; i < lines.length; i++) {
-        this.setLine(startLine + i, lines[i]);
+        const lineIndex = startLine + i - 1;
+        while (renderer.pendingFrame.length <= lineIndex) {
+          renderer.pendingFrame.push('');
+        }
+        renderer.pendingFrame[lineIndex] = lines[i];
+        
+        // Track in regionLines
+        while (this.regionLines.length < startLine + i) {
+          this.regionLines.push({ type: 'static', lineNumber: this.regionLines.length + 1 });
+        }
+        this.regionLines[startLine + i - 1] = {
+          type: 'static',
+          content: lines[i],
+          lineNumber: startLine + i
+        };
       }
       
-      // Update region height tracking (setLine() already updated renderer.height)
-      this._height = startLine + lines.length - 1;
+      // Update region height tracking
+      this._height = endLine;
       
-      // Re-enable rendering and flush once
+      // Re-enable rendering (but don't flush - let caller decide when to render)
+      // The update() method will handle flushing when ready
       renderer.disableRendering = wasRenderingDisabled;
-      this.renderer.flush();
+      return new SectionReference(this, startLine, lines.length);
     } else if (Array.isArray(content)) {
-      const startLine = this._height + 1;
-      
-      // CRITICAL: Disable auto-rendering during line setting to batch updates
-      // setLine() will expand the region automatically, but we want to batch renders
+      // CRITICAL: Check if region is effectively empty (no content has been set yet)
+      // If so, start from line 1 instead of appending after height
       const renderer = this.renderer as any;
+      // Region is empty if:
+      // 1. Height is 0, OR
+      // 2. All lines in pendingFrame are empty strings (no content set yet)
+      const isEmpty = this._height === 0 || 
+        (renderer.pendingFrame && renderer.pendingFrame.length > 0 && 
+         renderer.pendingFrame.every((line: string) => !line || line.trim() === ''));
+      
+      const startLine = isEmpty ? 1 : this._height + 1;
+      
+      // CRITICAL: Directly update pendingFrame without scheduling renders
+      // We don't want add() to trigger any rendering - only update() should render
       const wasRenderingDisabled = renderer.disableRendering;
       renderer.disableRendering = true;
       
-      // Set all lines (setLine() will expand region automatically)
-      for (let i = 0; i < content.length; i++) {
-        this.setLine(startLine + i, String(content[i]));
+      // Expand renderer if needed
+      const endLine = startLine + content.length - 1;
+      if (endLine > renderer.height) {
+        renderer.expandTo(endLine);
+        renderer.height = endLine;
       }
       
-      // Update region height tracking (setLine() already updated renderer.height)
-      this._height = startLine + content.length - 1;
+      // Directly update pendingFrame without going through setLine() (which schedules renders)
+      for (let i = 0; i < content.length; i++) {
+        const lineIndex = startLine + i - 1;
+        const lineContent = String(content[i]);
+        while (renderer.pendingFrame.length <= lineIndex) {
+          renderer.pendingFrame.push('');
+        }
+        renderer.pendingFrame[lineIndex] = lineContent;
+        
+        // Track in regionLines
+        while (this.regionLines.length < startLine + i) {
+          this.regionLines.push({ type: 'static', lineNumber: this.regionLines.length + 1 });
+        }
+        this.regionLines[startLine + i - 1] = {
+          type: 'static',
+          content: lineContent,
+          lineNumber: startLine + i
+        };
+      }
       
-      // Re-enable rendering and flush once
+      // Update region height tracking
+      this._height = Math.max(this._height, endLine);
+      
+      // Re-enable rendering (but don't flush - let caller decide when to render)
+      // The update() method will handle flushing when ready
       renderer.disableRendering = wasRenderingDisabled;
-      this.renderer.flush();
+      return new SectionReference(this, startLine, content.length);
     }
+    
+    // Fallback: return empty section reference (shouldn't happen)
+    return new SectionReference(this, this._height + 1, 0);
   }
 
 
@@ -478,6 +613,8 @@ export class TerminalRegion {
     // CRITICAL: Prevent concurrent re-renders
     // If we're already re-rendering, skip this call to prevent duplicates
     if (this.isReRendering) {
+      const renderer = this.renderer as any;
+      renderer.logToFile(`[reRenderLastContent] SKIPPED: already re-rendering`);
       return;
     }
     
@@ -486,8 +623,10 @@ export class TerminalRegion {
       
       try {
         const renderer = this.renderer as any;
-        renderer.logToFile(`[reRenderLastContent] CALLED: height=${this._height} lastRenderedHeight=${renderer.lastRenderedHeight}`);
+        // CRITICAL: Read width AFTER setting isReRendering to ensure we get the latest value
+        // The width getter syncs with renderer.getWidth() which should have the updated width from resize
       const width = this.width;
+        renderer.logToFile(`[reRenderLastContent] CALLED: height=${this._height} width=${width} lastRenderedHeight=${renderer.lastRenderedHeight}`);
       
       // First, calculate total height of ALL content (components + static lines)
       let totalHeight = 0;

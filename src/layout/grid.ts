@@ -7,6 +7,34 @@ import { applyStyle } from '../utils/colors';
 import { truncateEnd, truncateStart, truncateMiddle, wrapText } from '../utils/text';
 
 /**
+ * Extract character and color from spaceBetween option for a specific gap index
+ */
+function getSpaceBetweenChar(
+  spaceBetween: string | string[] | { char: string; color?: Color } | Array<{ char: string; color?: Color }>,
+  gapIndex: number
+): { char: string; color?: Color } {
+  if (typeof spaceBetween === 'string') {
+    return { char: spaceBetween };
+  }
+  
+  if (Array.isArray(spaceBetween)) {
+    // Check if it's an array of strings or array of objects
+    if (spaceBetween.length > 0 && typeof spaceBetween[0] === 'string') {
+      // Array of strings
+      const char = spaceBetween[gapIndex] ?? spaceBetween[spaceBetween.length - 1];
+      return { char };
+    } else {
+      // Array of objects
+      const obj = spaceBetween[gapIndex] ?? spaceBetween[spaceBetween.length - 1];
+      return { char: obj.char, color: obj.color };
+    }
+  }
+  
+  // Single object
+  return { char: spaceBetween.char, color: spaceBetween.color };
+}
+
+/**
  * RenderContext provides information needed for rendering
  */
 export interface RenderContext {
@@ -37,7 +65,7 @@ export interface GridOptions {
   columnGap?: number;
   
   /** Characters to draw between columns (fills blank space until next column) */
-  spaceBetween?: string | string[] | { char: string; color?: Color };
+  spaceBetween?: string | string[] | { char: string; color?: Color } | Array<{ char: string; color?: Color }>;
   
   /** Justify content: 'space-between' for left/right items with flexing middle */
   justify?: 'start' | 'end' | 'center' | 'space-between';
@@ -264,15 +292,7 @@ export function createGrid(
         
         // Handle spaceBetween
         if (i < validChildren.length - 1 && spaceBetween) {
-          const spaceChar = typeof spaceBetween === 'string' 
-            ? spaceBetween 
-            : Array.isArray(spaceBetween)
-            ? (spaceBetween[i] ?? spaceBetween[spaceBetween.length - 1])
-            : spaceBetween.char;
-          const spaceColor = typeof spaceBetween === 'object' && !Array.isArray(spaceBetween)
-            ? spaceBetween.color
-            : undefined;
-          
+            const { char: spaceChar, color: spaceColor } = getSpaceBetweenChar(spaceBetween, i);
           const gapText = spaceChar.repeat(columnGap);
           results.push(spaceColor ? applyStyle(gapText, { color: spaceColor }) : gapText);
         }
@@ -294,31 +314,51 @@ export function createGrid(
         for (let i = 0; i < validChildren.length; i++) {
           const result = results[partIdx];
           partIdx++;
+          const columnWidth = actualWidths[i] ?? 0;
           
           if (result === null) {
-            // Null result - add empty space
-            lineParts.push('');
+            // Null result - pad to column width
+            // If spaceBetween is set, use it to fill empty columns
+            if (spaceBetween && columnWidth > 0) {
+              const { char: spaceChar, color: spaceColor } = getSpaceBetweenChar(spaceBetween, i);
+              const fillText = spaceChar.repeat(columnWidth);
+              lineParts.push(spaceColor ? applyStyle(fillText, { color: spaceColor }) : fillText);
+            } else {
+              lineParts.push(' '.repeat(columnWidth));
+            }
             continue;
           }
           
+          let columnContent: string;
           if (Array.isArray(result)) {
-            lineParts.push(result[lineIdx] ?? '');
+            columnContent = result[lineIdx] ?? '';
           } else {
-            lineParts.push(lineIdx === 0 ? result : '');
+            columnContent = lineIdx === 0 ? result : '';
           }
+          
+          // CRITICAL: Pad each column to its allocated width
+          // This ensures flex columns actually fill their allocated space
+          // If spaceBetween is set and content is empty, fill with spaceBetween character
+          const plainContent = columnContent.replace(/\x1b\[[0-9;]*m/g, '');
+          let paddedContent: string;
+          if (plainContent.length === 0 && spaceBetween && columnWidth > 0) {
+            // Fill empty column with spaceBetween character
+            const { char: spaceChar, color: spaceColor } = getSpaceBetweenChar(spaceBetween, i);
+            const fillText = spaceChar.repeat(columnWidth);
+            paddedContent = spaceColor ? applyStyle(fillText, { color: spaceColor }) : fillText;
+          } else {
+            // Normal padding with spaces
+            paddedContent = plainContent.length < columnWidth
+              ? columnContent + ' '.repeat(columnWidth - plainContent.length)
+              : columnContent;
+          }
+          
+          lineParts.push(paddedContent);
           
           // Add gap (spaceBetween or spaces) if not last
           if (i < validChildren.length - 1 && columnGap > 0) {
             if (spaceBetween) {
-              const spaceChar = typeof spaceBetween === 'string' 
-                ? spaceBetween 
-                : Array.isArray(spaceBetween)
-                ? (spaceBetween[i] ?? spaceBetween[spaceBetween.length - 1])
-                : spaceBetween.char;
-              const spaceColor = typeof spaceBetween === 'object' && !Array.isArray(spaceBetween)
-                ? spaceBetween.color
-                : undefined;
-              
+              const { char: spaceChar, color: spaceColor } = getSpaceBetweenChar(spaceBetween, i);
               const gapText = spaceChar.repeat(columnGap);
               lineParts.push(spaceColor ? applyStyle(gapText, { color: spaceColor }) : gapText);
               partIdx++; // spaceBetween adds an extra result
@@ -415,15 +455,7 @@ export function grid(
       // Handle gap (spaceBetween or spaces)
       if (i < validChildren.length - 1 && columnGap > 0) {
         if (spaceBetween) {
-          const spaceChar = typeof spaceBetween === 'string' 
-            ? spaceBetween 
-            : Array.isArray(spaceBetween)
-            ? (spaceBetween[i] ?? spaceBetween[spaceBetween.length - 1])
-            : spaceBetween.char;
-          const spaceColor = typeof spaceBetween === 'object' && !Array.isArray(spaceBetween)
-            ? spaceBetween.color
-            : undefined;
-          
+          const { char: spaceChar, color: spaceColor } = getSpaceBetweenChar(spaceBetween, i);
           // Fill gap with space character
           const gapText = spaceChar.repeat(columnGap);
           results.push(spaceColor ? applyStyle(gapText, { color: spaceColor }) : gapText);
@@ -443,12 +475,61 @@ export function grid(
     );
     
     if (maxLines === 1) {
-      // Single line - join all results
-      const filtered = results.filter(r => r !== null);
-      if (filtered.length === 0) {
-        return null;
+      // Single line - join all results with proper column padding
+      const lineParts: string[] = [];
+      let partIdx = 0;
+      
+      for (let i = 0; i < validChildren.length; i++) {
+        const result = results[partIdx];
+        partIdx++;
+        const columnWidth = actualWidths[i] ?? 0;
+        
+        if (result === null) {
+          // Null result - pad to column width
+          // If spaceBetween is set, use it to fill empty columns
+          if (spaceBetween && columnWidth > 0) {
+            const { char: spaceChar, color: spaceColor } = getSpaceBetweenChar(spaceBetween, i);
+            const fillText = spaceChar.repeat(columnWidth);
+            lineParts.push(spaceColor ? applyStyle(fillText, { color: spaceColor }) : fillText);
+          } else {
+            lineParts.push(' '.repeat(columnWidth));
+          }
+        } else {
+          const columnContent = typeof result === 'string' ? result : '';
+          // CRITICAL: Pad each column to its allocated width
+          // This ensures flex columns actually fill their allocated space
+          // If spaceBetween is set and content is empty, fill with spaceBetween character
+          const plainContent = columnContent.replace(/\x1b\[[0-9;]*m/g, '');
+          let paddedContent: string;
+          if (plainContent.length === 0 && spaceBetween && columnWidth > 0) {
+            // Fill empty column with spaceBetween character
+            const { char: spaceChar, color: spaceColor } = getSpaceBetweenChar(spaceBetween, i);
+            const fillText = spaceChar.repeat(columnWidth);
+            paddedContent = spaceColor ? applyStyle(fillText, { color: spaceColor }) : fillText;
+          } else {
+            // Normal padding with spaces
+            paddedContent = plainContent.length < columnWidth
+              ? columnContent + ' '.repeat(columnWidth - plainContent.length)
+              : columnContent;
       }
-      const line = filtered.join('');
+          lineParts.push(paddedContent);
+        }
+        
+        // Add gap (spaceBetween or spaces) if not last
+        if (i < validChildren.length - 1 && columnGap > 0) {
+          if (spaceBetween) {
+            const { char: spaceChar, color: spaceColor } = getSpaceBetweenChar(spaceBetween, i);
+            const gapText = spaceChar.repeat(columnGap);
+            lineParts.push(spaceColor ? applyStyle(gapText, { color: spaceColor }) : gapText);
+            partIdx++; // spaceBetween adds an extra result
+          } else {
+            // Just add spaces for columnGap
+            lineParts.push(' '.repeat(columnGap));
+          }
+        }
+      }
+      
+      const line = lineParts.join('');
       // CRITICAL: Pad line to full availableWidth to ensure grid fills the region
       const plainLine = line.replace(/\x1b\[[0-9;]*m/g, '');
       const paddedLine = plainLine.length < ctx.availableWidth 
@@ -466,27 +547,44 @@ export function grid(
       for (let i = 0; i < validChildren.length; i++) {
         const result = results[partIdx];
         partIdx++;
+        const columnWidth = actualWidths[i] ?? 0;
         
-        if (result === null) continue;
-        
-        if (Array.isArray(result)) {
-          lineParts.push(result[lineIdx] ?? '');
-        } else {
-          lineParts.push(lineIdx === 0 ? result : '');
+        if (result === null) {
+          // Null result - pad to column width
+          lineParts.push(' '.repeat(columnWidth));
+          continue;
         }
+        
+        let columnContent: string;
+        if (Array.isArray(result)) {
+          columnContent = result[lineIdx] ?? '';
+        } else {
+          columnContent = lineIdx === 0 ? result : '';
+        }
+        
+        // CRITICAL: Pad each column to its allocated width
+        // This ensures flex columns actually fill their allocated space
+        // If spaceBetween is set and content is empty, fill with spaceBetween character
+        const plainContent = columnContent.replace(/\x1b\[[0-9;]*m/g, '');
+        let paddedContent: string;
+        if (plainContent.length === 0 && spaceBetween && columnWidth > 0) {
+          // Fill empty column with spaceBetween character
+          const { char: spaceChar, color: spaceColor } = getSpaceBetweenChar(spaceBetween, i);
+          const fillText = spaceChar.repeat(columnWidth);
+          paddedContent = spaceColor ? applyStyle(fillText, { color: spaceColor }) : fillText;
+        } else {
+          // Normal padding with spaces
+          paddedContent = plainContent.length < columnWidth
+            ? columnContent + ' '.repeat(columnWidth - plainContent.length)
+            : columnContent;
+        }
+        
+        lineParts.push(paddedContent);
         
         // Add gap (spaceBetween or spaces) if not last
         if (i < validChildren.length - 1 && columnGap > 0) {
           if (spaceBetween) {
-            const spaceChar = typeof spaceBetween === 'string' 
-              ? spaceBetween 
-              : Array.isArray(spaceBetween)
-              ? (spaceBetween[i] ?? spaceBetween[spaceBetween.length - 1])
-              : spaceBetween.char;
-            const spaceColor = typeof spaceBetween === 'object' && !Array.isArray(spaceBetween)
-              ? spaceBetween.color
-              : undefined;
-            
+            const { char: spaceChar, color: spaceColor } = getSpaceBetweenChar(spaceBetween, i);
             const gapText = spaceChar.repeat(columnGap);
             lineParts.push(spaceColor ? applyStyle(gapText, { color: spaceColor }) : gapText);
             partIdx++; // spaceBetween adds an extra result

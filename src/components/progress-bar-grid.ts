@@ -58,7 +58,7 @@ export function progressBar(options: ProgressBarOptions): Component {
       style({ color: bracketColor }, leftBracket),
       barComponent,
       style({ color: bracketColor }, rightBracket),
-      style({ color: options.percentColor ?? 'brightBlack' }, percent.toFixed(1) + '%'),
+      style({ color: options.percentColor ?? 'brightBlack', align: 'right' }, percent.toFixed(1) + '%'),
     ];
     
     // Use grid to layout: [1] [flex] [1] [7]

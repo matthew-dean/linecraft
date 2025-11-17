@@ -12,6 +12,7 @@ export interface StyleOptions {
   italic?: boolean;
   underline?: boolean;
   overflow?: 'none' | 'ellipsis-end' | 'ellipsis-start' | 'ellipsis-middle' | 'wrap';
+  align?: 'left' | 'right' | 'center';  // Text alignment within available width
   when?: (ctx: RenderContext) => boolean;  // Only show if condition is true
 }
 
@@ -56,17 +57,23 @@ export function style(
       } else if (overflow === 'wrap') {
         // Wrap returns array
         const wrapped = wrapText(processed, availableWidth);
-        return wrapped.map(line => applyStyle(line, {
+        return wrapped.map(line => {
+          const aligned = alignText(line, availableWidth, options.align ?? 'left');
+          return applyStyle(aligned, {
           color: options.color,
           backgroundColor: options.backgroundColor,
           bold: options.bold,
           italic: options.italic,
           underline: options.underline,
-        }));
+          });
+        });
       }
       
+      // Apply alignment
+      const aligned = alignText(processed, availableWidth, options.align ?? 'left');
+      
       // Apply styling
-      return applyStyle(processed, {
+      return applyStyle(aligned, {
         color: options.color,
         backgroundColor: options.backgroundColor,
         bold: options.bold,
@@ -74,15 +81,44 @@ export function style(
         underline: options.underline,
       });
     } else {
-      // Array of strings - apply styling to each line
-      return text.map(line => applyStyle(line, {
+      // Array of strings - apply styling and alignment to each line
+      return text.map(line => {
+        const aligned = alignText(line, availableWidth, options.align ?? 'left');
+        return applyStyle(aligned, {
         color: options.color,
         backgroundColor: options.backgroundColor,
         bold: options.bold,
         italic: options.italic,
         underline: options.underline,
-      }));
+        });
+      });
     }
   };
+}
+
+/**
+ * Align text within available width
+ */
+function alignText(text: string, width: number, align: 'left' | 'right' | 'center'): string {
+  // Get plain text length (without ANSI codes)
+  const plainText = text.replace(/\x1b\[[0-9;]*m/g, '');
+  const textLength = plainText.length;
+  
+  if (textLength >= width) {
+    return text; // No alignment needed if text is already at or exceeds width
+  }
+  
+  const padding = width - textLength;
+  
+  if (align === 'right') {
+    return ' '.repeat(padding) + text;
+  } else if (align === 'center') {
+    const leftPad = Math.floor(padding / 2);
+    const rightPad = padding - leftPad;
+    return ' '.repeat(leftPad) + text + ' '.repeat(rightPad);
+  } else {
+    // 'left' - default, no padding needed
+    return text + ' '.repeat(padding);
+  }
 }
 
