@@ -449,7 +449,7 @@ export function grid(
         return null;
       }
       const line = filtered.join('');
-      // CRITICAL: Pad line to full width to ensure grid fills the region
+      // CRITICAL: Pad line to full availableWidth to ensure grid fills the region
       const plainLine = line.replace(/\x1b\[[0-9;]*m/g, '');
       const paddedLine = plainLine.length < ctx.availableWidth 
         ? line + ' '.repeat(ctx.availableWidth - plainLine.length)

@@ -30,21 +30,14 @@ export function getTerminalWidth(): number {
     }
   }
   
-  // CRITICAL: Leave the last column empty (never write a character to it)
-  // This ensures content never reaches the terminal edge, preventing:
-  // - Auto-wrap from triggering (even if it somehow gets enabled)
-  // - Cursor positioning issues at the last column
-  // - Resize-triggered reflow problems
+  // CRITICAL: Reserve 2 columns to prevent cursor wrapping
+  // - Writing exactly (terminal_width - 1) characters puts cursor at last column, causing wrap
+  // - We need to write (terminal_width - 2) characters to keep cursor safe
+  // - After writing (width - 2) characters, cursor is at column (width - 2), leaving columns (width - 1) and width empty
   // 
-  // How it works:
-  // - We can write up to (width - 1) characters per line
-  // - The cursor can be positioned at column (width - 1) after writing
-  // - We never write a character to column width (the last column stays empty)
-  // - This is how OhMyZsh works - it never writes to the full width
-  // 
-  // Example: If terminal is 80 columns, we use 79 columns max.
-  // After writing 79 characters, cursor is at column 79, column 80 stays empty.
-  return Math.max(1, width - 1);
+  // Example: If terminal is 80 columns, we can write up to 78 characters.
+  // After writing 78 characters, cursor is at column 78, columns 79-80 stay empty.
+  return Math.max(1, width - 2);
 }
 
 /**
@@ -104,11 +97,11 @@ export function onResize(callback: (width: number, height: number) => void): () 
   const resizeHandler = () => {
     // Read directly from stdout to ensure we get the latest values
     // process.stdout.columns/rows are updated by Node.js when resize happens
-    // CRITICAL: Apply the same margin as getTerminalWidth() - leave last column empty
+    // CRITICAL: Apply the same margin as getTerminalWidth() - reserve 2 columns
     const rawWidth = process.stdout.isTTY && process.stdout.columns 
       ? process.stdout.columns 
-      : getTerminalWidth();
-    const width = Math.max(1, rawWidth - 1);
+      : 80;
+    const width = Math.max(1, rawWidth - 2);
     const height = process.stdout.isTTY && process.stdout.rows 
       ? process.stdout.rows 
       : getTerminalHeight();

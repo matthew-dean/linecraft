@@ -1,4 +1,5 @@
 import type { TerminalRegion } from '../region';
+import { logToFile } from './debug-log';
 
 /**
  * Wait for spacebar press before continuing
@@ -12,6 +13,9 @@ export function waitForSpacebar(
   message: string = 'Press SPACEBAR to exit...'
 ): Promise<void> {
   return new Promise((resolve) => {
+    // DEBUG: Log when waitForSpacebar is called
+    logToFile(`[waitForSpacebar] CALLED, isTTY=${process.stdin.isTTY}, isRaw=${process.stdin.isRaw}`);
+    
     // CRITICAL: Use add() to properly append the prompt to the region
     // This ensures the cursor is positioned at the end of the region correctly
     // and all rendering/positioning is handled properly
@@ -20,6 +24,7 @@ export function waitForSpacebar(
     // Set stdin to raw mode to capture individual keypresses
     if (!process.stdin.isTTY) {
       // If not a TTY, just resolve immediately
+      logToFile(`[waitForSpacebar] Not a TTY, resolving immediately`);
       resolve();
       return;
     }
@@ -27,8 +32,10 @@ export function waitForSpacebar(
     // Try to set raw mode, but handle errors gracefully
     try {
       process.stdin.setRawMode(true);
+      logToFile(`[waitForSpacebar] Set raw mode successfully`);
     } catch (err) {
       // If setRawMode fails (e.g., stdin is closed or not available), just resolve
+      logToFile(`[waitForSpacebar] setRawMode FAILED: ${err instanceof Error ? err.message : String(err)}, resolving immediately`);
       resolve();
       return;
     }

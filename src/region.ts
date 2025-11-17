@@ -183,7 +183,8 @@ export class TerminalRegion {
       
       // Re-enable rendering and flush once
       renderer.disableRendering = wasRenderingDisabled;
-      this.renderer.flush();
+      // Note: flush() is async but we don't await here - caller should await if needed
+      void this.renderer.flush();
       return;
     }
     
@@ -236,7 +237,8 @@ export class TerminalRegion {
       
       // Re-enable rendering and flush once
       renderer.disableRendering = wasRenderingDisabled;
-      this.renderer.flush();
+      // Note: flush() is async but we don't await here - caller should await if needed
+      void this.renderer.flush();
       return;
     }
     
@@ -336,7 +338,8 @@ export class TerminalRegion {
       
       // Re-enable rendering and flush once
       renderer.disableRendering = wasRenderingDisabled;
-      this.renderer.flush();
+      // Note: flush() is async but we don't await here - caller should await if needed
+      void this.renderer.flush();
       return;
     }
     
@@ -392,7 +395,8 @@ export class TerminalRegion {
       
       // Re-enable rendering and flush once
       renderer.disableRendering = wasRenderingDisabled;
-      this.renderer.flush();
+      // Note: flush() is async but we don't await here - caller should await if needed
+      void this.renderer.flush();
       return;
     }
 
@@ -453,9 +457,10 @@ export class TerminalRegion {
     this.renderer.clear();
   }
 
-  flush(): void {
+  async flush(): Promise<void> {
     // Force immediate render of any pending updates (bypasses throttle)
-    this.renderer.flush();
+    // Returns a promise that resolves when rendering is complete
+    await this.renderer.flush();
   }
 
   /**
@@ -482,7 +487,7 @@ export class TerminalRegion {
       try {
         const renderer = this.renderer as any;
         renderer.logToFile(`[reRenderLastContent] CALLED: height=${this._height} lastRenderedHeight=${renderer.lastRenderedHeight}`);
-        const width = this.width;
+      const width = this.width;
       
       // First, calculate total height of ALL content (components + static lines)
       let totalHeight = 0;
@@ -603,8 +608,8 @@ export class TerminalRegion {
     // this.region.setThrottleFps(fps);
   }
 
-  destroy(clearFirst: boolean = false): void {
-    this.renderer.destroy(clearFirst);
+  async destroy(clearFirst: boolean = false): Promise<void> {
+    await this.renderer.destroy(clearFirst);
   }
 }
 
