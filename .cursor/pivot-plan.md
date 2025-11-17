@@ -39,7 +39,7 @@ CSS Grid is different. The parent specifies up front what the grid template will
  * A component that returns null removes itself from the grid template slot.
  * The grid recalculates widths, assigning 0 width to the null component.
  * On resize, the process starts from the beginning.
- */
+*/
 type Component = (
   options: Record<string, any>,
   ...children: any[]

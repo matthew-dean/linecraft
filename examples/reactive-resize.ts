@@ -1,70 +1,46 @@
-#!/usr/bin/env node
-/**
- * Demo: Reactive Terminal Resize with Flex Layout
- * 
- * This demo shows how flex layouts automatically adapt to terminal resize events.
- * Try resizing your terminal window while this demo is running!
- */
+// Reactive resize example using grid
 
-import { createRegion, flex, col, color } from '../src/ts/index';
-import { waitForSpacebar } from '../src/ts/utils/wait-for-spacebar';
+import { region, grid, style } from '../src/index';
+import { waitForSpacebar } from '../src/utils/wait-for-spacebar';
 
 async function main() {
-  console.log('Reactive Flex Resize Demo');
-  console.log('==========================');
-  console.log('Resize your terminal window and watch the flex layout adapt!');
-  console.log('Press SPACEBAR to exit.\n');
+  const r = region();
 
-  // Create a region without specifying width (auto-resize enabled by default)
-  const region = createRegion({
-    height: 5,
-  });
-
-  // Update function that shows current width and flex behavior
-  const updateDisplay = () => {
-    const width = region.width;
-    region.set(
-      flex({ gap: 1, direction: 'column' },
-        flex({ gap: 2 },
-          col({ min: 15, max: 15 }, color('cyan', 'Terminal:')),
-          col({ flex: 1 }, color('green', `${width} columns`))
+  function updateDisplay() {
+    r.set(
+      grid({ template: ['1*'] },
+        grid({ template: [20, '1*'], columnGap: 2 },
+          style({ color: 'cyan' }, 'Terminal width:'),
+          style({ color: 'yellow' }, `${r.width} columns`)
         ),
-        flex({ gap: 2 },
-          col({ min: 15, max: 15 }, color('cyan', 'Fixed col:')),
-          col({ flex: 1 }, color('yellow', 'This column grows/shrinks with terminal'))
+        grid({ template: [20, '1*'], columnGap: 2 },
+          style({ color: 'cyan' }, 'Terminal height:'),
+          style({ color: 'yellow' }, `${r.height} rows`)
         ),
-        flex({ gap: 2 },
-          col({ min: 15, max: 15 }, color('cyan', 'Flex ratio:')),
-          col({ flex: 1 }, color('green', 'Flex 1')),
-          col({ flex: 2 }, color('yellow', 'Flex 2 (double)')),
-          col({ flex: 1 }, color('green', 'Flex 1'))
+        grid({ template: ['1*'] },
+          style({ color: 'brightBlack' }, '─'.repeat(Math.min(80, r.width)))
         ),
-        flex({ gap: 2 },
-          col({ min: 15, max: 15 }, color('cyan', 'Status:')),
-          col({ flex: 1 }, color('green', 'Resize to see flex adapt!'))
+        grid({ template: ['1*'] },
+          style({ color: 'green' }, 'Resize the terminal to see it update!')
         )
       )
     );
-  };
+  }
 
   // Initial display
   updateDisplay();
 
   // Update on resize
   const resizeHandler = () => {
-    setTimeout(updateDisplay, 50);
+    updateDisplay();
   };
   process.stdout.on('resize', resizeHandler);
 
-  // Also update periodically to show current width
-  const interval = setInterval(updateDisplay, 500);
+  await waitForSpacebar(r);
 
-  await waitForSpacebar(region);
-  
-  clearInterval(interval);
   process.stdout.removeListener('resize', resizeHandler);
-  region.destroy(true);
-  console.log('\n\nDemo ended. Goodbye!');
+  r.destroy(true);
 }
 
 main().catch(console.error);
+

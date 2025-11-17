@@ -1,72 +1,67 @@
-import { createRegion, flex, col, color, createJustifyBetween, createBadge, createResponsive } from '../src/ts/index';
-import { showPrompt } from '../src/ts/components/prompt';
+// OhMyZsh-style prompt using grid with justify: 'space-between'
+
+import { region, grid, style } from '../src/index';
+import { waitForSpacebar } from '../src/utils/wait-for-spacebar';
 
 async function main() {
-  const region = createRegion();
-
-  // Simulate OhMyZsh-style prompt:
-  // [branch] ──────────────────────────────── [status]
-  // When resized small: [branch]
+  const r = region();
 
   const branch = 'main';
   const status = '✓';
 
-  region.set(
-    createJustifyBetween(region, {
-      left: createBadge(region, {
-        text: branch,
-        bgColor: 'blue',
-        textColor: 'white',
-        icon: '⎇',
-      }),
-      right: createBadge(region, {
-        text: status,
-        bgColor: 'green',
-        textColor: 'white',
-      }),
-      fillChar: '─',
-      fillStyle: 'single',
-      minWidthForRight: 50, // Hide right element if width < 50
-    })
+  // OhMyZsh-style prompt: [branch] ──────────────────────────────── [status]
+  // Using justify: 'space-between' to pin left and right items
+  r.set(
+    grid({ 
+      template: [15, '1*', 15], 
+      justify: 'space-between',
+      columnGap: 1,
+      spaceBetween: { char: '─', color: 'brightBlack' }
+    },
+      style({ color: 'blue', backgroundColor: 'brightBlack' }, ` ⎇ ${branch} `),
+      style({ color: 'brightBlack' }, ''), // Empty middle (filled by spaceBetween)
+      style({ color: 'green', backgroundColor: 'brightBlack' }, ` ${status} `)
+    )
   );
 
+  await new Promise(resolve => setTimeout(resolve, 1000));
+
   // Show current width
-  const widthInfo = col({ width: 20 }, color('brightBlack', `Width: ${region.width}`));
-  
+  r.add(
+    grid({ template: ['1*'] },
+      grid({ template: [20, '1*'], columnGap: 2 },
+        style({ color: 'brightBlack' }, 'Width:'),
+        style({ color: 'yellow' }, `${r.width} columns`)
+      )
+    )
+  );
+
   // Update on resize
   const updateDisplay = () => {
-    region.set(
-      flex({ gap: 1 },
-        createJustifyBetween(region, {
-          left: createBadge(region, {
-            text: branch,
-            bgColor: 'blue',
-            textColor: 'white',
-            icon: '⎇',
-          }),
-          right: createBadge(region, {
-            text: status,
-            bgColor: 'green',
-            textColor: 'white',
-          }),
-          fillChar: '─',
-          fillStyle: 'single',
-          minWidthForRight: 50,
-        }),
-        col({ width: 20 }, color('brightBlack', `Width: ${region.width}`))
+    r.set(
+      grid({ 
+        template: [15, '1*', 15], 
+        justify: 'space-between',
+        columnGap: 1,
+        spaceBetween: { char: '─', color: 'brightBlack' }
+      },
+        style({ color: 'blue', backgroundColor: 'brightBlack' }, ` ⎇ ${branch} `),
+        style({ color: 'brightBlack' }, ''),
+        style({ color: 'green', backgroundColor: 'brightBlack' }, ` ${status} `)
+      ),
+      grid({ template: [20, '1*'], columnGap: 2 },
+        style({ color: 'brightBlack' }, 'Width:'),
+        style({ color: 'yellow' }, `${r.width} columns`)
       )
     );
   };
 
   process.stdout.on('resize', updateDisplay);
 
-  await showPrompt(region, {
-    message: 'continue',
-    key: 'SPACEBAR',
-  });
+  await waitForSpacebar(r);
 
-  process.stdout.off('resize', updateDisplay);
-  region.destroy(true);
+  process.stdout.removeListener('resize', updateDisplay);
+  r.destroy(true);
 }
 
 main().catch(console.error);

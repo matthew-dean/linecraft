@@ -1,35 +1,57 @@
-import { createRegion, flex, col, color } from '../src/ts/index';
-import { createSpinner } from '../src/ts/index';
-import { waitForSpacebar } from '../src/ts/utils/wait-for-spacebar';
+// Spinner example using grid
+
+import { region, grid, style } from '../src/index';
+import { spinner } from '../src/index';
+import { waitForSpacebar } from '../src/utils/wait-for-spacebar';
 
 async function main() {
-  const region = createRegion(); // Auto-resize enabled
-  const spinner = createSpinner(region, 1);
+  const r = region();
 
-  // Use flex layout for spinner
-  region.set(
-    flex({ gap: 2 },
-      col({}, spinner.getText()),
-      col({ flex: 1 }, color('cyan', 'Processing...'))
+  // Create spinner on line 1
+  const spin = spinner(r, 1, {
+    frames: ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'],
+    interval: 80,
+  });
+
+  // Add label next to spinner using grid
+  r.set(
+    grid({ template: [3, '1*'], columnGap: 1 },
+      style({ color: 'yellow' }, '⠋'), // Spinner will update this
+      style({ color: 'cyan' }, 'Loading...')
     )
   );
 
-  spinner.setText('Processing...');
-  spinner.start();
+  // Start spinner
+  spin.start();
+
+  // Update spinner character in the grid
+  let frameIndex = 0;
+  const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+  const interval = setInterval(() => {
+    frameIndex = (frameIndex + 1) % frames.length;
+    r.set(
+      grid({ template: [3, '1*'], columnGap: 1 },
+        style({ color: 'yellow' }, frames[frameIndex]),
+        style({ color: 'cyan' }, 'Loading...')
+      )
+    );
+  }, 80);
 
   // Simulate work
   await new Promise(resolve => setTimeout(resolve, 3000));
 
-  spinner.stop();
-  region.set(
-    flex({ gap: 2 },
-      col({}, color('green', '✓')),
-      col({ flex: 1 }, color('green', 'Done!'))
+  clearInterval(interval);
+  spin.stop();
+
+  r.set(
+    grid({ template: ['1*'] },
+      style({ color: 'green' }, '✓ Complete!')
     )
   );
-  
-  await waitForSpacebar(region);
-  region.destroy(true);
+
+  await waitForSpacebar(r);
+  r.destroy(true);
 }
 
 main().catch(console.error);
+

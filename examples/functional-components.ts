@@ -1,107 +1,89 @@
-import { createRegion, flex, col, color } from '../src/ts/index';
-import { waitForSpacebar } from '../src/ts/utils/wait-for-spacebar';
+// Functional components example using grid
 
-/**
- * Example showing functional components with flex layout
- * Demonstrates:
- * - Flex columns with different flex ratios
- * - Min/max constraints
- * - Text wrapping (we manage it ourselves)
- * - Functional components returning arrays
- */
+import { region, grid, style } from '../src/index';
+import { waitForSpacebar } from '../src/utils/wait-for-spacebar';
+import type { Component } from '../src/layout/grid';
 
-// Simple functional component - just returns a string
-function label(text: string) {
-  return text;
+// Create a reusable component function
+function statusBadge(status: 'online' | 'offline' | 'warning'): Component {
+  const colors = {
+    online: 'green',
+    warning: 'yellow',
+    offline: 'red',
+  } as const;
+  
+  const icons = {
+    online: '●',
+    warning: '⚠',
+    offline: '○',
+  } as const;
+
+  return style({ color: colors[status] }, `${icons[status]} ${status}`);
 }
 
-// Functional component that returns an array
-function statusBar(status: string, ...children: any[]) {
-  return [
-    'Status: ',
-    color('green', status),
-    ' | ',
-    ...children
-  ];
-}
-
-// Functional component with props
-function card(title: string, content: string) {
-  return [
-    color('bold', title),
-    '\n',
-    content
-  ];
+// Create a component that takes props
+function progressIndicator(current: number, total: number): Component {
+  const percent = Math.floor((current / total) * 100);
+  const filled = Math.floor(percent / 10);
+  const empty = 10 - filled;
+  
+  return style({ color: 'green' }, 
+    '█'.repeat(filled) + '░'.repeat(empty) + ` ${percent}%`
+  );
 }
 
 async function main() {
-  const region = createRegion(); // Auto-resize enabled
+  const r = region();
 
-  // Example 1: Basic flex with strings
-  console.log('Example 1: Basic flex with strings');
-  region.set(
-    flex({ gap: 2 },
-      'Hello',
-      'World',
-      col({ flex: 1 }, color('cyan', 'Grows'))
-    )
-  );
-
-  await new Promise(resolve => setTimeout(resolve, 2000));
-
-  // Example 2: Flex ratios
-  console.log('\nExample 2: Flex ratios (1:2:1)');
-  region.set(
-    flex({ gap: 1 },
-      col({ flex: 1 }, color('red', 'Flex 1')),
-      col({ flex: 2 }, color('yellow', 'Flex 2 (double)')),
-      col({ flex: 1 }, color('blue', 'Flex 1'))
-    )
-  );
-
-  await new Promise(resolve => setTimeout(resolve, 2000));
-
-  // Example 3: Functional component with flex
-  console.log('\nExample 3: Functional components in flex');
-  region.set(
-    flex({ gap: 2 },
-      label('Label:'),
-      col({ flex: 1 }, color('cyan', 'This column grows')),
-      ...statusBar('Active', 'Tasks: 5')
-    )
-  );
-
-  await new Promise(resolve => setTimeout(resolve, 2000));
-
-  // Example 4: Text wrapping in flex columns
-  console.log('\nExample 4: Text wrapping (we manage it)');
-  region.set(
-    flex({ gap: 2, direction: 'column' },
-      flex({ gap: 2 },
-        col({ min: 12, max: 12 }, color('cyan', 'Description:')),
-        col({ flex: 1 }, 'This is a long description that will wrap to multiple lines when the terminal is narrow. We manage all wrapping ourselves since auto-wrap is disabled globally.')
+  // Use functional components
+  r.set(
+    grid({ template: ['1*'], columnGap: 1 },
+      grid({ template: [20, '1*'], columnGap: 2 },
+        style({ color: 'cyan' }, 'Server Status:'),
+        statusBadge('online')
       ),
-      flex({ gap: 2 },
-        col({ min: 12, max: 12 }, color('cyan', 'Short:')),
-        col({ flex: 1 }, 'Short text')
+      grid({ template: [20, '1*'], columnGap: 2 },
+        style({ color: 'cyan' }, 'Database:'),
+        statusBadge('online')
+      ),
+      grid({ template: [20, '1*'], columnGap: 2 },
+        style({ color: 'cyan' }, 'Cache:'),
+        statusBadge('warning')
+      ),
+      grid({ template: [20, '1*'], columnGap: 2 },
+        style({ color: 'cyan' }, 'Progress:'),
+        progressIndicator(75, 100)
       )
     )
   );
 
   await new Promise(resolve => setTimeout(resolve, 2000));
 
-  // Example 5: Min/max constraints
-  console.log('\nExample 5: Min/max constraints');
-  region.set(
-    flex({ gap: 2 },
-      col({ min: 15, max: 15 }, color('cyan', 'Fixed 15')),
-      col({ flex: 1, min: 20 }, color('green', 'Grows, min 20')),
-      col({ flex: 1, max: 30 }, color('yellow', 'Grows, max 30'))
+  // Update status
+  r.set(
+    grid({ template: ['1*'], columnGap: 1 },
+      grid({ template: [20, '1*'], columnGap: 2 },
+        style({ color: 'cyan' }, 'Server Status:'),
+        statusBadge('online')
+      ),
+      grid({ template: [20, '1*'], columnGap: 2 },
+        style({ color: 'cyan' }, 'Database:'),
+        statusBadge('offline')
+      ),
+      grid({ template: [20, '1*'], columnGap: 2 },
+        style({ color: 'cyan' }, 'Cache:'),
+        statusBadge('online')
+      ),
+      grid({ template: [20, '1*'], columnGap: 2 },
+        style({ color: 'cyan' }, 'Progress:'),
+        progressIndicator(100, 100)
+      )
     )
   );
 
-  await waitForSpacebar(region);
-  region.destroy(true);
+  await waitForSpacebar(r);
+  r.destroy(true);
 }
 
 main().catch(console.error);
+

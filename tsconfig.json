@@ -4,8 +4,6 @@
     "module": "ESNext",
     "lib": ["ES2022"],
     "moduleResolution": "node",
-    "outDir": "./lib",
-    "rootDir": "./src/ts",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -15,7 +13,7 @@
     "sourceMap": true,
     "resolveJsonModule": true
   },
-  "include": ["src/ts/**/*"],
+  "include": ["src/**/*", "examples/**/*"],
   "exclude": ["node_modules", "lib", "build"]
 }
 

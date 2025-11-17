@@ -1,69 +1,63 @@
-import { createRegion, flex, col, progressBar, color } from '../src/ts/index';
-import { waitForSpacebar } from '../src/ts/utils/wait-for-spacebar';
+// Multi-lane progress bars using grid
+
+import { region, grid, style, progressBar } from '../src/index';
+import { waitForSpacebar } from '../src/utils/wait-for-spacebar';
 
 async function main() {
-  const region = createRegion(); // No width specified = auto-resize enabled
+  const r = region();
 
   let downloadProgress = 0;
   let extractProgress = 0;
   let installProgress = 0;
 
   function updateAll() {
-    region.set(
-      flex({ gap: 0 },
+    r.set(
+      grid({ template: ['1*'], columnGap: 0 },
         // Downloading
-        flex({ gap: 2 },
-          col({ min: 12, max: 12 }, color('cyan', 'Downloading')),
-          progressBar(region, { 
-            current: downloadProgress, 
+        grid({ template: [12, '1*'], columnGap: 2 },
+          style({ color: 'cyan' }, 'Downloading'),
+          progressBar({
+            current: downloadProgress,
             total: 100,
-            width: 40,
             barColor: 'green',
             bracketColor: 'brightBlack',
-            percentColor: 'yellow',
-            flex: 1
+            percentColor: 'yellow'
           })
         ),
         // Extracting
-        flex({ gap: 2 },
-          col({ min: 12, max: 12 }, color('cyan', 'Extracting')),
-          progressBar(region, { 
-            current: extractProgress, 
+        grid({ template: [12, '1*'], columnGap: 2 },
+          style({ color: 'cyan' }, 'Extracting'),
+          progressBar({
+            current: extractProgress,
             total: 100,
-            width: 40,
             barColor: 'green',
             bracketColor: 'brightBlack',
-            percentColor: 'yellow',
-            flex: 1
+            percentColor: 'yellow'
           })
         ),
         // Installing
-        flex({ gap: 2 },
-          col({ min: 12, max: 12 }, color('cyan', 'Installing')),
-          progressBar(region, { 
-            current: installProgress, 
+        grid({ template: [12, '1*'], columnGap: 2 },
+          style({ color: 'cyan' }, 'Installing'),
+          progressBar({
+            current: installProgress,
             total: 100,
-            width: 40,
             barColor: 'green',
             bracketColor: 'brightBlack',
-            percentColor: 'yellow',
-            flex: 1
+            percentColor: 'yellow'
           })
         )
       )
     );
   }
 
-  // Set up resize handler to re-render flex layout on resize
-  // Flex layout will automatically adapt to new width
+  // Set up resize handler
   const resizeHandler = () => {
     if ((resizeHandler as any).pending) {
-      return; // Already scheduled
+      return;
     }
     (resizeHandler as any).pending = true;
     setTimeout(() => {
       (resizeHandler as any).pending = false;
-      // Flex layout will automatically use the new region.width
       updateAll();
     }, 50);
   };
@@ -94,11 +88,10 @@ async function main() {
     })(),
   ]);
 
-  await waitForSpacebar(region);
+  await waitForSpacebar(r);
   
-  // Clean up resize handler
   process.stdout.removeListener('resize', resizeHandler);
-  region.destroy(true);
+  r.destroy(true);
 }
 
 main().catch(console.error);

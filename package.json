@@ -20,9 +20,10 @@
   ],
   "license": "MIT",
   "scripts": {
-    "build:ts": "tsc",
+    "build:ts": "tsc -p tsconfig.build.json",
     "build": "pnpm build:ts",
     "dev": "pnpm build:ts --watch",
+    "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:ts": "vitest",
     "example": "node scripts/run-example.js"
