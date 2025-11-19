@@ -41,8 +41,31 @@ export function style(
     }
     
     // Handle overflow
-    const overflow = options.overflow ?? 'none';
-    const availableWidth = ctx.availableWidth;
+    const overflow = options.overflow ?? 'wrap';
+    const availableWidth = Math.max(0, ctx.availableWidth);
+    const alignMode = options.align ?? 'left';
+    const styleOptions = {
+      color: options.color,
+      backgroundColor: options.backgroundColor,
+      bold: options.bold,
+      italic: options.italic,
+      underline: options.underline,
+    };
+
+    const formatLines = (lines: string[]): string | string[] => {
+      if (lines.length === 0) {
+        lines.push('');
+      }
+      const formatted = lines.map(line => {
+        const aligned = alignText(line, availableWidth, alignMode);
+        return applyStyle(aligned, styleOptions);
+      });
+      return formatted.length === 1 ? formatted[0] : formatted;
+    };
+
+    if (availableWidth === 0) {
+      return formatLines(['']);
+    }
     
     if (typeof text === 'string') {
       // Single line
@@ -54,44 +77,22 @@ export function style(
         processed = truncateStart(processed, availableWidth);
       } else if (overflow === 'ellipsis-middle' && processed.length > availableWidth) {
         processed = truncateMiddle(processed, availableWidth);
-      } else if (overflow === 'wrap') {
-        // Wrap returns array
+      } else if (overflow === 'wrap' || overflow === 'none') {
         const wrapped = wrapText(processed, availableWidth);
-        return wrapped.map(line => {
-          const aligned = alignText(line, availableWidth, options.align ?? 'left');
-          return applyStyle(aligned, {
-          color: options.color,
-          backgroundColor: options.backgroundColor,
-          bold: options.bold,
-          italic: options.italic,
-          underline: options.underline,
-          });
-        });
+        return formatLines(wrapped);
       }
       
       // Apply alignment
-      const aligned = alignText(processed, availableWidth, options.align ?? 'left');
-      
-      // Apply styling
-      return applyStyle(aligned, {
-        color: options.color,
-        backgroundColor: options.backgroundColor,
-        bold: options.bold,
-        italic: options.italic,
-        underline: options.underline,
-      });
+      const aligned = alignText(processed, availableWidth, alignMode);
+      return applyStyle(aligned, styleOptions);
     } else {
       // Array of strings - apply styling and alignment to each line
-      return text.map(line => {
-        const aligned = alignText(line, availableWidth, options.align ?? 'left');
-        return applyStyle(aligned, {
-        color: options.color,
-        backgroundColor: options.backgroundColor,
-        bold: options.bold,
-        italic: options.italic,
-        underline: options.underline,
-        });
-      });
+      const lines: string[] = [];
+      for (const line of text) {
+        const wrapped = wrapText(line, availableWidth);
+        lines.push(...wrapped);
+      }
+      return formatLines(lines);
     }
   };
 }
@@ -103,6 +104,9 @@ function alignText(text: string, width: number, align: 'left' | 'right' | 'cente
   // Get plain text length (without ANSI codes)
   const plainText = text.replace(/\x1b\[[0-9;]*m/g, '');
   const textLength = plainText.length;
+  if (!Number.isFinite(width)) {
+    return text;
+  }
   
   if (textLength >= width) {
     return text; // No alignment needed if text is already at or exceeds width

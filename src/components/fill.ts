@@ -18,6 +18,13 @@ export function fill(options: FillOptions = {}): Component {
     const char = options.char ?? ' ';
     const availableWidth = ctx.availableWidth;
     
+    // During auto column measurement, availableWidth might be Infinity
+    // Fill components have no intrinsic width - they fill available space
+    // So during measurement, return empty string (0 width contribution)
+    if (!Number.isFinite(availableWidth) || availableWidth <= 0) {
+      return '';
+    }
+    
     const fillText = char.repeat(availableWidth);
     
     return applyStyle(fillText, {

@@ -38,16 +38,14 @@ describe('RegionRenderer', () => {
   });
 
   describe('initialization', () => {
-    it('should create region with correct dimensions', () => {
+    it('should create region sized to stdout width', () => {
       const region = new RegionRenderer({
-        width: 80,
-        height: 5,
         stdout: mockStdout,
         disableRendering: true,
       });
 
       expect(region.getWidth()).toBe(80);
-      expect(region.getHeight()).toBe(5);
+      expect(region.getHeight()).toBe(1);
     });
 
     it('should use default values', () => {
@@ -64,8 +62,6 @@ describe('RegionRenderer', () => {
   describe('setLine', () => {
     it('should expand automatically when needed', () => {
       const region = new RegionRenderer({
-        width: 80,
-        height: 1,
         stdout: mockStdout,
         disableRendering: true,
       });
@@ -88,8 +84,6 @@ describe('RegionRenderer', () => {
 
     it('should handle empty string', () => {
       const region = new RegionRenderer({
-        width: 80,
-        height: 2,
         stdout: mockStdout,
         disableRendering: true,
       });
@@ -104,8 +98,6 @@ describe('RegionRenderer', () => {
   describe('set', () => {
     it('should split content by newlines correctly', () => {
       const region = new RegionRenderer({
-        width: 80,
-        height: 1,
         stdout: mockStdout,
         disableRendering: true,
       });
@@ -116,8 +108,6 @@ describe('RegionRenderer', () => {
 
     it('should handle empty content', () => {
       const region = new RegionRenderer({
-        width: 80,
-        height: 1,
         stdout: mockStdout,
         disableRendering: true,
       });
@@ -128,8 +118,6 @@ describe('RegionRenderer', () => {
 
     it('should handle single line (no newline)', () => {
       const region = new RegionRenderer({
-        width: 80,
-        height: 1,
         stdout: mockStdout,
         disableRendering: true,
       });
@@ -142,8 +130,6 @@ describe('RegionRenderer', () => {
   describe('clearLine', () => {
     it('should clear individual lines', () => {
       const region = new RegionRenderer({
-        width: 80,
-        height: 3,
         stdout: mockStdout,
         disableRendering: true,
       });
@@ -167,8 +153,6 @@ describe('RegionRenderer', () => {
   describe('clear', () => {
     it('should clear all lines', () => {
       const region = new RegionRenderer({
-        width: 80,
-        height: 3,
         stdout: mockStdout,
         disableRendering: true,
       });
@@ -199,8 +183,6 @@ describe('RegionRenderer', () => {
   describe('multiple setLine calls', () => {
     it('should handle multiple updates', () => {
       const region = new RegionRenderer({
-        width: 80,
-        height: 1,
         stdout: mockStdout,
         disableRendering: true,
       });

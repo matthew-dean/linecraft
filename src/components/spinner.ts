@@ -1,58 +1,73 @@
-import { TerminalRegion } from '../region';
-import type { SpinnerOptions } from '../types';
+// Spinner component - manages its own animation state
 
-const DEFAULT_SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+import type { Component, RenderContext } from '../layout/grid';
+import type { Color } from '../types';
+import { applyStyle } from '../utils/colors';
 
-export class Spinner {
-  private region: TerminalRegion;
-  private lineNumber: number; // 1-based
-  private frameIndex: number = 0;
-  private text: string = '';
-  private interval?: NodeJS.Timeout;
-  private isRunning: boolean = false;
-  private frames: string[];
-  private intervalMs: number;
+export interface SpinnerOptions {
+  frames?: string[];
+  interval?: number;
+  color?: Color;
+}
 
-  constructor(region: TerminalRegion, lineNumber: number, options: SpinnerOptions = {}) {
-    this.region = region;
-    this.lineNumber = lineNumber;
-    this.frames = options.frames ?? DEFAULT_SPINNER_FRAMES;
-    this.intervalMs = options.interval ?? 100;
-  }
+/**
+ * Create a spinner component that manages its own animation state
+ * Returns an object with render(), start(), and stop() methods
+ */
+export function createSpinner(options: SpinnerOptions = {}): {
+  render: Component;
+  start: () => void;
+  stop: () => void;
+} {
+  const {
+    frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'],
+    interval = 80,
+    color = 'yellow',
+  } = options;
 
-  start(): void {
-    if (this.isRunning) return;
-    this.isRunning = true;
-    // Render immediately when starting
-    this.render();
-    this.interval = setInterval(() => {
-      this.frameIndex = (this.frameIndex + 1) % this.frames.length;
-      this.render();
-    }, this.intervalMs);
-  }
+  let currentFrameIndex = 0;
+  let intervalId: NodeJS.Timeout | null = null;
+  let renderCallback: (() => void) | null = null;
 
-  stop(): void {
-    if (!this.isRunning) return;
-    this.isRunning = false;
-    if (this.interval) {
-      clearInterval(this.interval);
+  const render: Component = (ctx: RenderContext) => {
+    const frame = frames[currentFrameIndex];
+    if (color) {
+      return applyStyle(frame, { color });
     }
-    // Clear the spinner line
-    this.region.setLine(this.lineNumber, '');
-  }
+    return frame;
+  };
 
-  setText(text: string): void {
-    this.text = text;
-    this.render();
-  }
+  const start = () => {
+    if (intervalId !== null) {
+      return; // Already running
+    }
 
-  private render(): void {
-    const frame = this.frames[this.frameIndex];
-    const line = `${frame} ${this.text}`;
+    intervalId = setInterval(() => {
+      currentFrameIndex = (currentFrameIndex + 1) % frames.length;
+      // Trigger re-render if callback is set
+      if (renderCallback) {
+        renderCallback();
+      }
+    }, interval);
+  };
 
-    // Just update the line - Zig handles batching and rendering
-    this.region.setLine(this.lineNumber, line);
-    // Spinner updates frequently, so Zig's throttling will handle smooth animation
-  }
+  const stop = () => {
+    if (intervalId !== null) {
+      clearInterval(intervalId);
+      intervalId = null;
+    }
+  };
+
+  // Expose a way to set the render callback (for region to trigger re-renders)
+  // This is a bit of a hack, but necessary for the spinner to update
+  (render as any).__setRenderCallback = (callback: () => void) => {
+    renderCallback = callback;
+  };
+
+  return {
+    render,
+    start,
+    stop,
+  };
 }
 

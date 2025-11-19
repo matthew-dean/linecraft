@@ -4,7 +4,7 @@
 import type { TerminalRegion } from '../region';
 import type { Color } from '../types';
 import { applyStyle } from '../utils/colors';
-import { truncateEnd, truncateStart, truncateMiddle, wrapText } from '../utils/text';
+import { truncateEnd, truncateStart, truncateMiddle, wrapText, getTrimmedTextWidth } from '../utils/text';
 
 /**
  * Extract character and color from spaceBetween option for a specific gap index
@@ -45,15 +45,28 @@ export interface RenderContext {
 }
 
 /**
- * Component type: function that takes RenderContext and returns string(s) or null
+ * Component type: can be a function or an object with a render method
  */
-export type Component = (ctx: RenderContext) => string | string[] | null;
+export type Component = 
+  | ((ctx: RenderContext) => string | string[] | null)
+  | { render: (ctx: RenderContext) => string | string[] | null };
+
+/**
+ * Helper to call a component (handles both function and object forms)
+ */
+export function callComponent(component: Component, ctx: RenderContext): string | string[] | null {
+  if (typeof component === 'function') {
+    return component(ctx);
+  }
+  return component.render(ctx);
+}
 
 /**
  * Grid template entry: fixed width, flex unit, or minmax
  */
 export type GridTemplateEntry = 
   | number  // Fixed width: 20
+  | 'auto'  // Auto width (fit content)
   | string  // Flex unit: '1*', '2*'
   | { min: number; width: string };  // Minmax: { min: 40, width: '2*' }
 
@@ -75,7 +88,7 @@ export interface GridOptions {
  * Parse template entry into track size info
  */
 interface TrackSize {
-  type: 'fixed' | 'flex' | 'minmax';
+  type: 'fixed' | 'flex' | 'minmax' | 'auto';
   value: number;  // Fixed width, or flex ratio, or min width
   flexRatio?: number;  // For flex and minmax
 }
@@ -83,6 +96,10 @@ interface TrackSize {
 function parseTemplateEntry(entry: GridTemplateEntry): TrackSize {
   if (typeof entry === 'number') {
     return { type: 'fixed', value: entry };
+  }
+  
+  if (entry === 'auto') {
+    return { type: 'auto', value: 0 };
   }
   
   if (typeof entry === 'string') {
@@ -110,31 +127,27 @@ function parseTemplateEntry(entry: GridTemplateEntry): TrackSize {
  * Calculate column widths from template
  * Reference: https://www.w3.org/TR/css-grid-1/#track-sizing
  */
-function calculateColumnWidths(
-  template: GridTemplateEntry[],
-  availableWidth: number,
-  columnGap: number,
-  numChildren: number
-): number[] {
-  // Expand template if needed (repeat last value)
-  const expandedTemplate: GridTemplateEntry[] = [];
-  for (let i = 0; i < numChildren; i++) {
+function expandTemplate(template: GridTemplateEntry[], count: number): GridTemplateEntry[] {
+  const expanded: GridTemplateEntry[] = [];
+  for (let i = 0; i < count; i++) {
     if (i < template.length) {
-      expandedTemplate.push(template[i]);
+      expanded.push(template[i]);
     } else {
-      // Repeat last template value
-      expandedTemplate.push(template[template.length - 1] ?? '1*');
+      expanded.push(template[template.length - 1] ?? '1*');
     }
   }
-  
-  // If template is empty, use equal flex for all
-  if (expandedTemplate.length === 0) {
-    expandedTemplate.push('1*');
+  if (expanded.length === 0) {
+    expanded.push('1*');
   }
-  
-  // Parse all template entries
-  const tracks: TrackSize[] = expandedTemplate.map(parseTemplateEntry);
-  
+  return expanded;
+}
+
+function calculateColumnWidths(
+  tracks: TrackSize[],
+  availableWidth: number,
+  columnGap: number,
+  autoContentWidths: number[]
+): number[] {
   // Step 1: Calculate fixed track sizes
   let fixedTotal = 0;
   let flexTotal = 0;
@@ -152,6 +165,10 @@ function calculateColumnWidths(
       widths[i] = track.value;  // Start with min
       fixedTotal += track.value;
       flexTotal += track.flexRatio ?? 1;
+    } else if (track.type === 'auto') {
+      const autoWidth = autoContentWidths[i] ?? 0;
+      widths[i] = autoWidth;
+      fixedTotal += autoWidth;
     }
   }
   
@@ -175,241 +192,151 @@ function calculateColumnWidths(
   }
   
   // Step 4: Round to integers
-  return widths.map(w => Math.floor(w));
-}
+  const rounded = widths.map(w => Math.max(0, Math.floor(w)));
 
-/**
- * Grid component that renders to region (like flex)
- * This is the internal implementation
- */
-export interface GridComponent {
-  getHeight(): number;
-  render(x: number, y: number, width: number): void;
-}
+  // Step 5: Clamp total width to available space (minus gaps)
+  // CRITICAL: Preserve auto column widths - only adjust flex columns
+  const maxContentWidth = Math.max(0, availableWidth - gapSpace);
+  let totalRounded = rounded.reduce((sum, w) => sum + w, 0);
 
-/**
- * Create a grid component that renders to region
- */
-export function createGrid(
-  region: TerminalRegion,
-  options: GridOptions,
-  ...children: Component[]
-): GridComponent {
-  return {
-    getHeight(): number {
-      // Calculate height by rendering children and checking for multi-line
-      const { template, columnGap = 0 } = options;
-      const validChildren = children.filter(c => c !== null && c !== undefined);
-      
-      if (validChildren.length === 0) {
-        return 0;
+  if (totalRounded > maxContentWidth && totalRounded > 0) {
+    // Calculate auto/fixed total (these should not be scaled)
+    let autoFixedTotal = 0;
+    for (let i = 0; i < tracks.length; i++) {
+      if (tracks[i].type === 'auto' || tracks[i].type === 'fixed') {
+        autoFixedTotal += rounded[i];
       }
-      
-      const columnWidths = calculateColumnWidths(
-        template,
-        region.width,
-        columnGap,
-        validChildren.length
-      );
-      
-      let maxLines = 1;
-      for (let i = 0; i < validChildren.length; i++) {
-        const child = validChildren[i];
-        const width = columnWidths[i] ?? 0;
-        
-        const childCtx: RenderContext = {
-          availableWidth: width,
-          region: region,
-          columnIndex: i,
-          rowIndex: 0,
-        };
-        
-        const result = child(childCtx);
-        if (result !== null) {
-          const lines = Array.isArray(result) ? result.length : 1;
-          maxLines = Math.max(maxLines, lines);
-        }
-      }
-      
-      return maxLines;
-    },
+    }
     
-    render(x: number, y: number, width: number): void {
-      const { template, columnGap = 0, spaceBetween, justify = 'start' } = options;
+    // Only scale flex columns if needed
+    const flexTotal = totalRounded - autoFixedTotal;
+    if (flexTotal > 0) {
+      const availableForFlex = Math.max(0, maxContentWidth - autoFixedTotal);
+      const scale = availableForFlex / flexTotal;
       
-      // Filter out null children
-      const validChildren = children.filter(c => c !== null && c !== undefined);
-      
-      if (validChildren.length === 0) {
-        return;
-      }
-      
-      // Calculate column widths
-      const columnWidths = calculateColumnWidths(
-        template,
-        width,
-        columnGap,
-        validChildren.length
-      );
-      
-      // Handle justify: 'space-between'
-      let startX = x;
-      let actualWidths = columnWidths;
-      
-      if (justify === 'space-between' && validChildren.length > 1) {
-        const firstWidth = columnWidths[0];
-        const lastWidth = columnWidths[columnWidths.length - 1];
-        const middleTotal = columnWidths.slice(1, -1).reduce((sum, w) => sum + w, 0);
-        const middleFlex = width - firstWidth - lastWidth - (columnGap * (validChildren.length - 1));
-        
-        actualWidths = [firstWidth];
-        for (let i = 1; i < columnWidths.length - 1; i++) {
-          const ratio = middleTotal > 0 ? columnWidths[i] / middleTotal : 1 / (columnWidths.length - 2);
-          actualWidths.push(Math.floor(middleFlex * ratio));
+      let adjustedTotal = autoFixedTotal;
+      for (let i = 0; i < rounded.length; i++) {
+        if (tracks[i].type === 'flex' || tracks[i].type === 'minmax') {
+          rounded[i] = Math.max(0, Math.floor(rounded[i] * scale));
+          adjustedTotal += rounded[i];
         }
-        actualWidths.push(lastWidth);
       }
-      
-      // Render each child and collect results
-      const results: (string | string[] | null)[] = [];
-      let currentX = startX;
-      
-      for (let i = 0; i < validChildren.length; i++) {
-        const child = validChildren[i];
-        const childWidth = actualWidths[i] ?? 0;
-        
-        // Create context for child
-        const childCtx: RenderContext = {
-          availableWidth: childWidth,
-          region: region,
-          columnIndex: i,
-          rowIndex: 0,
-        };
-        
-        // Render child
-        const result = child(childCtx);
-        results.push(result);
-        
-        // Handle spaceBetween
-        if (i < validChildren.length - 1 && spaceBetween) {
-            const { char: spaceChar, color: spaceColor } = getSpaceBetweenChar(spaceBetween, i);
-          const gapText = spaceChar.repeat(columnGap);
-          results.push(spaceColor ? applyStyle(gapText, { color: spaceColor }) : gapText);
+
+      let remainder = maxContentWidth - adjustedTotal;
+      let idx = 0;
+      while (remainder > 0 && rounded.length > 0) {
+        const targetIndex = idx % rounded.length;
+        // Only add to flex columns
+        if (tracks[targetIndex].type === 'flex' || tracks[targetIndex].type === 'minmax') {
+          rounded[targetIndex] += 1;
+          remainder -= 1;
         }
-        
-        currentX += childWidth + columnGap;
+        idx++;
+        if (idx > rounded.length * 10) break; // Safety limit
       }
-      
-      // Handle multi-line: if any result is string[], expand grid vertically
-      const maxLines = Math.max(
-        ...results.map(r => Array.isArray(r) ? r.length : 1),
-        1
-      );
-      
-      // Render line by line
-      for (let lineIdx = 0; lineIdx < maxLines; lineIdx++) {
-        const lineParts: string[] = [];
-        let partIdx = 0;
-        
-        for (let i = 0; i < validChildren.length; i++) {
-          const result = results[partIdx];
-          partIdx++;
-          const columnWidth = actualWidths[i] ?? 0;
-          
-          if (result === null) {
-            // Null result - pad to column width
-            // If spaceBetween is set, use it to fill empty columns
-            if (spaceBetween && columnWidth > 0) {
-              const { char: spaceChar, color: spaceColor } = getSpaceBetweenChar(spaceBetween, i);
-              const fillText = spaceChar.repeat(columnWidth);
-              lineParts.push(spaceColor ? applyStyle(fillText, { color: spaceColor }) : fillText);
-            } else {
-              lineParts.push(' '.repeat(columnWidth));
-            }
-            continue;
-          }
-          
-          let columnContent: string;
-          if (Array.isArray(result)) {
-            columnContent = result[lineIdx] ?? '';
-          } else {
-            columnContent = lineIdx === 0 ? result : '';
-          }
-          
-          // CRITICAL: Pad each column to its allocated width
-          // This ensures flex columns actually fill their allocated space
-          // If spaceBetween is set and content is empty, fill with spaceBetween character
-          const plainContent = columnContent.replace(/\x1b\[[0-9;]*m/g, '');
-          let paddedContent: string;
-          if (plainContent.length === 0 && spaceBetween && columnWidth > 0) {
-            // Fill empty column with spaceBetween character
-            const { char: spaceChar, color: spaceColor } = getSpaceBetweenChar(spaceBetween, i);
-            const fillText = spaceChar.repeat(columnWidth);
-            paddedContent = spaceColor ? applyStyle(fillText, { color: spaceColor }) : fillText;
-          } else {
-            // Normal padding with spaces
-            paddedContent = plainContent.length < columnWidth
-              ? columnContent + ' '.repeat(columnWidth - plainContent.length)
-              : columnContent;
-          }
-          
-          lineParts.push(paddedContent);
-          
-          // Add gap (spaceBetween or spaces) if not last
-          if (i < validChildren.length - 1 && columnGap > 0) {
-            if (spaceBetween) {
-              const { char: spaceChar, color: spaceColor } = getSpaceBetweenChar(spaceBetween, i);
-              const gapText = spaceChar.repeat(columnGap);
-              lineParts.push(spaceColor ? applyStyle(gapText, { color: spaceColor }) : gapText);
-              partIdx++; // spaceBetween adds an extra result
-            } else {
-              // Just add spaces for columnGap
-              lineParts.push(' '.repeat(columnGap));
-            }
+    } else {
+      // No flex columns - scale down fixed and auto columns proportionally if needed
+      if (autoFixedTotal > maxContentWidth) {
+        const scale = maxContentWidth / autoFixedTotal;
+        let adjustedTotal = 0;
+        for (let i = 0; i < rounded.length; i++) {
+          if (tracks[i].type === 'auto' || tracks[i].type === 'fixed') {
+            rounded[i] = Math.max(0, Math.floor(rounded[i] * scale));
+            adjustedTotal += rounded[i];
           }
         }
         
-        const line = lineParts.join('');
-        const lineY = y + lineIdx;
-        
-        // CRITICAL: Pad line to full width to ensure grid fills the region
-        // This ensures grids are always full-width by default
-        const plainLine = line.replace(/\x1b\[[0-9;]*m/g, '');
-        const paddedLine = plainLine.length < width 
-          ? line + ' '.repeat(width - plainLine.length)
-          : line;
-        
-        // For now, just set the line (we can add merging later if needed)
-        region.setLine(lineY, paddedLine);
+        // Distribute remainder to fixed columns (prefer fixed over auto)
+        let remainder = maxContentWidth - adjustedTotal;
+        let idx = 0;
+        while (remainder > 0 && rounded.length > 0) {
+          const targetIndex = idx % rounded.length;
+          if (tracks[targetIndex].type === 'fixed' || tracks[targetIndex].type === 'auto') {
+            rounded[targetIndex] += 1;
+            remainder -= 1;
+          }
+          idx++;
+          if (idx > rounded.length * 10) break; // Safety limit
+        }
       }
-    },
-  };
+    }
+  }
+
+  return rounded;
+}
+
+function getRenderedWidth(result: string | string[] | null): number {
+  if (result === null) {
+    return 0;
+  }
+  if (Array.isArray(result)) {
+    return result.reduce((max, line) => Math.max(max, getTrimmedTextWidth(line)), 0);
+  }
+  return getTrimmedTextWidth(result);
+}
+
+function measureAutoContentWidths(
+  tracks: TrackSize[],
+  children: Component[],
+  ctxFactory: (index: number) => RenderContext
+): number[] {
+  const widths = new Array(tracks.length).fill(0);
+  for (let i = 0; i < tracks.length; i++) {
+    if (tracks[i].type !== 'auto') {
+      continue;
+    }
+    const result = children[i] ? children[i]!(ctxFactory(i)) : null;
+    widths[i] = getRenderedWidth(result);
+  }
+  return widths;
 }
 
 /**
  * Create a grid component (function-based API)
  * This returns a Component that can be used in other grids
+ * Accepts Component children or strings (which are converted to style components)
  */
 export function grid(
   options: GridOptions,
-  ...children: Component[]
+  ...children: (Component | string)[]
 ): Component {
+  // Convert strings to style components
+  const convertedChildren: Component[] = children.map(child => {
+    if (typeof child === 'string') {
+      // Import style dynamically to avoid circular dependency
+      const { style } = require('../components/style');
+      return style({}, child);
+    }
+    return child;
+  });
   return (ctx: RenderContext) => {
     const { template, columnGap = 0, spaceBetween, justify = 'start' } = options;
     
     // Filter out null children (from when conditions)
-    const validChildren = children.filter(c => c !== null && c !== undefined);
+    const validChildren = convertedChildren.filter(c => c !== null && c !== undefined);
     
     if (validChildren.length === 0) {
       return null;
     }
     
     // Calculate column widths
+    const expandedTemplate = expandTemplate(template, validChildren.length);
+    const tracks = expandedTemplate.map(parseTemplateEntry);
+    const autoContentWidths = measureAutoContentWidths(
+      tracks,
+      validChildren,
+      (index) => ({
+        availableWidth: Number.POSITIVE_INFINITY,
+        region: ctx.region,
+        columnIndex: index,
+        rowIndex: 0,
+      })
+    );
     const columnWidths = calculateColumnWidths(
-      template,
+      tracks,
       ctx.availableWidth,
       columnGap,
-      validChildren.length
+      autoContentWidths
     );
     
     // Handle justify: 'space-between'
@@ -434,6 +361,7 @@ export function grid(
     
     // Render each child
     const results: (string | string[] | null)[] = [];
+    let anyRenderableChild = false;
     let currentX = startX;
     
     for (let i = 0; i < validChildren.length; i++) {
@@ -451,6 +379,9 @@ export function grid(
       // Render child
       const result = child(childCtx);
       results.push(result);
+      if (result !== null) {
+        anyRenderableChild = true;
+      }
       
       // Handle gap (spaceBetween or spaces)
       if (i < validChildren.length - 1 && columnGap > 0) {
@@ -468,6 +399,10 @@ export function grid(
       currentX += width + columnGap;
     }
     
+    if (!anyRenderableChild) {
+      return null;
+    }
+    
     // Handle multi-line: if any result is string[], expand grid vertically
     const maxLines = Math.max(
       ...results.map(r => Array.isArray(r) ? r.length : 1),
@@ -475,7 +410,93 @@ export function grid(
     );
     
     if (maxLines === 1) {
-      // Single line - join all results with proper column padding
+      // Special handling for spaceBetween with auto columns (CSS justify-content: space-between)
+      const hasAutoColumns = tracks.some(t => t.type === 'auto');
+      const allAuto = tracks.every(t => t.type === 'auto' || t.type === 'flex');
+      
+      if (spaceBetween && hasAutoColumns && allAuto) {
+        // Special case: spaceBetween with auto columns (CSS justify-content: space-between)
+        // Collect all auto column contents (skip gap results in results array)
+        const autoContents: string[] = [];
+        let totalAutoWidth = 0;
+        let partIdx = 0;
+        
+        // Debug: log what we're working with
+        if (process.env.DEBUG_GRID) {
+          console.log('DEBUG: spaceBetween with auto columns');
+          console.log('DEBUG: validChildren.length:', validChildren.length);
+          console.log('DEBUG: results.length:', results.length);
+          console.log('DEBUG: tracks:', tracks.map(t => t.type));
+        }
+        
+        for (let i = 0; i < validChildren.length; i++) {
+          const track = tracks[i];
+          
+          if (track.type === 'auto') {
+            if (process.env.DEBUG_GRID) {
+              console.log(`DEBUG: Processing auto column ${i}, partIdx=${partIdx}, results[partIdx]=`, results[partIdx]);
+            }
+            const result = results[partIdx];
+            partIdx++;
+            const content = result === null ? '' : (typeof result === 'string' ? result : '');
+            const plainContent = content.replace(/\x1b\[[0-9;]*m/g, '');
+            totalAutoWidth += plainContent.length;
+            autoContents.push(content);
+            
+            if (process.env.DEBUG_GRID) {
+              console.log(`DEBUG: Collected auto column ${i}: "${plainContent}", totalAutoWidth=${totalAutoWidth}, autoContents.length=${autoContents.length}`);
+            }
+            
+            // Skip gap result if present (spaceBetween adds gap results between columns)
+            // Only skip if this is not the last column and there's a gap result
+            if (i < validChildren.length - 1 && columnGap > 0 && partIdx < results.length) {
+              if (process.env.DEBUG_GRID) {
+                console.log(`DEBUG: Skipping gap result at partIdx=${partIdx}`);
+              }
+              partIdx++; // Skip the gap result
+            }
+          } else {
+            // Not an auto column, skip it
+            partIdx++;
+            if (i < validChildren.length - 1 && columnGap > 0 && partIdx < results.length) {
+              partIdx++; // Skip gap if present
+            }
+          }
+        }
+        
+        if (process.env.DEBUG_GRID) {
+          console.log('DEBUG: Final autoContents.length:', autoContents.length);
+          console.log('DEBUG: Final totalAutoWidth:', totalAutoWidth);
+        }
+        
+        // Calculate spaceBetween fill width
+        const spaceBetweenWidth = Math.max(0, ctx.availableWidth - totalAutoWidth);
+        const { char: spaceChar, color: spaceColor } = getSpaceBetweenChar(spaceBetween, 0);
+        const fillText = spaceChar.repeat(spaceBetweenWidth);
+        const spaceBetweenContent = spaceColor ? applyStyle(fillText, { color: spaceColor }) : fillText;
+        
+        // Build line: first column + spaceBetween + remaining columns
+        const lineParts: string[] = [];
+        if (autoContents.length > 0) {
+          lineParts.push(autoContents[0]);
+          if (autoContents.length > 1) {
+            lineParts.push(spaceBetweenContent);
+            for (let i = 1; i < autoContents.length; i++) {
+              lineParts.push(autoContents[i]);
+            }
+          }
+        }
+        
+        const line = lineParts.join('');
+        // Pad to full width to ensure right column is at the end
+        const plainLine = line.replace(/\x1b\[[0-9;]*m/g, '');
+        const paddedLine = plainLine.length < ctx.availableWidth 
+          ? line + ' '.repeat(ctx.availableWidth - plainLine.length)
+          : line;
+        return paddedLine;
+      }
+      
+      // Standard rendering for other cases
       const lineParts: string[] = [];
       let partIdx = 0;
       
@@ -483,47 +504,57 @@ export function grid(
         const result = results[partIdx];
         partIdx++;
         const columnWidth = actualWidths[i] ?? 0;
+        const track = tracks[i];
+        const isAuto = track?.type === 'auto';
+        
+        const isFlex = track?.type === 'flex' || track?.type === 'minmax';
         
         if (result === null) {
           // Null result - pad to column width
-          // If spaceBetween is set, use it to fill empty columns
-          if (spaceBetween && columnWidth > 0) {
+          // If spaceBetween is set, use it to fill empty columns (especially flex columns)
+          if (!isAuto && spaceBetween && columnWidth > 0) {
             const { char: spaceChar, color: spaceColor } = getSpaceBetweenChar(spaceBetween, i);
             const fillText = spaceChar.repeat(columnWidth);
             lineParts.push(spaceColor ? applyStyle(fillText, { color: spaceColor }) : fillText);
-          } else {
+          } else if (!isAuto) {
             lineParts.push(' '.repeat(columnWidth));
+          } else {
+            lineParts.push('');
           }
         } else {
           const columnContent = typeof result === 'string' ? result : '';
-          // CRITICAL: Pad each column to its allocated width
-          // This ensures flex columns actually fill their allocated space
-          // If spaceBetween is set and content is empty, fill with spaceBetween character
-          const plainContent = columnContent.replace(/\x1b\[[0-9;]*m/g, '');
-          let paddedContent: string;
-          if (plainContent.length === 0 && spaceBetween && columnWidth > 0) {
-            // Fill empty column with spaceBetween character
-            const { char: spaceChar, color: spaceColor } = getSpaceBetweenChar(spaceBetween, i);
-            const fillText = spaceChar.repeat(columnWidth);
-            paddedContent = spaceColor ? applyStyle(fillText, { color: spaceColor }) : fillText;
+          if (isAuto) {
+            lineParts.push(columnContent);
           } else {
-            // Normal padding with spaces
-            paddedContent = plainContent.length < columnWidth
-              ? columnContent + ' '.repeat(columnWidth - plainContent.length)
-              : columnContent;
-      }
-          lineParts.push(paddedContent);
+            const plainContent = columnContent.replace(/\x1b\[[0-9;]*m/g, '');
+            let paddedContent: string;
+            // If content is empty and this is a flex column with spaceBetween, fill it
+            if (plainContent.length === 0 && spaceBetween && columnWidth > 0 && isFlex) {
+              const { char: spaceChar, color: spaceColor } = getSpaceBetweenChar(spaceBetween, i);
+              const fillText = spaceChar.repeat(columnWidth);
+              paddedContent = spaceColor ? applyStyle(fillText, { color: spaceColor }) : fillText;
+            } else if (plainContent.length === 0 && spaceBetween && columnWidth > 0) {
+              const { char: spaceChar, color: spaceColor } = getSpaceBetweenChar(spaceBetween, i);
+              const fillText = spaceChar.repeat(columnWidth);
+              paddedContent = spaceColor ? applyStyle(fillText, { color: spaceColor }) : fillText;
+            } else {
+              paddedContent = plainContent.length < columnWidth
+                ? columnContent + ' '.repeat(columnWidth - plainContent.length)
+                : columnContent;
+            }
+            lineParts.push(paddedContent);
+        }
         }
         
-        // Add gap (spaceBetween or spaces) if not last
+        // Skip gap result if present (gap results are added to results array between columns)
+        // Then add gap to lineParts if not using spaceBetween
         if (i < validChildren.length - 1 && columnGap > 0) {
-          if (spaceBetween) {
-            const { char: spaceChar, color: spaceColor } = getSpaceBetweenChar(spaceBetween, i);
-            const gapText = spaceChar.repeat(columnGap);
-            lineParts.push(spaceColor ? applyStyle(gapText, { color: spaceColor }) : gapText);
-            partIdx++; // spaceBetween adds an extra result
-          } else {
-            // Just add spaces for columnGap
+          // Skip the gap result in the results array
+          if (partIdx < results.length) {
+            partIdx++; // Skip the gap result
+          }
+          // Add gap to line (unless spaceBetween is set, which handles gaps differently)
+          if (!spaceBetween) {
             lineParts.push(' '.repeat(columnGap));
           }
         }
@@ -548,10 +579,26 @@ export function grid(
         const result = results[partIdx];
         partIdx++;
         const columnWidth = actualWidths[i] ?? 0;
+        const track = tracks[i];
+        const isAuto = track?.type === 'auto';
+        const isFlex = track?.type === 'flex' || track?.type === 'minmax';
         
         if (result === null) {
           // Null result - pad to column width
-          lineParts.push(' '.repeat(columnWidth));
+          // If spaceBetween is set, use it to fill empty columns (especially flex columns)
+          if (!isAuto && spaceBetween && columnWidth > 0) {
+            const { char: spaceChar, color: spaceColor } = getSpaceBetweenChar(spaceBetween, i);
+            const fillText = spaceChar.repeat(columnWidth);
+            lineParts.push(spaceColor ? applyStyle(fillText, { color: spaceColor }) : fillText);
+          } else if (!isAuto) {
+            lineParts.push(' '.repeat(columnWidth));
+          } else {
+            lineParts.push('');
+          }
+          // Skip gap result if present
+          if (i < validChildren.length - 1 && columnGap > 0 && partIdx < results.length) {
+            partIdx++;
+          }
           continue;
         }
         
@@ -565,31 +612,37 @@ export function grid(
         // CRITICAL: Pad each column to its allocated width
         // This ensures flex columns actually fill their allocated space
         // If spaceBetween is set and content is empty, fill with spaceBetween character
-        const plainContent = columnContent.replace(/\x1b\[[0-9;]*m/g, '');
-        let paddedContent: string;
-        if (plainContent.length === 0 && spaceBetween && columnWidth > 0) {
-          // Fill empty column with spaceBetween character
-          const { char: spaceChar, color: spaceColor } = getSpaceBetweenChar(spaceBetween, i);
-          const fillText = spaceChar.repeat(columnWidth);
-          paddedContent = spaceColor ? applyStyle(fillText, { color: spaceColor }) : fillText;
+        if (isAuto) {
+          lineParts.push(columnContent);
         } else {
-          // Normal padding with spaces
-          paddedContent = plainContent.length < columnWidth
-            ? columnContent + ' '.repeat(columnWidth - plainContent.length)
-            : columnContent;
+          const plainContent = columnContent.replace(/\x1b\[[0-9;]*m/g, '');
+          let paddedContent: string;
+          // If content is empty and this is a flex column with spaceBetween, fill it
+          if (plainContent.length === 0 && spaceBetween && columnWidth > 0 && isFlex) {
+            const { char: spaceChar, color: spaceColor } = getSpaceBetweenChar(spaceBetween, i);
+            const fillText = spaceChar.repeat(columnWidth);
+            paddedContent = spaceColor ? applyStyle(fillText, { color: spaceColor }) : fillText;
+          } else if (plainContent.length === 0 && spaceBetween && columnWidth > 0) {
+            const { char: spaceChar, color: spaceColor } = getSpaceBetweenChar(spaceBetween, i);
+            const fillText = spaceChar.repeat(columnWidth);
+            paddedContent = spaceColor ? applyStyle(fillText, { color: spaceColor }) : fillText;
+          } else {
+            paddedContent = plainContent.length < columnWidth
+              ? columnContent + ' '.repeat(columnWidth - plainContent.length)
+              : columnContent;
+          }
+          lineParts.push(paddedContent);
         }
         
-        lineParts.push(paddedContent);
-        
-        // Add gap (spaceBetween or spaces) if not last
+        // Skip gap result if present (gap results are added to results array between columns)
+        // Then add gap to lineParts if not using spaceBetween
         if (i < validChildren.length - 1 && columnGap > 0) {
-          if (spaceBetween) {
-            const { char: spaceChar, color: spaceColor } = getSpaceBetweenChar(spaceBetween, i);
-            const gapText = spaceChar.repeat(columnGap);
-            lineParts.push(spaceColor ? applyStyle(gapText, { color: spaceColor }) : gapText);
-            partIdx++; // spaceBetween adds an extra result
-          } else {
-            // Just add spaces for columnGap
+          // Skip the gap result in the results array
+          if (partIdx < results.length) {
+            partIdx++; // Skip the gap result
+          }
+          // Add gap to line (unless spaceBetween is set, which handles gaps differently)
+          if (!spaceBetween) {
             lineParts.push(' '.repeat(columnGap));
           }
         }
@@ -604,7 +657,7 @@ export function grid(
       lines.push(paddedLine);
     }
     
-    return lines;
-  };
+  return lines;
+};
 }
 

@@ -2,8 +2,55 @@ import { RegionRenderer, type RegionRendererOptions } from './native/region-rend
 import { applyStyle } from './utils/colors';
 import { getTerminalWidth } from './utils/terminal';
 import type { RegionOptions, LineContent } from './types';
-import { resolveGrid, type GridDescriptor } from './api/grid';
-import { type GridComponent } from './layout/grid';
+import type { Component } from './layout/grid';
+
+/**
+ * Type guard to check if an item is a Component
+ */
+function isComponent(item: any): item is Component {
+  return item !== null && (
+    typeof item === 'function' ||
+    (typeof item === 'object' && 'render' in item && typeof item.render === 'function')
+  );
+}
+
+/**
+ * Get the height of a component by calling it with a context
+ */
+function getComponentHeight(component: Component, region: TerminalRegion, width: number): number {
+  const ctx = {
+    availableWidth: width,
+    region: region,
+    columnIndex: 0,
+    rowIndex: 0,
+  };
+  const result = typeof component === 'function' ? component(ctx) : component.render(ctx);
+  if (result === null) return 0;
+  return Array.isArray(result) ? result.length : 1;
+}
+
+/**
+ * Render a component to the region at the specified position
+ */
+function renderComponent(component: Component, region: TerminalRegion, x: number, y: number, width: number): void {
+  const ctx = {
+    availableWidth: width,
+    region: region,
+    columnIndex: x,
+    rowIndex: y,
+  };
+  const result = typeof component === 'function' ? component(ctx) : component.render(ctx);
+  
+  if (result === null) return;
+  
+  if (Array.isArray(result)) {
+    for (let i = 0; i < result.length; i++) {
+      region.setLine(y + i, result[i]);
+    }
+  } else {
+    region.setLine(y, result);
+  }
+}
 
 /**
  * Reference to a section of lines in the region that can be updated
@@ -93,9 +140,7 @@ export class TerminalRegion {
     this._height = options.height ?? 1;
 
     // Create the low-level renderer
-    // Only pass width if it was explicitly set by the user (to allow auto-resize)
     const rendererOptions: RegionRendererOptions = {
-      height: this._height,
       stdout: options.stdout,
       disableRendering: options.disableRendering,
       // CRITICAL: Pass callback to re-render last content during keep-alive and resize
@@ -103,11 +148,6 @@ export class TerminalRegion {
       // The region orchestrates this - components don't manage their own re-rendering
       onKeepAlive: () => this.reRenderLastContent(),
     };
-    
-    // Only set width if user explicitly provided it (allows auto-resize to work)
-    if (options.width !== undefined) {
-      rendererOptions.width = options.width;
-    }
     
     this.renderer = new RegionRenderer(rendererOptions);
   }
@@ -128,6 +168,14 @@ export class TerminalRegion {
 
   async getStartRow(): Promise<number | null> {
     return this.renderer.getStartRow();
+  }
+
+  showCursorAt(lineNumber: number, column: number): void {
+    this.renderer.showCursorAt(lineNumber, column);
+  }
+
+  hideCursor(): void {
+    this.renderer.hideCursor();
   }
 
   /**
@@ -193,9 +241,16 @@ export class TerminalRegion {
       ? [content, ...additionalLines]
       : [content];
     
-    // Check if first item is a grid descriptor
-    if (allContent.length > 0 && typeof allContent[0] === 'object' && allContent[0] !== null && 'type' in allContent[0] && allContent[0].type === 'grid') {
-      // Grid descriptor(s)
+    // Check if first item is a Component (object with render method or function)
+    const isComponent = (item: any): item is Component => {
+      return item !== null && (
+        typeof item === 'function' ||
+        (typeof item === 'object' && 'render' in item && typeof item.render === 'function')
+      );
+    };
+    
+    if (allContent.length > 0 && isComponent(allContent[0])) {
+      // Component(s)
       this.allComponentDescriptors = [allContent.length > 1 ? allContent : allContent[0]];
       
       const width = this.width;
@@ -205,10 +260,9 @@ export class TerminalRegion {
       const oldHeight = this._height;
       
       // Calculate total height first
-      for (const descriptor of allContent) {
-        if (descriptor.type === 'grid') {
-          const component = resolveGrid(this, descriptor);
-          totalHeight += component.getHeight();
+      for (const component of allContent) {
+        if (isComponent(component)) {
+          totalHeight += getComponentHeight(component, this, width);
         }
       }
       
@@ -241,14 +295,27 @@ export class TerminalRegion {
       
       // Render each component on its line
       let currentLine = 1;
-      for (const descriptor of allContent) {
-        if (descriptor.type === 'grid') {
-          const component = resolveGrid(this, descriptor);
-          const height = component.getHeight();
+      for (const component of allContent) {
+        if (isComponent(component)) {
+          const ctx = {
+            availableWidth: width,
+            region: this,
+            columnIndex: 0,
+            rowIndex: currentLine,
+          };
+          const result = typeof component === 'function' ? component(ctx) : component.render(ctx);
           
-          component.render(0, currentLine, width);
-          
-          currentLine += height;
+          if (result !== null) {
+            const height = Array.isArray(result) ? result.length : 1;
+            if (Array.isArray(result)) {
+              for (let i = 0; i < result.length; i++) {
+                this.setLine(currentLine + i, result[i]);
+              }
+            } else {
+              this.setLine(currentLine, result);
+            }
+            currentLine += height;
+          }
         }
       }
       
@@ -265,59 +332,6 @@ export class TerminalRegion {
       return;
     }
     
-    // Single grid descriptor
-    if (typeof content === 'object' && content !== null && 'type' in content && content.type === 'grid') {
-      this.allComponentDescriptors = [content];
-      
-      const component = resolveGrid(this, content);
-      const width = this.width;
-      const height = component.getHeight();
-      
-      const renderer = this.renderer as any;
-      const oldHeight = this._height;
-      
-      renderer.pendingFrame = renderer.pendingFrame.slice(0, height);
-      renderer.previousFrame = renderer.previousFrame.slice(0, height);
-      
-      while (renderer.pendingFrame.length < height) {
-        renderer.pendingFrame.push('');
-      }
-      while (renderer.previousFrame.length < height) {
-        renderer.previousFrame.push('');
-      }
-      
-      for (let i = 0; i < height; i++) {
-        renderer.pendingFrame[i] = '';
-      }
-      
-      this._height = height;
-      this.regionLines = [];
-      for (let i = 0; i < height; i++) {
-        this.regionLines[i] = { type: 'component', lineNumber: i + 1 };
-      }
-      
-      (renderer as any).height = height;
-      
-      if (height > oldHeight) {
-        renderer.expandTo(height);
-      }
-      
-      // CRITICAL: Disable auto-rendering during component rendering
-      const wasRenderingDisabled = renderer.disableRendering;
-      renderer.disableRendering = true;
-      
-      component.render(0, 1, width);
-      
-      if (renderer.pendingFrame.length > height) {
-        renderer.pendingFrame = renderer.pendingFrame.slice(0, height);
-      }
-      
-      // Re-enable rendering and flush once
-      renderer.disableRendering = wasRenderingDisabled;
-      // Note: flush() is async but we don't await here - caller should await if needed
-      void this.renderer.flush();
-      return;
-    }
     
 
     // Original string/array handling
@@ -347,18 +361,24 @@ export class TerminalRegion {
       ? [content, ...additionalLines]
       : [content];
     
-    // Check if first item is a grid descriptor
-    if (allContent.length > 0 && typeof allContent[0] === 'object' && allContent[0] !== null && 'type' in allContent[0] && allContent[0].type === 'grid') {
+    // Check if first item is a Component
+    const isComponent = (item: any): item is Component => {
+      return item !== null && (
+        typeof item === 'function' ||
+        (typeof item === 'object' && 'render' in item && typeof item.render === 'function')
+      );
+    };
+    
+    if (allContent.length > 0 && isComponent(allContent[0])) {
       const width = this.width;
       let totalHeight = 0;
       
       // Calculate total height of new content
-      const resolvedComponents: GridComponent[] = [];
-      for (const descriptor of allContent) {
-        if (descriptor.type === 'grid') {
-          const component = resolveGrid(this, descriptor);
-          resolvedComponents.push(component);
-          totalHeight += component.getHeight();
+      const components: Component[] = [];
+      for (const item of allContent) {
+        if (isComponent(item)) {
+          components.push(item);
+          totalHeight += getComponentHeight(item, this, width);
         }
       }
       
@@ -409,8 +429,8 @@ export class TerminalRegion {
       // Render each component starting from startLine
       let currentLine = startLine;
       for (const component of resolvedComponents) {
-        const height = component.getHeight();
-        component.render(0, currentLine, width);
+        const height = getComponentHeight(component, this, width);
+        renderComponent(component, this, 0, currentLine, width);
         currentLine += height;
       }
       
@@ -421,11 +441,17 @@ export class TerminalRegion {
       return new SectionReference(this, startLine, totalHeight);
     }
     
-    // Single grid descriptor
-    if (typeof content === 'object' && content !== null && 'type' in content && content.type === 'grid') {
-      const component = resolveGrid(this, content);
+    // Single Component (object with render method or function)
+    const isComponent = (item: any): item is Component => {
+      return item !== null && (
+        typeof item === 'function' ||
+        (typeof item === 'object' && 'render' in item && typeof item.render === 'function')
+      );
+    };
+    
+    if (isComponent(content)) {
       const width = this.width;
-      const height = component.getHeight();
+      const height = getComponentHeight(content, this, width);
       const startLine = this._height + 1;
       
       const renderer = this.renderer as any;
@@ -469,7 +495,7 @@ export class TerminalRegion {
       renderer.disableRendering = true;
       
       // Render component
-      component.render(0, startLine, width);
+      renderComponent(content, this, 0, startLine, width);
       
       // Re-enable rendering and flush once
       renderer.disableRendering = wasRenderingDisabled;
@@ -629,16 +655,20 @@ export class TerminalRegion {
         renderer.logToFile(`[reRenderLastContent] CALLED: height=${this._height} width=${width} lastRenderedHeight=${renderer.lastRenderedHeight}`);
       
       // First, calculate total height of ALL content (components + static lines)
+      const isComponent = (item: any): item is Component => {
+        return item !== null && (
+          typeof item === 'function' ||
+          (typeof item === 'object' && 'render' in item && typeof item.render === 'function')
+        );
+      };
+      
       let totalHeight = 0;
-      for (const descriptorOrArray of this.allComponentDescriptors) {
-        const descriptors = Array.isArray(descriptorOrArray) && descriptorOrArray.length > 0 && typeof descriptorOrArray[0] === 'object' && descriptorOrArray[0] !== null && 'type' in descriptorOrArray[0]
-          ? descriptorOrArray 
-          : [descriptorOrArray];
+      for (const itemOrArray of this.allComponentDescriptors) {
+        const items = Array.isArray(itemOrArray) ? itemOrArray : [itemOrArray];
         
-        for (const descriptor of descriptors) {
-          if (descriptor.type === 'grid') {
-            const component = resolveGrid(this, descriptor);
-            totalHeight += component.getHeight();
+        for (const item of items) {
+          if (isComponent(item)) {
+            totalHeight += getComponentHeight(item, this, width);
           }
         }
       }
@@ -684,22 +714,19 @@ export class TerminalRegion {
       const wasRenderingDisabled = renderer.disableRendering;
       renderer.disableRendering = true;
       
-      // Now re-render ALL component descriptors starting from line 1
+      // Now re-render ALL components starting from line 1
       let currentLine = 1;
-      for (const descriptorOrArray of this.allComponentDescriptors) {
-        // Each entry can be a single descriptor or an array of descriptors (for multi-line sections)
-        const descriptors = Array.isArray(descriptorOrArray) && descriptorOrArray.length > 0 && typeof descriptorOrArray[0] === 'object' && descriptorOrArray[0] !== null && 'type' in descriptorOrArray[0]
-          ? descriptorOrArray 
-          : [descriptorOrArray];
+      for (const itemOrArray of this.allComponentDescriptors) {
+        // Each entry can be a single component or an array of components (for multi-line sections)
+        const items = Array.isArray(itemOrArray) ? itemOrArray : [itemOrArray];
         
         // Re-render each component in this section
-        for (const descriptor of descriptors) {
-          if (descriptor.type === 'grid') {
-            const component = resolveGrid(this, descriptor);
-            const componentHeight = component.getHeight();
+        for (const item of items) {
+          if (isComponent(item)) {
+            const componentHeight = getComponentHeight(item, this, width);
             
             // Render component at current line
-            component.render(0, currentLine, width);
+            renderComponent(item, this, 0, currentLine, width);
             
             // Move to next line
             currentLine += componentHeight;

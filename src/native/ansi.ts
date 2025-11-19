@@ -119,6 +119,17 @@ export const DISABLE_AUTO_WRAP = '\x1b[?7l';
 export const ENABLE_AUTO_WRAP = '\x1b[?7h';
 
 /**
+ * Switch to the terminal's alternate screen buffer.
+ * Commonly used by fullscreen TUIs so the main screen is restored on exit.
+ */
+export const ENTER_ALTERNATE_SCREEN = '\x1b[?1049h';
+
+/**
+ * Return to the main screen buffer from the alternate buffer.
+ */
+export const EXIT_ALTERNATE_SCREEN = '\x1b[?1049l';
+
+/**
  * Query cursor position (DSR - Device Status Report)
  * Format: \x1b[6n
  * 

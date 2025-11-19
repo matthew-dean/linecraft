@@ -48,33 +48,54 @@ export function truncateMiddle(text: string, maxWidth: number): string {
  * Wrap text to fit within a width, breaking on spaces
  */
 export function wrapText(text: string, width: number): string[] {
-  const lines: string[] = [];
-  const words = text.split(/\s+/);
-  let currentLine = '';
-
-  for (const word of words) {
-    if (currentLine.length + word.length + 1 <= width) {
-      currentLine += (currentLine ? ' ' : '') + word;
-    } else {
-      if (currentLine) {
-        lines.push(currentLine);
-      }
-      // If word is longer than width, break it
-      if (word.length > width) {
-        let remaining = word;
-        while (remaining.length > width) {
-          lines.push(remaining.slice(0, width));
-          remaining = remaining.slice(width);
-        }
-        currentLine = remaining;
-      } else {
-        currentLine = word;
-      }
-    }
+  if (!Number.isFinite(width) || width <= 0) {
+    return text.length > 0 ? [text] : [''];
   }
 
-  if (currentLine) {
-    lines.push(currentLine);
+  const lines: string[] = [];
+  const length = text.length;
+  let index = 0;
+
+  while (index < length) {
+    // Skip leading spaces
+    while (index < length && text[index] === ' ') {
+      index++;
+    }
+    if (index >= length) {
+      break;
+    }
+
+    let end = Math.min(length, index + width);
+
+    if (end === length) {
+      lines.push(text.slice(index));
+      break;
+    }
+
+    let breakPoint = -1;
+    for (let i = end; i > index; i--) {
+      const char = text[i - 1];
+      if (char === ' ') {
+        breakPoint = i - 1;
+        break;
+      }
+      if (char === '-') {
+        breakPoint = i;
+        break;
+      }
+    }
+
+    if (breakPoint === -1) {
+      breakPoint = end;
+    }
+
+    const line = text.slice(index, breakPoint).trimEnd();
+    lines.push(line);
+
+    index = breakPoint;
+    while (index < length && text[index] === ' ') {
+      index++;
+    }
   }
 
   return lines.length > 0 ? lines : [''];
@@ -86,6 +107,14 @@ export function wrapText(text: string, width: number): string[] {
 export function getTextWidth(text: string): number {
   // Remove ANSI escape codes
   const ansiRegex = /\x1b\[[0-9;]*m/g;
-  return text.replace(ansiRegex, '').length;
+  const plain = text.replace(ansiRegex, '');
+  return plain.length;
+}
+
+export function getTrimmedTextWidth(text: string): number {
+  const ansiRegex = /\x1b\[[0-9;]*m/g;
+  const plain = text.replace(ansiRegex, '');
+  const trimmed = plain.replace(/\s+$/u, '');
+  return trimmed.length;
 }
 

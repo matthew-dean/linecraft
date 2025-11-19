@@ -1,14 +1,14 @@
 // Spinner example using grid
 
 import { region, grid, style } from '../src/index';
-import { spinner } from '../src/index';
+import { DemoSpinner } from './demo-spinner';
 import { waitForSpacebar } from '../src/utils/wait-for-spacebar';
 
 async function main() {
   const r = region();
 
   // Create spinner on line 1
-  const spin = spinner(r, 1, {
+  const spin = new DemoSpinner(r, 1, {
     frames: ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'],
     interval: 80,
   });

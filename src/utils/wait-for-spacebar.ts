@@ -8,18 +8,21 @@ import { logToFile } from './debug-log';
  * Adds the prompt as part of the region by expanding it, ensuring everything
  * is managed by the region and avoiding scrolling/positioning issues.
  */
-export function waitForSpacebar(
+export async function waitForSpacebar(
   region: TerminalRegion,
   message: string = 'Press SPACEBAR to continue...'
 ): Promise<void> {
+  // Prepare prompt inside region before listening for input
+  logToFile(`[waitForSpacebar] CALLED, isTTY=${process.stdin.isTTY}, isRaw=${process.stdin.isRaw}`);
+
+  region.add(['', message]);
+  await region.flush();
+  const promptLineNumber = region.height;
+  const promptColumn = message.length + 1;
+  region.showCursorAt(promptLineNumber, promptColumn);
+
   return new Promise((resolve) => {
     // DEBUG: Log when waitForSpacebar is called
-    logToFile(`[waitForSpacebar] CALLED, isTTY=${process.stdin.isTTY}, isRaw=${process.stdin.isRaw}`);
-    
-    // CRITICAL: Use add() to properly append the prompt to the region
-    // This ensures the cursor is positioned at the end of the region correctly
-    // and all rendering/positioning is handled properly
-    region.add(['', message]);
     
     // Set stdin to raw mode to capture individual keypresses
     if (!process.stdin.isTTY) {
@@ -71,6 +74,7 @@ export function waitForSpacebar(
       // CRITICAL: Remove SIGINT listener to prevent memory leak
       // Each call to waitForSpacebar adds a SIGINT listener, so we must remove it
       process.removeListener('SIGINT', onSIGINT);
+      region.hideCursor();
     };
     
     // Handle Ctrl+C explicitly

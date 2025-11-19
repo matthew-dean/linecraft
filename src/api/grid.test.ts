@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { grid, resolveGrid } from './grid';
-import { style } from './grid';
+import { grid } from '../layout/grid';
+import { style } from '../components/style';
 import { TerminalRegion } from '../region';
+import { callComponent } from '../layout/grid';
 
 describe('Grid API', () => {
   let region: TerminalRegion;
@@ -11,46 +12,62 @@ describe('Grid API', () => {
   });
 
   describe('grid()', () => {
-    it('should create a grid descriptor', () => {
-      const descriptor = grid({ template: [20, '1*'] }, 'A', 'B');
+    it('should create a Component (object with render method)', () => {
+      const component = grid({ template: [20, '1*'] }, 'A', 'B');
       
-      expect(descriptor.type).toBe('grid');
-      expect(descriptor.options.template).toEqual([20, '1*']);
-      expect(descriptor.children.length).toBe(2);
+      expect(component).toBeDefined();
+      expect(typeof component).toBe('object');
+      expect('render' in component).toBe(true);
+      expect(typeof component.render).toBe('function');
     });
 
     it('should convert strings to style components', () => {
-      const descriptor = grid({ template: [20, '1*'] }, 'A', 'B');
+      const component = grid({ template: [20, '1*'] }, 'A', 'B');
       
-      expect(descriptor.children.length).toBe(2);
-      // Both should be Components (functions)
-      expect(typeof descriptor.children[0]).toBe('function');
-      expect(typeof descriptor.children[1]).toBe('function');
+      const ctx = {
+        availableWidth: 80,
+        region: region,
+        columnIndex: 0,
+        rowIndex: 0,
+      };
+      const result = callComponent(component, ctx);
+      expect(result).toBeTruthy();
     });
 
     it('should accept Component children', () => {
       const childComponent = style({ color: 'red' }, 'Hello');
-      const descriptor = grid({ template: [20, '1*'] }, childComponent);
+      const component = grid({ template: [20, '1*'] }, childComponent);
       
-      expect(descriptor.children.length).toBe(1);
-      expect(descriptor.children[0]).toBe(childComponent);
+      const ctx = {
+        availableWidth: 80,
+        region: region,
+        columnIndex: 0,
+        rowIndex: 0,
+      };
+      const result = callComponent(component, ctx);
+      expect(result).toBeTruthy();
+      if (result && typeof result === 'string') {
+        expect(result).toContain('Hello');
+      }
     });
-  });
 
-  describe('resolveGrid', () => {
-    it('should resolve grid descriptor to GridComponent', () => {
-      const descriptor = grid({ template: [20, '1*'] }, 'A', 'B');
-      const gridComponent = resolveGrid(region, descriptor);
+    it('should render grid component', () => {
+      const component = grid({ template: [20, '1*'] }, 'A', 'B');
       
-      expect(gridComponent).toBeDefined();
-      expect(gridComponent.getHeight()).toBe(1);
-    });
-
-    it('should render resolved grid', () => {
-      const descriptor = grid({ template: [20, '1*'] }, 'A', 'B');
-      const gridComponent = resolveGrid(region, descriptor);
-      
-      gridComponent.render(0, 1, 80);
+      const ctx = {
+        availableWidth: 80,
+        region: region,
+        columnIndex: 0,
+        rowIndex: 1,
+      };
+      const result = callComponent(component, ctx);
+      if (result) {
+        if (Array.isArray(result)) {
+          region.setLine(1, result[0]);
+        } else {
+          region.setLine(1, result);
+        }
+      }
       
       const line = region.getLine(1);
       expect(line).toContain('A');

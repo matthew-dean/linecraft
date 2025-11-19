@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { createGrid, grid } from './grid';
+import { grid } from './grid';
 import { style } from '../components/style';
 import { TerminalRegion } from '../region';
+import { callComponent } from '../layout/grid';
 
 describe('Grid Layout', () => {
   let region: TerminalRegion;
@@ -10,24 +11,46 @@ describe('Grid Layout', () => {
     region = new TerminalRegion({ disableRendering: true, width: 80 });
   });
 
-  describe('createGrid', () => {
+  describe('grid (Component API)', () => {
     it('should create a grid component', () => {
-      const gridComponent = createGrid(region, { template: [20, '1*'] }, 
+      const gridComponent = grid({ template: [20, '1*'] }, 
         style({}, 'A'),
         style({}, 'B')
       );
       
       expect(gridComponent).toBeDefined();
-      expect(gridComponent.getHeight()).toBe(1);
+      const ctx = {
+        availableWidth: 80,
+        region: region,
+        columnIndex: 0,
+        rowIndex: 0,
+      };
+      const result = callComponent(gridComponent, ctx);
+      expect(result).toBeTruthy();
+      const height = Array.isArray(result) ? result.length : 1;
+      expect(height).toBe(1);
     });
 
     it('should calculate column widths correctly', () => {
-      const gridComponent = createGrid(region, { template: [20, '1*'] }, 
+      const gridComponent = grid({ template: [20, '1*'] }, 
         style({}, 'A'),
         style({}, 'B')
       );
       
-      gridComponent.render(0, 1, 80);
+      const ctx = {
+        availableWidth: 80,
+        region: region,
+        columnIndex: 0,
+        rowIndex: 1,
+      };
+      const result = callComponent(gridComponent, ctx);
+      if (result) {
+        if (Array.isArray(result)) {
+          region.setLine(1, result[0]);
+        } else {
+          region.setLine(1, result);
+        }
+      }
       
       // First column should be 20, second should be 60 (80 - 20)
       const line = region.getLine(1);
@@ -36,13 +59,26 @@ describe('Grid Layout', () => {
     });
 
     it('should handle flex ratios', () => {
-      const gridComponent = createGrid(region, { template: ['1*', '2*', '1*'] }, 
+      const gridComponent = grid({ template: ['1*', '2*', '1*'] }, 
         style({}, 'A'),
         style({}, 'B'),
         style({}, 'C')
       );
       
-      gridComponent.render(0, 1, 60);
+      const ctx = {
+        availableWidth: 60,
+        region: region,
+        columnIndex: 0,
+        rowIndex: 1,
+      };
+      const result = callComponent(gridComponent, ctx);
+      if (result) {
+        if (Array.isArray(result)) {
+          region.setLine(1, result[0]);
+        } else {
+          region.setLine(1, result);
+        }
+      }
       
       // Total flex = 4, so each 1* gets 15, 2* gets 30
       const line = region.getLine(1);
@@ -52,12 +88,25 @@ describe('Grid Layout', () => {
     });
 
     it('should handle minmax', () => {
-      const gridComponent = createGrid(region, { template: [{ min: 40, width: '2*' }, '1*'] }, 
+      const gridComponent = grid({ template: [{ min: 40, width: '2*' }, '1*'] }, 
         style({}, 'A'),
         style({}, 'B')
       );
       
-      gridComponent.render(0, 1, 80);
+      const ctx = {
+        availableWidth: 80,
+        region: region,
+        columnIndex: 0,
+        rowIndex: 1,
+      };
+      const result = callComponent(gridComponent, ctx);
+      if (result) {
+        if (Array.isArray(result)) {
+          region.setLine(1, result[0]);
+        } else {
+          region.setLine(1, result);
+        }
+      }
       
       const line = region.getLine(1);
       expect(line).toContain('A');
@@ -65,12 +114,25 @@ describe('Grid Layout', () => {
     });
 
     it('should handle columnGap', () => {
-      const gridComponent = createGrid(region, { template: [20, 20], columnGap: 2 }, 
+      const gridComponent = grid({ template: [20, 20], columnGap: 2 }, 
         style({}, 'A'.repeat(20)),
         style({}, 'B'.repeat(20))
       );
       
-      gridComponent.render(0, 1, 80);
+      const ctx = {
+        availableWidth: 80,
+        region: region,
+        columnIndex: 0,
+        rowIndex: 1,
+      };
+      const result = callComponent(gridComponent, ctx);
+      if (result) {
+        if (Array.isArray(result)) {
+          region.setLine(1, result[0]);
+        } else {
+          region.setLine(1, result);
+        }
+      }
       
       const line = region.getLine(1);
       const plain = line.replace(/\x1b\[[0-9;]*m/g, '');
@@ -80,13 +142,65 @@ describe('Grid Layout', () => {
       expect(secondColStart - firstColEnd).toBeGreaterThanOrEqual(2);
     });
 
+    it('should render all columns with columnGap (regression: Column 2 not rendering)', () => {
+      const gridComponent = grid({ template: [20, 20], columnGap: 3 }, 
+        style({ color: 'cyan' }, 'Column 1'),
+        style({ color: 'green' }, 'Column 2')
+      );
+      
+      const ctx = {
+        availableWidth: 80,
+        region: region,
+        columnIndex: 0,
+        rowIndex: 1,
+      };
+      const result = callComponent(gridComponent, ctx);
+      if (result) {
+        if (Array.isArray(result)) {
+          region.setLine(1, result[0]);
+        } else {
+          region.setLine(1, result);
+        }
+      }
+      
+      const line = region.getLine(1);
+      const plain = line.replace(/\x1b\[[0-9;]*m/g, '');
+      
+      // Both columns should be present
+      expect(plain).toContain('Column 1');
+      expect(plain).toContain('Column 2');
+      
+      // Column 2 should appear after Column 1
+      const col1Index = plain.indexOf('Column 1');
+      const col2Index = plain.indexOf('Column 2');
+      expect(col1Index).toBeGreaterThanOrEqual(0);
+      expect(col2Index).toBeGreaterThan(col1Index);
+      
+      // Should have gap between them
+      const between = plain.substring(col1Index + 'Column 1'.length, col2Index);
+      expect(between.length).toBeGreaterThanOrEqual(3); // At least 3 spaces (columnGap)
+    });
+
     it('should handle spaceBetween', () => {
-      const gridComponent = createGrid(region, { template: [20, 20], columnGap: 2, spaceBetween: '─' }, 
+      const gridComponent = grid({ template: [20, 20], columnGap: 2, spaceBetween: '─' }, 
         style({}, 'A'),
         style({}, 'B')
       );
       
-      gridComponent.render(0, 1, 80);
+      const ctx = {
+        availableWidth: 80,
+        region: region,
+        columnIndex: 0,
+        rowIndex: 1,
+      };
+      const result = callComponent(gridComponent, ctx);
+      if (result) {
+        if (Array.isArray(result)) {
+          region.setLine(1, result[0]);
+        } else {
+          region.setLine(1, result);
+        }
+      }
       
       const line = region.getLine(1);
       const plain = line.replace(/\x1b\[[0-9;]*m/g, '');
@@ -95,7 +209,7 @@ describe('Grid Layout', () => {
     });
 
     it('should handle spaceBetween with color', () => {
-      const gridComponent = createGrid(region, { 
+      const gridComponent = grid({ 
         template: [20, 20], 
         columnGap: 2, 
         spaceBetween: { char: '─', color: 'brightBlack' } 
@@ -104,14 +218,149 @@ describe('Grid Layout', () => {
         style({}, 'B')
       );
       
-      gridComponent.render(0, 1, 80);
+      const ctx = {
+        availableWidth: 80,
+        region: region,
+        columnIndex: 0,
+        rowIndex: 1,
+      };
+      const result = callComponent(gridComponent, ctx);
+      if (result) {
+        if (Array.isArray(result)) {
+          region.setLine(1, result[0]);
+        } else {
+          region.setLine(1, result);
+        }
+      }
       
       const line = region.getLine(1);
       expect(line).toContain('─');
     });
 
+    it('should handle spaceBetween with auto columns (justify-content: space-between)', () => {
+      const gridComponent = grid({ 
+        template: ['auto', 'auto'], 
+        columnGap: 2, 
+        spaceBetween: { char: '─', color: 'brightBlack' } 
+      }, 
+        style({}, 'Left'),
+        style({}, 'Right')
+      );
+      
+      const ctx = {
+        availableWidth: 80,
+        region: region,
+        columnIndex: 0,
+        rowIndex: 1,
+      };
+      const result = callComponent(gridComponent, ctx);
+      if (result) {
+        if (Array.isArray(result)) {
+          region.setLine(1, result[0]);
+        } else {
+          region.setLine(1, result);
+        }
+      }
+      
+      const line = region.getLine(1);
+      const plain = line.replace(/\x1b\[[0-9;]*m/g, '');
+      
+      // Both columns should be present
+      expect(plain).toContain('Left');
+      expect(plain).toContain('Right');
+      
+      // spaceBetween character should be between them
+      const leftIndex = plain.indexOf('Left');
+      const rightIndex = plain.indexOf('Right');
+      expect(leftIndex).toBeGreaterThanOrEqual(0);
+      expect(rightIndex).toBeGreaterThan(leftIndex);
+      
+      // The space between should contain ─ characters
+      const between = plain.substring(leftIndex + 'Left'.length, rightIndex);
+      expect(between).toContain('─');
+      expect(between.length).toBeGreaterThan(0);
+    });
+
+    it('should handle spaceBetween with auto columns - right column at end', () => {
+      const gridComponent = grid({ 
+        template: ['auto', 'auto'], 
+        columnGap: 2, 
+        spaceBetween: { char: '─', color: 'brightBlack' } 
+      }, 
+        style({}, 'Left'),
+        style({ align: 'right' }, 'Right')
+      );
+      
+      const ctx = {
+        availableWidth: 80,
+        region: region,
+        columnIndex: 0,
+        rowIndex: 1,
+      };
+      const result = callComponent(gridComponent, ctx);
+      if (result) {
+        if (Array.isArray(result)) {
+          region.setLine(1, result[0]);
+        } else {
+          region.setLine(1, result);
+        }
+      }
+      
+      const line = region.getLine(1);
+      const plain = line.replace(/\x1b\[[0-9;]*m/g, '');
+      
+      // Right should be at the end (or very close to it)
+      const rightIndex = plain.indexOf('Right');
+      expect(rightIndex).toBeGreaterThan(0);
+      
+      // The line should be close to full width
+      expect(plain.length).toBeGreaterThanOrEqual(75); // Allow some margin
+      
+      // spaceBetween should fill the gap
+      const leftIndex = plain.indexOf('Left');
+      const between = plain.substring(leftIndex + 'Left'.length, rightIndex);
+      expect(between).toContain('─');
+    });
+
+    it('should handle spaceBetween with auto columns - verify fill width', () => {
+      const gridComponent = grid({ 
+        template: ['auto', 'auto'], 
+        spaceBetween: '─' 
+      }, 
+        style({}, 'L'),
+        style({}, 'R')
+      );
+      
+      const ctx = {
+        availableWidth: 80,
+        region: region,
+        columnIndex: 0,
+        rowIndex: 1,
+      };
+      const result = callComponent(gridComponent, ctx);
+      if (result) {
+        if (Array.isArray(result)) {
+          region.setLine(1, result[0]);
+        } else {
+          region.setLine(1, result);
+        }
+      }
+      
+      const line = region.getLine(1);
+      const plain = line.replace(/\x1b\[[0-9;]*m/g, '');
+      
+      // Should have L, then ─ characters, then R
+      const lIndex = plain.indexOf('L');
+      const rIndex = plain.indexOf('R');
+      const between = plain.substring(lIndex + 1, rIndex);
+      
+      // Between should be mostly ─ characters
+      expect(between.length).toBeGreaterThan(70); // Most of the 80 width
+      expect(between.replace(/─/g, '').length).toBeLessThan(5); // Mostly ─
+    });
+
     it('should handle justify space-between', () => {
-      const gridComponent = createGrid(region, { 
+      const gridComponent = grid({ 
         template: [10, '1*', 10], 
         justify: 'space-between' 
       }, 
@@ -120,7 +369,20 @@ describe('Grid Layout', () => {
         style({}, 'Right')
       );
       
-      gridComponent.render(0, 1, 80);
+      const ctx = {
+        availableWidth: 80,
+        region: region,
+        columnIndex: 0,
+        rowIndex: 1,
+      };
+      const result = callComponent(gridComponent, ctx);
+      if (result) {
+        if (Array.isArray(result)) {
+          region.setLine(1, result[0]);
+        } else {
+          region.setLine(1, result);
+        }
+      }
       
       const line = region.getLine(1);
       expect(line).toContain('Left');
@@ -128,12 +390,25 @@ describe('Grid Layout', () => {
     });
 
     it('should handle null components (from when condition)', () => {
-      const gridComponent = createGrid(region, { template: [20, '1*'] }, 
+      const gridComponent = grid({ template: [20, '1*'] }, 
         style({}, 'A'),
         style({ when: () => false }, 'B') // Returns null
       );
       
-      gridComponent.render(0, 1, 80);
+      const ctx = {
+        availableWidth: 80,
+        region: region,
+        columnIndex: 0,
+        rowIndex: 1,
+      };
+      const result = callComponent(gridComponent, ctx);
+      if (result) {
+        if (Array.isArray(result)) {
+          region.setLine(1, result[0]);
+        } else {
+          region.setLine(1, result);
+        }
+      }
       
       const line = region.getLine(1);
       expect(line).toContain('A');
@@ -141,14 +416,29 @@ describe('Grid Layout', () => {
     });
 
     it('should handle multi-line content', () => {
-      const gridComponent = createGrid(region, { template: [20, '1*'] }, 
+      const gridComponent = grid({ template: [20, '1*'] }, 
         style({}, 'A'),
         style({}, ['Line 1', 'Line 2'])
       );
       
-      expect(gridComponent.getHeight()).toBe(2);
+      const ctx = {
+        availableWidth: 80,
+        region: region,
+        columnIndex: 0,
+        rowIndex: 1,
+      };
+      const result = callComponent(gridComponent, ctx);
+      expect(result).toBeTruthy();
+      const height = Array.isArray(result) ? result.length : 1;
+      expect(height).toBe(2);
       
-      gridComponent.render(0, 1, 80);
+      if (result && Array.isArray(result)) {
+        for (let i = 0; i < result.length; i++) {
+          region.setLine(1 + i, result[i]);
+        }
+      } else if (result) {
+        region.setLine(1, result);
+      }
       
       expect(region.getLine(1)).toContain('A');
       expect(region.getLine(1)).toContain('Line 1');
@@ -156,14 +446,27 @@ describe('Grid Layout', () => {
     });
 
     it('should auto-repeat template for extra children', () => {
-      const gridComponent = createGrid(region, { template: [20, '1*'] }, 
+      const gridComponent = grid({ template: [20, '1*'] }, 
         style({}, 'A'),
         style({}, 'B'),
         style({}, 'C'), // Should use '1*' (repeated)
         style({}, 'D')  // Should use '1*' (repeated)
       );
       
-      gridComponent.render(0, 1, 80);
+      const ctx = {
+        availableWidth: 80,
+        region: region,
+        columnIndex: 0,
+        rowIndex: 1,
+      };
+      const result = callComponent(gridComponent, ctx);
+      if (result) {
+        if (Array.isArray(result)) {
+          region.setLine(1, result[0]);
+        } else {
+          region.setLine(1, result);
+        }
+      }
       
       const line = region.getLine(1);
       expect(line).toContain('A');
@@ -173,13 +476,26 @@ describe('Grid Layout', () => {
     });
 
     it('should handle empty template (all equal flex)', () => {
-      const gridComponent = createGrid(region, { template: [] }, 
+      const gridComponent = grid({ template: [] }, 
         style({}, 'A'),
         style({}, 'B'),
         style({}, 'C')
       );
       
-      gridComponent.render(0, 1, 60);
+      const ctx = {
+        availableWidth: 60,
+        region: region,
+        columnIndex: 0,
+        rowIndex: 1,
+      };
+      const result = callComponent(gridComponent, ctx);
+      if (result) {
+        if (Array.isArray(result)) {
+          region.setLine(1, result[0]);
+        } else {
+          region.setLine(1, result);
+        }
+      }
       
       const line = region.getLine(1);
       expect(line).toContain('A');
