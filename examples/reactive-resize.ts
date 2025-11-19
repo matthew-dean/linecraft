@@ -1,27 +1,26 @@
 // Reactive resize example using grid
 
-import { region, grid, style } from '../src/index';
-import { waitForSpacebar } from '../src/utils/wait-for-spacebar';
+import { Region, Grid, Styled, prompt } from '../src/index';
 
 async function main() {
-  const r = region();
+  const r = Region();
 
   function updateDisplay() {
     r.set(
-      grid({ template: ['1*'] },
-        grid({ template: [20, '1*'], columnGap: 2 },
-          style({ color: 'cyan' }, 'Terminal width:'),
-          style({ color: 'yellow' }, `${r.width} columns`)
+      Grid({ template: ['1*'] },
+        Grid({ template: [20, '1*'], columnGap: 2 },
+          Styled({ color: 'cyan' }, 'Terminal width:'),
+          Styled({ color: 'yellow' }, `${r.width} columns`)
         ),
-        grid({ template: [20, '1*'], columnGap: 2 },
-          style({ color: 'cyan' }, 'Terminal height:'),
-          style({ color: 'yellow' }, `${r.height} rows`)
+        Grid({ template: [20, '1*'], columnGap: 2 },
+          Styled({ color: 'cyan' }, 'Terminal height:'),
+          Styled({ color: 'yellow' }, `${r.height} rows`)
         ),
-        grid({ template: ['1*'] },
-          style({ color: 'brightBlack' }, '─'.repeat(Math.min(80, r.width)))
+        Grid({ template: ['1*'] },
+          Styled({ color: 'brightBlack' }, '─'.repeat(Math.min(80, r.width)))
         ),
-        grid({ template: ['1*'] },
-          style({ color: 'green' }, 'Resize the terminal to see it update!')
+        Grid({ template: ['1*'] },
+          Styled({ color: 'green' }, 'Resize the terminal to see it update!')
         )
       )
     );
@@ -36,7 +35,7 @@ async function main() {
   };
   process.stdout.on('resize', resizeHandler);
 
-  await waitForSpacebar(r);
+  await prompt(r);
 
   process.stdout.removeListener('resize', resizeHandler);
   r.destroy(true);

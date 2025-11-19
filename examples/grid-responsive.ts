@@ -1,20 +1,19 @@
 // Example demonstrating responsive visibility with 'when' condition
 
-import { region, grid, style } from '../src/index';
-import { waitForSpacebar } from '../src/utils/wait-for-spacebar';
+import { Region, Grid, Styled, prompt } from '../src/index';
 
 async function main() {
-  const r = region();
+  const r = Region();
 
   // Show different content based on terminal width
   r.set(
-    grid({ template: [20, '1*'] },
-      style({ color: 'cyan' }, 'Status:'),
-      style({ 
+    Grid({ template: [20, '1*'] },
+      Styled({ color: 'cyan' }, 'Status:'),
+      Styled({ 
         color: 'green',
         when: (ctx) => ctx.availableWidth > 50
       }, 'Connected (wide terminal)'),
-      style({
+      Styled({
         color: 'yellow',
         when: (ctx) => ctx.availableWidth <= 50
       }, 'Connected (narrow)')
@@ -25,17 +24,17 @@ async function main() {
 
   // Multiple responsive items
   r.add(
-    grid({ template: [15, 15, 15, '1*'] },
-      style({ color: 'red' }, 'Always'),
-      style({ 
+    Grid({ template: [15, 15, 15, '1*'] },
+      Styled({ color: 'red' }, 'Always'),
+      Styled({ 
         color: 'green',
         when: (ctx) => ctx.availableWidth > 60
       }, 'Width > 60'),
-      style({
+      Styled({
         color: 'blue',
         when: (ctx) => ctx.availableWidth > 80
       }, 'Width > 80'),
-      style({ color: 'yellow' }, 'Flex')
+      Styled({ color: 'yellow' }, 'Flex')
     )
   );
 
@@ -43,16 +42,16 @@ async function main() {
 
   // Progress indicator that shows details only when wide
   r.add(
-    grid({ template: [20, '1*'] },
-      style({ color: 'cyan' }, 'Processing...'),
-      style({ 
+    Grid({ template: [20, '1*'] },
+      Styled({ color: 'cyan' }, 'Processing...'),
+      Styled({ 
         color: 'green',
         when: (ctx) => ctx.availableWidth > 40
       }, '████████████████ 75%')
     )
   );
 
-  await waitForSpacebar(r);
+  await prompt(r);
   r.destroy(true);
 }
 

@@ -171,22 +171,9 @@ export class RegionRenderer {
     if (this.previousFrame.length >= startIndex + count) {
       this.previousFrame.splice(startIndex, count);
     }
-    // Also update previousViewportFrame to reflect the deletion
-    // This ensures the next render knows those lines are gone
-    const normalized = this.getEffectiveFrame();
-    const viewportHeight = Math.max(1, this.viewportHeight);
-    const visibleLines = Math.min(viewportHeight, normalized.length);
-    const newViewportFrame = new Array<string>(viewportHeight).fill('');
-    
-    if (visibleLines > 0) {
-      const startIdx = normalized.length > viewportHeight
-        ? normalized.length - viewportHeight
-        : 0;
-      for (let i = 0; i < visibleLines; i++) {
-        newViewportFrame[i] = normalized[startIdx + i];
-      }
-    }
-    this.previousViewportFrame = newViewportFrame;
+    // Clear previousViewportFrame so next render recalculates from scratch
+    // This ensures deleted lines are properly handled
+    this.previousViewportFrame = [];
   }
 
   async destroy(clearFirst: boolean = false): Promise<void> {
@@ -476,8 +463,14 @@ export class RegionRenderer {
     this.inAlternateScreen = false;
     if (!clearFirst) {
       const finalLines = this.getEffectiveFrame();
-      const output = finalLines.join('\n');
-      if (output.length > 0) {
+      // Remove trailing empty lines - don't add extra blank lines to original screen
+      let lastNonEmpty = finalLines.length;
+      while (lastNonEmpty > 0 && finalLines[lastNonEmpty - 1].trim() === '') {
+        lastNonEmpty--;
+      }
+      const trimmedLines = finalLines.slice(0, lastNonEmpty);
+      if (trimmedLines.length > 0) {
+        const output = trimmedLines.join('\n');
         this.stdout.write(`${output}\n`);
       }
     }

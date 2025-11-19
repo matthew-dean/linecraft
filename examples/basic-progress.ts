@@ -1,14 +1,13 @@
-import { region, grid, style, progressBar } from '../src/index';
-import { waitForSpacebar } from '../src/utils/wait-for-spacebar';
+import { Region, Grid, Styled, progressBar, prompt } from '../src/index';
 
 async function main() {
-  const r = region(); // Auto-resize enabled
+  const r = Region(); // Auto-resize enabled
 
   // Use grid layout for progress bar
   for (let i = 0; i <= 100; i++) {
     r.set(
-      grid({ template: [20, '1*'], columnGap: 2 },
-        style({ color: 'cyan' }, 'Installing packages'),
+      Grid({ template: [20, '1*'], columnGap: 2 },
+        Styled({ color: 'cyan' }, 'Installing packages'),
         progressBar({
           current: i,
           total: 100,
@@ -21,7 +20,7 @@ async function main() {
     await new Promise(resolve => setTimeout(resolve, 50));
   }
 
-  await waitForSpacebar(r);
+  await prompt(r);
   r.destroy(true);
 }
 

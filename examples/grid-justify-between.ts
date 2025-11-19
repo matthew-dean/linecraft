@@ -1,21 +1,20 @@
 // Example demonstrating justify: 'space-between' for OhMyZsh-style prompts
 
-import { region, grid, style } from '../src/index';
-import { waitForSpacebar } from '../src/utils/wait-for-spacebar';
+import { Region, Grid, Styled, prompt } from '../src/index';
 
 async function main() {
-  const r = region();
+  const r = Region();
 
   // OhMyZsh-style prompt: left item, flexing middle, right item
   r.set(
-    grid({ 
+    Grid({ 
       template: [15, '1*', 15], 
       justify: 'space-between',
       columnGap: 1
     },
-      style({ color: 'green' }, 'user@host'),
-      style({ color: 'brightBlack' }, '─'), // Middle filler
-      style({ color: 'yellow' }, '~/projects')
+      Styled({ color: 'green' }, 'user@host'),
+      Styled({ color: 'brightBlack' }, '─'), // Middle filler
+      Styled({ color: 'yellow' }, '~/projects')
     )
   );
 
@@ -23,18 +22,18 @@ async function main() {
 
   // Another example with different items
   r.add(
-    grid({ 
+    Grid({ 
       template: [20, '1*', 20], 
       justify: 'space-between',
       spaceBetween: { char: '─', color: 'brightBlack' }
     },
-      style({ color: 'cyan' }, 'Left Section'),
-      style({ color: 'brightBlack' }, ''), // Empty middle
-      style({ color: 'magenta' }, 'Right Section')
+      Styled({ color: 'cyan' }, 'Left Section'),
+      Styled({ color: 'brightBlack' }, ''), // Empty middle
+      Styled({ color: 'magenta' }, 'Right Section')
     )
   );
 
-  await waitForSpacebar(r);
+  await prompt(r);
   r.destroy(true);
 }
 

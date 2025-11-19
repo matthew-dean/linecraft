@@ -1,19 +1,18 @@
 // Example demonstrating all overflow types
 
-import { region, grid, style } from '../src/index';
-import { waitForSpacebar } from '../src/utils/wait-for-spacebar';
+import { Region, Grid, Styled, prompt } from '../src/index';
 
 async function main() {
-  const r = region();
+  const r = Region();
 
   const longText = 'This is a very long text that will demonstrate different overflow behaviors';
 
   // Ellipsis end
   r.set(
-    grid({ template: [30, 30, 30] },
-      style({ color: 'red', overflow: 'ellipsis-end' }, longText),
-      style({ color: 'green', overflow: 'ellipsis-start' }, longText),
-      style({ color: 'blue', overflow: 'ellipsis-middle' }, longText)
+    Grid({ template: [30, 30, 30] },
+      Styled({ color: 'red', overflow: 'ellipsis-end' }, longText),
+      Styled({ color: 'green', overflow: 'ellipsis-start' }, longText),
+      Styled({ color: 'blue', overflow: 'ellipsis-middle' }, longText)
     )
   );
 
@@ -21,9 +20,9 @@ async function main() {
 
   // Wrap
   r.add(
-    grid({ template: [40, 40] },
-      style({ color: 'cyan', overflow: 'wrap' }, longText + ' ' + longText),
-      style({ color: 'yellow', overflow: 'none' }, longText)
+    Grid({ template: [40, 40] },
+      Styled({ color: 'cyan', overflow: 'wrap' }, longText + ' ' + longText),
+      Styled({ color: 'yellow', overflow: 'none' }, longText)
     )
   );
 
@@ -31,18 +30,18 @@ async function main() {
 
   // Mixed with colors
   r.add(
-    grid({ template: [25, 25, 25] },
-      style({ 
+    Grid({ template: [25, 25, 25] },
+      Styled({ 
         color: 'red', 
         overflow: 'ellipsis-end',
         bold: true 
       }, longText),
-      style({ 
+      Styled({ 
         color: 'green', 
         overflow: 'ellipsis-start',
         backgroundColor: 'brightBlack'
       }, longText),
-      style({ 
+      Styled({ 
         color: 'blue', 
         overflow: 'ellipsis-middle',
         underline: true
@@ -50,7 +49,7 @@ async function main() {
     )
   );
 
-  await waitForSpacebar(r);
+  await prompt(r);
   r.destroy(true);
 }
 

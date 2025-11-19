@@ -76,13 +76,6 @@ export class SectionReference {
     const wasRenderingDisabled = renderer.disableRendering;
     renderer.disableRendering = true;
 
-    // Clear all lines in this section
-    const updates: Array<{ lineNumber: number; content: string }> = [];
-    for (let i = 0; i < this.height; i++) {
-      const lineNumber = this.startLine + i;
-      updates.push({ lineNumber, content: '' });
-    }
-
     // Remove lines from regionLines
     this.region.removeRegionLines(this.startLine - 1, this.height);
 
@@ -90,15 +83,13 @@ export class SectionReference {
     this.region.decreaseHeight(this.height);
     renderer.setHeight(this.region.getInternalHeight());
 
-    // Shrink the frame arrays
+    // Shrink the frame arrays (this also clears previousViewportFrame for recalculation)
     renderer.shrinkFrame(this.startLine - 1, this.height);
 
     renderer.disableRendering = wasRenderingDisabled;
     
-    // Update lines and schedule render
-    if (updates.length > 0 && !wasRenderingDisabled) {
-      renderer.updateLines(updates);
-      // Force a render to clear the lines
+    // Force a render - the viewport frame will be recalculated and show correct content
+    if (!wasRenderingDisabled) {
       void renderer.flush();
     }
   }

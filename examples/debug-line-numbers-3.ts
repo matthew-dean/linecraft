@@ -1,4 +1,4 @@
-import { createRegion } from '../src';
+import { Region } from '../src';
 
 /**
  * Custom wait function that doesn't add any lines to the region
@@ -70,7 +70,7 @@ function waitForSpacebarNoPrompt(): Promise<void> {
  * - Third render: 9 lines at rows 12-20 (20 - 9 + 1 = 12)
  */
 async function main() {
-  const r = createRegion();
+  const r = Region();
   
   // Add 3 lines
   r.add(['1', '2', '3']);

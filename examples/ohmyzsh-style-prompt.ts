@@ -1,10 +1,9 @@
 // OhMyZsh-style prompt using grid with justify: 'space-between'
 
-import { region, grid, style } from '../src/index';
-import { waitForSpacebar } from '../src/utils/wait-for-spacebar';
+import { Region, Grid, Styled, prompt } from '../src/index';
 
 async function main() {
-  const r = region();
+  const r = Region();
 
   const branch = 'main';
   const status = '✓';
@@ -12,15 +11,15 @@ async function main() {
   // OhMyZsh-style prompt: [branch] ──────────────────────────────── [status]
   // Using justify: 'space-between' to pin left and right items
   r.set(
-    grid({ 
+    Grid({ 
       template: [15, '1*', 15], 
       justify: 'space-between',
       columnGap: 1,
       spaceBetween: { char: '─', color: 'brightBlack' }
     },
-      style({ color: 'blue', backgroundColor: 'brightBlack' }, ` ⎇ ${branch} `),
-      style({ color: 'brightBlack' }, ''), // Empty middle (filled by spaceBetween)
-      style({ color: 'green', backgroundColor: 'brightBlack' }, ` ${status} `)
+      Styled({ color: 'blue', backgroundColor: 'brightBlack' }, ` ⎇ ${branch} `),
+      Styled({ color: 'brightBlack' }, ''), // Empty middle (filled by spaceBetween)
+      Styled({ color: 'green', backgroundColor: 'brightBlack' }, ` ${status} `)
     )
   );
 
@@ -28,10 +27,10 @@ async function main() {
 
   // Show current width
   r.add(
-    grid({ template: ['1*'] },
-      grid({ template: [20, '1*'], columnGap: 2 },
-        style({ color: 'brightBlack' }, 'Width:'),
-        style({ color: 'yellow' }, `${r.width} columns`)
+    Grid({ template: ['1*'] },
+      Grid({ template: [20, '1*'], columnGap: 2 },
+        Styled({ color: 'brightBlack' }, 'Width:'),
+        Styled({ color: 'yellow' }, `${r.width} columns`)
       )
     )
   );
@@ -39,26 +38,26 @@ async function main() {
   // Update on resize
   const updateDisplay = () => {
     r.set(
-      grid({ 
+      Grid({ 
         template: [15, '1*', 15], 
         justify: 'space-between',
         columnGap: 1,
         spaceBetween: { char: '─', color: 'brightBlack' }
       },
-        style({ color: 'blue', backgroundColor: 'brightBlack' }, ` ⎇ ${branch} `),
-        style({ color: 'brightBlack' }, ''),
-        style({ color: 'green', backgroundColor: 'brightBlack' }, ` ${status} `)
+        Styled({ color: 'blue', backgroundColor: 'brightBlack' }, ` ⎇ ${branch} `),
+        Styled({ color: 'brightBlack' }, ''),
+        Styled({ color: 'green', backgroundColor: 'brightBlack' }, ` ${status} `)
       ),
-      grid({ template: [20, '1*'], columnGap: 2 },
-        style({ color: 'brightBlack' }, 'Width:'),
-        style({ color: 'yellow' }, `${r.width} columns`)
+      Grid({ template: [20, '1*'], columnGap: 2 },
+        Styled({ color: 'brightBlack' }, 'Width:'),
+        Styled({ color: 'yellow' }, `${r.width} columns`)
       )
     );
   };
 
   process.stdout.on('resize', updateDisplay);
 
-  await waitForSpacebar(r);
+  await prompt(r);
 
   process.stdout.removeListener('resize', updateDisplay);
   r.destroy(true);

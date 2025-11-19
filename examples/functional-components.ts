@@ -1,8 +1,7 @@
 // Functional components example using grid
 
-import { region, grid, style } from '../src/index';
-import { waitForSpacebar } from '../src/utils/wait-for-spacebar';
-import type { Component } from '../src/layout/grid';
+import { Region, Grid, Styled, prompt } from '../src/index';
+import type { Component } from '../src/component';
 
 // Create a reusable component function
 function statusBadge(status: 'online' | 'offline' | 'warning'): Component {
@@ -18,7 +17,7 @@ function statusBadge(status: 'online' | 'offline' | 'warning'): Component {
     offline: '○',
   } as const;
 
-  return style({ color: colors[status] }, `${icons[status]} ${status}`);
+  return Styled({ color: colors[status] }, `${icons[status]} ${status}`);
 }
 
 // Create a component that takes props
@@ -27,31 +26,31 @@ function progressIndicator(current: number, total: number): Component {
   const filled = Math.floor(percent / 10);
   const empty = 10 - filled;
   
-  return style({ color: 'green' }, 
+  return Styled({ color: 'green' }, 
     '█'.repeat(filled) + '░'.repeat(empty) + ` ${percent}%`
   );
 }
 
 async function main() {
-  const r = region();
+  const r = Region();
 
   // Use functional components
   r.set(
-    grid({ template: ['1*'], columnGap: 1 },
-      grid({ template: [20, '1*'], columnGap: 2 },
-        style({ color: 'cyan' }, 'Server Status:'),
+    Grid({ template: ['1*'], columnGap: 1 },
+      Grid({ template: [20, '1*'], columnGap: 2 },
+        Styled({ color: 'cyan' }, 'Server Status:'),
         statusBadge('online')
       ),
-      grid({ template: [20, '1*'], columnGap: 2 },
-        style({ color: 'cyan' }, 'Database:'),
+      Grid({ template: [20, '1*'], columnGap: 2 },
+        Styled({ color: 'cyan' }, 'Database:'),
         statusBadge('online')
       ),
-      grid({ template: [20, '1*'], columnGap: 2 },
-        style({ color: 'cyan' }, 'Cache:'),
+      Grid({ template: [20, '1*'], columnGap: 2 },
+        Styled({ color: 'cyan' }, 'Cache:'),
         statusBadge('warning')
       ),
-      grid({ template: [20, '1*'], columnGap: 2 },
-        style({ color: 'cyan' }, 'Progress:'),
+      Grid({ template: [20, '1*'], columnGap: 2 },
+        Styled({ color: 'cyan' }, 'Progress:'),
         progressIndicator(75, 100)
       )
     )
@@ -61,27 +60,27 @@ async function main() {
 
   // Update status
   r.set(
-    grid({ template: ['1*'], columnGap: 1 },
-      grid({ template: [20, '1*'], columnGap: 2 },
-        style({ color: 'cyan' }, 'Server Status:'),
+    Grid({ template: ['1*'], columnGap: 1 },
+      Grid({ template: [20, '1*'], columnGap: 2 },
+        Styled({ color: 'cyan' }, 'Server Status:'),
         statusBadge('online')
       ),
-      grid({ template: [20, '1*'], columnGap: 2 },
-        style({ color: 'cyan' }, 'Database:'),
+      Grid({ template: [20, '1*'], columnGap: 2 },
+        Styled({ color: 'cyan' }, 'Database:'),
         statusBadge('offline')
       ),
-      grid({ template: [20, '1*'], columnGap: 2 },
-        style({ color: 'cyan' }, 'Cache:'),
+      Grid({ template: [20, '1*'], columnGap: 2 },
+        Styled({ color: 'cyan' }, 'Cache:'),
         statusBadge('online')
       ),
-      grid({ template: [20, '1*'], columnGap: 2 },
-        style({ color: 'cyan' }, 'Progress:'),
+      Grid({ template: [20, '1*'], columnGap: 2 },
+        Styled({ color: 'cyan' }, 'Progress:'),
         progressIndicator(100, 100)
       )
     )
   );
 
-  await waitForSpacebar(r);
+  await prompt(r);
   r.destroy(true);
 }
 
