@@ -2,7 +2,7 @@
 
 import type { TerminalRegion } from '../region';
 import type { Color } from '../types';
-import { color } from '../api/color';
+import { Styled } from './styled';
 
 export interface PromptOptions {
   message: string;
@@ -27,18 +27,28 @@ export async function showPrompt(
   } = options;
 
   const currentHeight = region.height;
-  const promptText = color(promptColor, `Press ${key} to ${message}...`);
+  // Use Styled component and render it to get the styled string
+  const styleComponent = Styled({ color: promptColor }, `Press ${key} to ${message}...`);
+  const promptText = styleComponent({
+    availableWidth: Infinity, // No width constraint for prompt text
+    region: region,
+    columnIndex: 0,
+    rowIndex: 0,
+  });
+  
+  // Styled() returns string | string[] | null, we need a string
+  const promptString = typeof promptText === 'string' ? promptText : (Array.isArray(promptText) ? promptText[0] : '');
 
   if (position === 'below') {
     // Add blank line, then prompt
     region.setLine(currentHeight + 1, '');
-    region.setLine(currentHeight + 2, promptText);
+    region.setLine(currentHeight + 2, promptString);
   } else {
     // Add prompt above current content
     // This would require shifting all content down, which is complex
     // For now, just add below
     region.setLine(currentHeight + 1, '');
-    region.setLine(currentHeight + 2, promptText);
+    region.setLine(currentHeight + 2, promptString);
   }
 
   region.flush();

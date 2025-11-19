@@ -1,17 +1,16 @@
 export { TerminalRegion, SectionReference } from './region';
 export { getTerminalWidth, getTerminalHeight, isTTY, onResize } from './utils/terminal';
 // Grid system
-export { grid } from './layout/grid';
-export { style } from './components/style';
+export { grid as Grid } from './layout/grid';
+export { Styled } from './components/styled';
 export type { GridOptions } from './layout/grid';
-export type { StyleOptions } from './components/style';
+export type { StyleOptions } from './components/styled';
 export { fill } from './components/fill';
 export type { FillOptions } from './components/fill';
-export { section, type SectionOptions } from './components/section';
-export { createSpinner, type SpinnerOptions } from './components/spinner';
-export { color } from './api/color';
+export { Section, type SectionOptions } from './components/section';
+export { Spinner, type SpinnerOptions } from './components/spinner';
 // progressBar is exported below as a function
-export { showPrompt } from './components/index';
+export { prompt } from './utils/prompt';
 export type {
   RegionOptions,
   LineContent,
@@ -25,12 +24,13 @@ import { progressBar as progressBarGrid } from './components/progress-bar-grid';
 import type { RegionOptions, ProgressBarOptions } from './types';
 import type { ProgressBarOptions as ProgressBarGridOptions } from './components/progress-bar-grid';
 
-export function region(options?: RegionOptions): TerminalRegion {
+export function Region(options?: RegionOptions): TerminalRegion {
   return new TerminalRegion(options);
 }
 
-// Keep createRegion as alias for backward compatibility
-export const createRegion = region;
+// Keep region and createRegion as aliases for backward compatibility
+export const region = Region;
+export const createRegion = Region;
 
 // Grid-based progress bar (returns Component)
 export function progressBar(options: ProgressBarGridOptions) {

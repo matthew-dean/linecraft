@@ -1,21 +1,37 @@
 // Fill component - fills available width with a character
 
-import type { RenderContext, Component } from '../layout/grid';
-import type { Color } from '../types';
+import type { RenderContext, Component } from '../component';
+import type { Color, FillChar } from '../types';
 import { applyStyle } from '../utils/colors';
 
 export interface FillOptions {
-  char?: string;  // Character to repeat (default: ' ')
-  color?: Color;
   backgroundColor?: Color;
 }
 
 /**
- * Fill component - fills the available width with a repeated character
+ * Normalize FillChar to { char, color } format
  */
-export function fill(options: FillOptions = {}): Component {
+function normalizeFillChar(fillChar: FillChar): { char: string; color?: Color } {
+  if (typeof fillChar === 'string') {
+    return { char: fillChar };
+  }
+  return fillChar;
+}
+
+/**
+ * Fill component - fills the available width with a repeated character
+ * 
+ * Usage:
+ *   fill('─')                                    // Simple character
+ *   fill({ char: '─', color: 'red' })           // Character with color
+ *   fill('─', { backgroundColor: 'blue' })      // Character with additional options
+ */
+export function fill(
+  fillChar: FillChar = ' ',
+  options: FillOptions = {}
+): Component {
   return (ctx: RenderContext) => {
-    const char = options.char ?? ' ';
+    const { char, color } = normalizeFillChar(fillChar);
     const availableWidth = ctx.availableWidth;
     
     // During auto column measurement, availableWidth might be Infinity
@@ -28,7 +44,7 @@ export function fill(options: FillOptions = {}): Component {
     const fillText = char.repeat(availableWidth);
     
     return applyStyle(fillText, {
-      color: options.color,
+      color,
       backgroundColor: options.backgroundColor,
     });
   };

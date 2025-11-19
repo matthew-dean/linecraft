@@ -52,6 +52,12 @@ export interface SpinnerOptions {
 }
 
 /**
+ * Character with optional color - used for fill components and spaceBetween
+ * Can be a simple string or an object with char and color
+ */
+export type FillChar = string | { char: string; color?: Color };
+
+/**
  * Base options for all components - includes common styling props
  */
 export interface BaseComponentOptions {

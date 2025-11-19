@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createRegion, createProgressBar, createSpinner } from './index';
+import { createRegion, createProgressBar, Spinner } from './index';
 import { TerminalRegion } from './region';
-import { Spinner } from './components/spinner';
 
 describe('createRegion', () => {
   it('should create a TerminalRegion instance', () => {
@@ -61,7 +60,7 @@ describe('createProgressBar', () => {
   });
 });
 
-describe('createSpinner', () => {
+describe('spinner', () => {
   let region: TerminalRegion;
 
   beforeEach(() => {
@@ -74,19 +73,26 @@ describe('createSpinner', () => {
     region.destroy();
   });
 
-  it('should create a Spinner instance', () => {
-    const spinner = createSpinner(region, 1);
-    expect(spinner).toBeInstanceOf(Spinner);
-    spinner.stop();
+  it('should create a spinner with render, start, and stop methods', () => {
+    const spinnerInstance = Spinner();
+    expect(spinnerInstance).toBeDefined();
+    expect(typeof spinnerInstance.render).toBe('function');
+    expect(typeof spinnerInstance.start).toBe('function');
+    expect(typeof spinnerInstance.stop).toBe('function');
+    spinnerInstance.stop();
   });
 
   it('should create a spinner with options', () => {
-    const spinner = createSpinner(region, 1, {
+    const spinnerInstance = Spinner({
       frames: ['-', '\\', '|', '/'],
       interval: 200,
+      color: 'yellow',
     });
-    expect(spinner).toBeInstanceOf(Spinner);
-    spinner.stop();
+    expect(spinnerInstance).toBeDefined();
+    expect(typeof spinnerInstance.render).toBe('function');
+    expect(typeof spinnerInstance.start).toBe('function');
+    expect(typeof spinnerInstance.stop).toBe('function');
+    spinnerInstance.stop();
   });
 });
 

@@ -1,6 +1,6 @@
 // Spinner component - manages its own animation state
 
-import type { Component, RenderContext } from '../layout/grid';
+import type { Component, RenderContext } from '../component';
 import type { Color } from '../types';
 import { applyStyle } from '../utils/colors';
 
@@ -8,13 +8,14 @@ export interface SpinnerOptions {
   frames?: string[];
   interval?: number;
   color?: Color;
+  autoStart?: boolean; // Start animating automatically (default: true)
 }
 
 /**
  * Create a spinner component that manages its own animation state
  * Returns an object with render(), start(), and stop() methods
  */
-export function createSpinner(options: SpinnerOptions = {}): {
+export function Spinner(options: SpinnerOptions = {}): {
   render: Component;
   start: () => void;
   stop: () => void;
@@ -23,13 +24,23 @@ export function createSpinner(options: SpinnerOptions = {}): {
     frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'],
     interval = 80,
     color = 'yellow',
+    autoStart = true,
   } = options;
 
   let currentFrameIndex = 0;
   let intervalId: NodeJS.Timeout | null = null;
-  let renderCallback: (() => void) | null = null;
+  let onUpdateCallback: (() => void) | null = null;
 
   const render: Component = (ctx: RenderContext) => {
+    // Store the onUpdate callback from context (set by region)
+    if (ctx.onUpdate && !onUpdateCallback) {
+      onUpdateCallback = ctx.onUpdate;
+      // Start automatically if enabled and callback is available
+      if (autoStart) {
+        start();
+      }
+    }
+    
     const frame = frames[currentFrameIndex];
     if (color) {
       return applyStyle(frame, { color });
@@ -44,9 +55,9 @@ export function createSpinner(options: SpinnerOptions = {}): {
 
     intervalId = setInterval(() => {
       currentFrameIndex = (currentFrameIndex + 1) % frames.length;
-      // Trigger re-render if callback is set
-      if (renderCallback) {
-        renderCallback();
+      // Trigger re-render using the callback from RenderContext
+      if (onUpdateCallback) {
+        onUpdateCallback();
       }
     }, interval);
   };
@@ -56,13 +67,7 @@ export function createSpinner(options: SpinnerOptions = {}): {
       clearInterval(intervalId);
       intervalId = null;
     }
-  };
-
-  // Expose a way to set the render callback (for region to trigger re-renders)
-  // This is a bit of a hack, but necessary for the spinner to update
-  (render as any).__setRenderCallback = (callback: () => void) => {
-    renderCallback = callback;
-  };
+  }
 
   return {
     render,

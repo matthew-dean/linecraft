@@ -1,9 +1,9 @@
 // Progress bar component using grid system
 
-import type { Component, RenderContext } from '../layout/grid';
+import type { Component, RenderContext } from '../component';
 import type { Color } from '../types';
-import { style } from './style';
-import { grid as gridComponent } from '../layout/grid';
+import { Styled } from './styled';
+import { grid as Grid } from '../layout/grid';
 import { applyStyle } from '../utils/colors';
 
 export interface ProgressBarOptions {
@@ -55,14 +55,14 @@ export function progressBar(options: ProgressBarOptions): Component {
     
     // Build grid children
     const children = [
-      style({ color: bracketColor }, leftBracket),
+      Styled({ color: bracketColor }, leftBracket),
       barComponent,
-      style({ color: bracketColor }, rightBracket),
-      style({ color: options.percentColor ?? 'brightBlack', align: 'right' }, percent.toFixed(1) + '%'),
+      Styled({ color: bracketColor }, rightBracket),
+      Styled({ color: options.percentColor ?? 'brightBlack', align: 'right' }, percent.toFixed(1) + '%'),
     ];
     
     // Use grid to layout: [1] [flex] [1] [7]
-    const gridComp = gridComponent({ template: [1, '1*', 1, 7], columnGap: 0 }, ...children);
+    const gridComp = Grid({ template: [1, '1*', 1, 7], columnGap: 0 }, ...children);
     return gridComp(ctx);
   };
 }

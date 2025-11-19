@@ -1,16 +1,18 @@
 // CSS Grid-based layout system for terminal components
 // Simplified grid that eliminates circular measurement complexity
 
-import type { TerminalRegion } from '../region';
-import type { Color } from '../types';
+import type { Color, FillChar } from '../types';
 import { applyStyle } from '../utils/colors';
 import { truncateEnd, truncateStart, truncateMiddle, wrapText, getTrimmedTextWidth } from '../utils/text';
+import type { RenderContext, Component } from '../component';
+import { callComponent, createChildContext } from '../component';
 
 /**
  * Extract character and color from spaceBetween option for a specific gap index
+ * spaceBetween can be a FillChar, or an array of FillChar values
  */
 function getSpaceBetweenChar(
-  spaceBetween: string | string[] | { char: string; color?: Color } | Array<{ char: string; color?: Color }>,
+  spaceBetween: FillChar | FillChar[],
   gapIndex: number
 ): { char: string; color?: Color } {
   if (typeof spaceBetween === 'string') {
@@ -18,48 +20,17 @@ function getSpaceBetweenChar(
   }
   
   if (Array.isArray(spaceBetween)) {
-    // Check if it's an array of strings or array of objects
-    if (spaceBetween.length > 0 && typeof spaceBetween[0] === 'string') {
-      // Array of strings
-      const char = spaceBetween[gapIndex] ?? spaceBetween[spaceBetween.length - 1];
-      return { char };
-    } else {
-      // Array of objects
-      const obj = spaceBetween[gapIndex] ?? spaceBetween[spaceBetween.length - 1];
-      return { char: obj.char, color: obj.color };
+    const item = spaceBetween[gapIndex] ?? spaceBetween[spaceBetween.length - 1];
+    if (typeof item === 'string') {
+      return { char: item };
     }
+    return { char: item.char, color: item.color };
   }
   
   // Single object
   return { char: spaceBetween.char, color: spaceBetween.color };
 }
 
-/**
- * RenderContext provides information needed for rendering
- */
-export interface RenderContext {
-  availableWidth: number;  // Width allocated to this component
-  region: TerminalRegion;  // For setLine access (needed for multi-line)
-  columnIndex: number;     // Which grid column (0-based)
-  rowIndex: number;         // Which grid row (0-based, for multi-line)
-}
-
-/**
- * Component type: can be a function or an object with a render method
- */
-export type Component = 
-  | ((ctx: RenderContext) => string | string[] | null)
-  | { render: (ctx: RenderContext) => string | string[] | null };
-
-/**
- * Helper to call a component (handles both function and object forms)
- */
-export function callComponent(component: Component, ctx: RenderContext): string | string[] | null {
-  if (typeof component === 'function') {
-    return component(ctx);
-  }
-  return component.render(ctx);
-}
 
 /**
  * Grid template entry: fixed width, flex unit, or minmax
@@ -67,7 +38,7 @@ export function callComponent(component: Component, ctx: RenderContext): string 
 export type GridTemplateEntry = 
   | number  // Fixed width: 20
   | 'auto'  // Auto width (fit content)
-  | string  // Flex unit: '1*', '2*'
+  | `${number}*`  // Flex unit: '1*', '2*'
   | { min: number; width: string };  // Minmax: { min: 40, width: '2*' }
 
 export interface GridOptions {
@@ -78,7 +49,7 @@ export interface GridOptions {
   columnGap?: number;
   
   /** Characters to draw between columns (fills blank space until next column) */
-  spaceBetween?: string | string[] | { char: string; color?: Color } | Array<{ char: string; color?: Color }>;
+  spaceBetween?: FillChar | FillChar[];
   
   /** Justify content: 'space-between' for left/right items with flexing middle */
   justify?: 'start' | 'end' | 'center' | 'space-between';
@@ -285,7 +256,7 @@ function measureAutoContentWidths(
     if (tracks[i].type !== 'auto') {
       continue;
     }
-    const result = children[i] ? children[i]!(ctxFactory(i)) : null;
+    const result = children[i] ? callComponent(children[i]!, ctxFactory(i)) : null;
     widths[i] = getRenderedWidth(result);
   }
   return widths;
@@ -294,19 +265,24 @@ function measureAutoContentWidths(
 /**
  * Create a grid component (function-based API)
  * This returns a Component that can be used in other grids
- * Accepts Component children or strings (which are converted to style components)
+ * Accepts Component children, strings (converted to Styled components), or objects with render methods
  */
 export function grid(
   options: GridOptions,
-  ...children: (Component | string)[]
+  ...children: (Component | string | { render: Component })[]
 ): Component {
-  // Convert strings to style components
+  // Convert children to Components
   const convertedChildren: Component[] = children.map(child => {
     if (typeof child === 'string') {
-      // Import style dynamically to avoid circular dependency
-      const { style } = require('../components/style');
-      return style({}, child);
+      // Import Styled dynamically to avoid circular dependency
+      const { Styled } = require('../components/styled');
+      return Styled({}, child);
     }
+    // If it's an object with a render method, extract the render function
+    if (typeof child === 'object' && child !== null && 'render' in child && typeof child.render === 'function') {
+      return child.render;
+    }
+    // Otherwise it's already a Component
     return child;
   });
   return (ctx: RenderContext) => {
@@ -325,9 +301,8 @@ export function grid(
     const autoContentWidths = measureAutoContentWidths(
       tracks,
       validChildren,
-      (index) => ({
+      (index) => createChildContext(ctx, {
         availableWidth: Number.POSITIVE_INFINITY,
-        region: ctx.region,
         columnIndex: index,
         rowIndex: 0,
       })
@@ -369,15 +344,14 @@ export function grid(
       const width = actualWidths[i] ?? 0;
       
       // Create context for child
-      const childCtx: RenderContext = {
+      const childCtx = createChildContext(ctx, {
         availableWidth: width,
-        region: ctx.region,
         columnIndex: i,
         rowIndex: 0,
-      };
+      });
       
       // Render child
-      const result = child(childCtx);
+      const result = callComponent(child, childCtx);
       results.push(result);
       if (result !== null) {
         anyRenderableChild = true;

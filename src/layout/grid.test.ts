@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { grid } from './grid';
-import { style } from '../components/style';
+import { grid as Grid } from './grid';
+import { Styled } from '../components/styled';
 import { TerminalRegion } from '../region';
-import { callComponent } from '../layout/grid';
+import { callComponent } from '../component';
 
 describe('Grid Layout', () => {
   let region: TerminalRegion;
@@ -13,9 +13,9 @@ describe('Grid Layout', () => {
 
   describe('grid (Component API)', () => {
     it('should create a grid component', () => {
-      const gridComponent = grid({ template: [20, '1*'] }, 
-        style({}, 'A'),
-        style({}, 'B')
+      const gridComponent = Grid({ template: [20, '1*'] }, 
+        Styled({}, 'A'),
+        Styled({}, 'B')
       );
       
       expect(gridComponent).toBeDefined();
@@ -32,9 +32,9 @@ describe('Grid Layout', () => {
     });
 
     it('should calculate column widths correctly', () => {
-      const gridComponent = grid({ template: [20, '1*'] }, 
-        style({}, 'A'),
-        style({}, 'B')
+      const gridComponent = Grid({ template: [20, '1*'] }, 
+        Styled({}, 'A'),
+        Styled({}, 'B')
       );
       
       const ctx = {
@@ -59,10 +59,10 @@ describe('Grid Layout', () => {
     });
 
     it('should handle flex ratios', () => {
-      const gridComponent = grid({ template: ['1*', '2*', '1*'] }, 
-        style({}, 'A'),
-        style({}, 'B'),
-        style({}, 'C')
+      const gridComponent = Grid({ template: ['1*', '2*', '1*'] }, 
+        Styled({}, 'A'),
+        Styled({}, 'B'),
+        Styled({}, 'C')
       );
       
       const ctx = {
@@ -88,9 +88,9 @@ describe('Grid Layout', () => {
     });
 
     it('should handle minmax', () => {
-      const gridComponent = grid({ template: [{ min: 40, width: '2*' }, '1*'] }, 
-        style({}, 'A'),
-        style({}, 'B')
+      const gridComponent = Grid({ template: [{ min: 40, width: '2*' }, '1*'] }, 
+        Styled({}, 'A'),
+        Styled({}, 'B')
       );
       
       const ctx = {
@@ -114,9 +114,9 @@ describe('Grid Layout', () => {
     });
 
     it('should handle columnGap', () => {
-      const gridComponent = grid({ template: [20, 20], columnGap: 2 }, 
-        style({}, 'A'.repeat(20)),
-        style({}, 'B'.repeat(20))
+      const gridComponent = Grid({ template: [20, 20], columnGap: 2 }, 
+        Styled({}, 'A'.repeat(20)),
+        Styled({}, 'B'.repeat(20))
       );
       
       const ctx = {
@@ -143,9 +143,9 @@ describe('Grid Layout', () => {
     });
 
     it('should render all columns with columnGap (regression: Column 2 not rendering)', () => {
-      const gridComponent = grid({ template: [20, 20], columnGap: 3 }, 
-        style({ color: 'cyan' }, 'Column 1'),
-        style({ color: 'green' }, 'Column 2')
+      const gridComponent = Grid({ template: [20, 20], columnGap: 3 }, 
+        Styled({ color: 'cyan' }, 'Column 1'),
+        Styled({ color: 'green' }, 'Column 2')
       );
       
       const ctx = {
@@ -181,10 +181,10 @@ describe('Grid Layout', () => {
       expect(between.length).toBeGreaterThanOrEqual(3); // At least 3 spaces (columnGap)
     });
 
-    it('should handle spaceBetween', () => {
-      const gridComponent = grid({ template: [20, 20], columnGap: 2, spaceBetween: '─' }, 
-        style({}, 'A'),
-        style({}, 'B')
+    it('should handle spaceBetween with auto columns', () => {
+      const gridComponent = Grid({ template: ['auto', 'auto'], columnGap: 2, spaceBetween: '─' }, 
+        Styled({}, 'A'),
+        Styled({}, 'B')
       );
       
       const ctx = {
@@ -208,14 +208,14 @@ describe('Grid Layout', () => {
       expect(plain).toContain('─');
     });
 
-    it('should handle spaceBetween with color', () => {
-      const gridComponent = grid({ 
-        template: [20, 20], 
+    it('should handle spaceBetween with color and auto columns', () => {
+      const gridComponent = Grid({ 
+        template: ['auto', 'auto'], 
         columnGap: 2, 
         spaceBetween: { char: '─', color: 'brightBlack' } 
       }, 
-        style({}, 'A'),
-        style({}, 'B')
+        Styled({}, 'A'),
+        Styled({}, 'B')
       );
       
       const ctx = {
@@ -238,13 +238,13 @@ describe('Grid Layout', () => {
     });
 
     it('should handle spaceBetween with auto columns (justify-content: space-between)', () => {
-      const gridComponent = grid({ 
+      const gridComponent = Grid({ 
         template: ['auto', 'auto'], 
         columnGap: 2, 
         spaceBetween: { char: '─', color: 'brightBlack' } 
       }, 
-        style({}, 'Left'),
-        style({}, 'Right')
+        Styled({}, 'Left'),
+        Styled({}, 'Right')
       );
       
       const ctx = {
@@ -282,13 +282,13 @@ describe('Grid Layout', () => {
     });
 
     it('should handle spaceBetween with auto columns - right column at end', () => {
-      const gridComponent = grid({ 
+      const gridComponent = Grid({ 
         template: ['auto', 'auto'], 
         columnGap: 2, 
         spaceBetween: { char: '─', color: 'brightBlack' } 
       }, 
-        style({}, 'Left'),
-        style({ align: 'right' }, 'Right')
+        Styled({}, 'Left'),
+        Styled({ align: 'right' }, 'Right')
       );
       
       const ctx = {
@@ -323,12 +323,12 @@ describe('Grid Layout', () => {
     });
 
     it('should handle spaceBetween with auto columns - verify fill width', () => {
-      const gridComponent = grid({ 
+      const gridComponent = Grid({ 
         template: ['auto', 'auto'], 
         spaceBetween: '─' 
       }, 
-        style({}, 'L'),
-        style({}, 'R')
+        Styled({}, 'L'),
+        Styled({}, 'R')
       );
       
       const ctx = {
@@ -360,13 +360,13 @@ describe('Grid Layout', () => {
     });
 
     it('should handle justify space-between', () => {
-      const gridComponent = grid({ 
+      const gridComponent = Grid({ 
         template: [10, '1*', 10], 
         justify: 'space-between' 
       }, 
-        style({}, 'Left'),
-        style({}, 'Middle'),
-        style({}, 'Right')
+        Styled({}, 'Left'),
+        Styled({}, 'Middle'),
+        Styled({}, 'Right')
       );
       
       const ctx = {
@@ -390,9 +390,9 @@ describe('Grid Layout', () => {
     });
 
     it('should handle null components (from when condition)', () => {
-      const gridComponent = grid({ template: [20, '1*'] }, 
-        style({}, 'A'),
-        style({ when: () => false }, 'B') // Returns null
+      const gridComponent = Grid({ template: [20, '1*'] }, 
+        Styled({}, 'A'),
+        Styled({ when: () => false }, 'B') // Returns null
       );
       
       const ctx = {
@@ -416,9 +416,9 @@ describe('Grid Layout', () => {
     });
 
     it('should handle multi-line content', () => {
-      const gridComponent = grid({ template: [20, '1*'] }, 
-        style({}, 'A'),
-        style({}, ['Line 1', 'Line 2'])
+      const gridComponent = Grid({ template: [20, '1*'] }, 
+        Styled({}, 'A'),
+        Styled({}, ['Line 1', 'Line 2'])
       );
       
       const ctx = {
@@ -446,11 +446,11 @@ describe('Grid Layout', () => {
     });
 
     it('should auto-repeat template for extra children', () => {
-      const gridComponent = grid({ template: [20, '1*'] }, 
-        style({}, 'A'),
-        style({}, 'B'),
-        style({}, 'C'), // Should use '1*' (repeated)
-        style({}, 'D')  // Should use '1*' (repeated)
+      const gridComponent = Grid({ template: [20, '1*'] }, 
+        Styled({}, 'A'),
+        Styled({}, 'B'),
+        Styled({}, 'C'), // Should use '1*' (repeated)
+        Styled({}, 'D')  // Should use '1*' (repeated)
       );
       
       const ctx = {
@@ -476,10 +476,10 @@ describe('Grid Layout', () => {
     });
 
     it('should handle empty template (all equal flex)', () => {
-      const gridComponent = grid({ template: [] }, 
-        style({}, 'A'),
-        style({}, 'B'),
-        style({}, 'C')
+      const gridComponent = Grid({ template: [] }, 
+        Styled({}, 'A'),
+        Styled({}, 'B'),
+        Styled({}, 'C')
       );
       
       const ctx = {
@@ -506,9 +506,9 @@ describe('Grid Layout', () => {
 
   describe('grid (Component API)', () => {
     it('should return a Component', () => {
-      const component = grid({ template: [20, '1*'] }, 
-        style({}, 'A'),
-        style({}, 'B')
+      const component = Grid({ template: [20, '1*'] }, 
+        Styled({}, 'A'),
+        Styled({}, 'B')
       );
       
       expect(typeof component).toBe('function');
@@ -525,9 +525,9 @@ describe('Grid Layout', () => {
     });
 
     it('should return null if all children are null', () => {
-      const component = grid({ template: [20, '1*'] }, 
-        style({ when: () => false }, 'A'),
-        style({ when: () => false }, 'B')
+      const component = Grid({ template: [20, '1*'] }, 
+        Styled({ when: () => false }, 'A'),
+        Styled({ when: () => false }, 'B')
       );
       
       const result = component({

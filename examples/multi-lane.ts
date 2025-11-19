@@ -1,10 +1,9 @@
 // Multi-lane progress bars using grid
 
-import { region, grid, style, progressBar } from '../src/index';
-import { waitForSpacebar } from '../src/utils/wait-for-spacebar';
+import { Region, Grid, Styled, progressBar, prompt } from '../src/index';
 
 async function main() {
-  const r = region();
+  const r = Region();
 
   let downloadProgress = 0;
   let extractProgress = 0;
@@ -12,10 +11,10 @@ async function main() {
 
   function updateAll() {
     r.set(
-      grid({ template: ['1*'], columnGap: 0 },
+      Grid({ template: ['1*'], columnGap: 0 },
         // Downloading
-        grid({ template: [12, '1*'], columnGap: 2 },
-          style({ color: 'cyan' }, 'Downloading'),
+        Grid({ template: [12, '1*'], columnGap: 2 },
+          Styled({ color: 'cyan' }, 'Downloading'),
           progressBar({
             current: downloadProgress,
             total: 100,
@@ -25,8 +24,8 @@ async function main() {
           })
         ),
         // Extracting
-        grid({ template: [12, '1*'], columnGap: 2 },
-          style({ color: 'cyan' }, 'Extracting'),
+        Grid({ template: [12, '1*'], columnGap: 2 },
+          Styled({ color: 'cyan' }, 'Extracting'),
           progressBar({
             current: extractProgress,
             total: 100,
@@ -36,8 +35,8 @@ async function main() {
           })
         ),
         // Installing
-        grid({ template: [12, '1*'], columnGap: 2 },
-          style({ color: 'cyan' }, 'Installing'),
+        Grid({ template: [12, '1*'], columnGap: 2 },
+          Styled({ color: 'cyan' }, 'Installing'),
           progressBar({
             current: installProgress,
             total: 100,
@@ -88,7 +87,7 @@ async function main() {
     })(),
   ]);
 
-  await waitForSpacebar(r);
+  await prompt(r);
   
   process.stdout.removeListener('resize', resizeHandler);
   r.destroy(true);

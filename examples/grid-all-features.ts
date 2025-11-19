@@ -1,202 +1,201 @@
 // Comprehensive example demonstrating all grid features
 
-import { region, grid, style, progressBar, fill, section } from '../src/index';
-import { waitForSpacebar } from '../src/utils/wait-for-spacebar';
+import { Region, Grid, Styled, progressBar, fill, Section, prompt } from '../src/index';
 
 async function main() {
-  const r = region();
+  const r = Region();
 
   // Section 1: Basic grid with fixed widths
   r.set(
-    section({ title: 'Fixed & Flexible Columns' },
-      grid({ template: [20, 30, '1*'] },
-        style({ color: 'cyan' }, 'Fixed 20'),
-        style({ color: 'green' }, 'Fixed 30'),
-        style({ color: 'yellow' }, 'Flexible')
+    Section({ title: 'Fixed & Flexible Columns' },
+      Grid({ template: [20, 30, '1*'] },
+        Styled({ color: 'cyan' }, 'Fixed 20'),
+        Styled({ color: 'green' }, 'Fixed 30'),
+        Styled({ color: 'yellow' }, 'Flexible')
       ),
       // Visual indicator: show column widths using fill
-      grid({ template: [20, 30, '1*'] },
-        fill({ color: 'brightRed', char: '─' }),
-        fill({ color: 'brightGreen', char: '─' }),
-        fill({ color: 'brightYellow', char: '─' })
+      Grid({ template: [20, 30, '1*'] },
+        fill({ char: '─', color: 'brightRed' }),
+        fill({ char: '─', color: 'brightGreen' }),
+        fill({ char: '─', color: 'brightYellow' })
       )
     )
   );
 
-  await waitForSpacebar(r);
+  await prompt(r);
 
   // Section 2: Flex ratios
   r.add(
-    section({ title: 'Flex Ratios' },
-      grid({ template: ['1*', '2*', '1*'] },
-        style({ color: 'red' }, 'Flex 1'),
-        style({ color: 'blue' }, 'Flex 2'),
-        style({ color: 'magenta' }, 'Flex 1')
+    Section({ title: 'Flex Ratios' },
+      Grid({ template: ['1*', '2*', '1*'] },
+        Styled({ color: 'red' }, 'Flex 1'),
+        Styled({ color: 'blue' }, 'Flex 2'),
+        Styled({ color: 'magenta' }, 'Flex 1')
       ),
       // Visual indicator: show proportional widths
-      grid({ template: ['1*', '2*', '1*'] },
-        fill({ color: 'brightRed', char: '█' }),
-        fill({ color: 'brightBlue', char: '█' }),
-        fill({ color: 'brightMagenta', char: '█' })
+      Grid({ template: ['1*', '2*', '1*'] },
+        fill({ char: '█', color: 'brightRed' }),
+        fill({ char: '█', color: 'brightBlue' }),
+        fill({ char: '█', color: 'brightMagenta' })
       )
     )
   );
 
-  await waitForSpacebar(r);
+  await prompt(r);
 
   // Section 3: Column gap - make it visible
   r.add(
-    section({ title: 'Column Gap' },
-      grid({ template: [20, 20], columnGap: 3 },
-        style({ color: 'cyan' }, 'Column 1'),
-        style({ color: 'green' }, 'Column 2')
+    Section({ title: 'Column Gap' },
+      Grid({ template: [20, 20], columnGap: 3 },
+        Styled({ color: 'cyan' }, 'Column 1'),
+        Styled({ color: 'green' }, 'Column 2')
       ),
       // Visual indicator: show column widths
-      grid({ template: [20, 20], columnGap: 3 },
-        fill({ color: 'brightCyan', char: '─' }),
-        fill({ color: 'brightGreen', char: '─' })
+      Grid({ template: [20, 20], columnGap: 3 },
+        fill({ char: '─', color: 'brightCyan' }),
+        fill({ char: '─', color: 'brightGreen' })
       )
     )
   );
 
-  await waitForSpacebar(r);
+  await prompt(r);
 
   // Section 4: SpaceBetween - fills gaps between columns with a character
   r.add(
-    section({ title: 'Space Between (Auto Columns)' },
-      grid({ template: ['auto', 'auto'], columnGap: 2, spaceBetween: { char: '─', color: 'brightBlack' } },
-        style({ color: 'yellow' }, 'Left'),
-        style({ color: 'yellow', align: 'right' }, 'Right'),
+    Section({ title: 'Space Between (Auto Columns)' },
+      Grid({ template: ['auto', 'auto'], columnGap: 2, spaceBetween: { char: '─', color: 'brightBlack' } },
+        Styled({ color: 'yellow' }, 'Left'),
+        Styled({ color: 'yellow', align: 'right' }, 'Right'),
         
         // Second row - Visual indicator
-        fill({ color: 'brightYellow', char: '─' }),
-        fill({ color: 'brightYellow', char: '─' })
+        fill({ char: '─', color: 'brightYellow' }),
+        fill({ char: '─', color: 'brightYellow' })
       )
     )
   );
 
-  await waitForSpacebar(r);
+  await prompt(r);
 
   // Section 5: SpaceBetween with different character
   r.add(
-    section({ title: 'Space Between (Flex Column)' },
-      grid({ template: [20, '1*', 20], columnGap: 2, spaceBetween: { char: '·', color: 'brightCyan' } },
-        style({ color: 'cyan' }, 'Left'),
-        style({ color: 'brightBlack' }, ''),
-        style({ color: 'cyan' }, 'Right')
+    Section({ title: 'Space Between (Flex Column)' },
+      Grid({ template: [20, '1*', 20], columnGap: 2, spaceBetween: { char: '·', color: 'brightCyan' } },
+        Styled({ color: 'cyan' }, 'Left'),
+        Styled({ color: 'brightBlack' }, ''),
+        Styled({ color: 'cyan' }, 'Right')
       ),
       // Visual indicator
-      grid({ template: [20, '1*', 20], columnGap: 2 },
-        fill({ color: 'brightCyan', char: '─' }),
-        fill({ color: 'brightCyan', char: '─' }),
-        fill({ color: 'brightCyan', char: '─' })
+      Grid({ template: [20, '1*', 20], columnGap: 2 },
+        fill({ char: '─', color: 'brightCyan' }),
+        fill({ char: '─', color: 'brightCyan' }),
+        fill({ char: '─', color: 'brightCyan' })
       )
     )
   );
 
-  await waitForSpacebar(r);
+  await prompt(r);
 
   // Section 6: Justify space-between - left/right items with flexing middle
   r.add(
-    section({ title: 'Justify: Space Between' },
-      grid({ template: [15, '1*', 15], justify: 'space-between' },
-        style({ color: 'green' }, 'Left Item'),
-        style({ color: 'brightBlack' }, 'Flexing Middle'),
-        style({ color: 'green' }, 'Right Item')
+    Section({ title: 'Justify: Space Between' },
+      Grid({ template: [15, '1*', 15], justify: 'space-between' },
+        Styled({ color: 'green' }, 'Left Item'),
+        Styled({ color: 'brightBlack' }, 'Flexing Middle'),
+        Styled({ color: 'green' }, 'Right Item')
       ),
       // Visual indicator
-      grid({ template: [15, '1*', 15], justify: 'space-between' },
-        fill({ color: 'brightGreen', char: '─' }),
-        fill({ color: 'brightBlack', char: '─' }),
-        fill({ color: 'brightGreen', char: '─' })
+      Grid({ template: [15, '1*', 15], justify: 'space-between' },
+        fill({ char: '─', color: 'brightGreen' }),
+        fill({ char: '─', color: 'brightBlack' }),
+        fill({ char: '─', color: 'brightGreen' })
       )
     )
   );
 
-  await waitForSpacebar(r);
+  await prompt(r);
 
   // Section 7: Overflow ellipsis
   r.add(
-    section({ title: 'Text Overflow: Ellipsis' },
-      grid({ template: ['1*', '1*', '1*'] },
-        style({ color: 'red', overflow: 'ellipsis-end' }, 'This is a very long text that will be truncated'),
-        style({ color: 'blue', overflow: 'ellipsis-start' }, 'This is a very long text that will be truncated'),
-        style({ color: 'magenta', overflow: 'ellipsis-middle' }, 'This is a very long text that will be truncated')
+    Section({ title: 'Text Overflow: Ellipsis' },
+      Grid({ template: ['1*', '1*', '1*'] },
+        Styled({ color: 'red', overflow: 'ellipsis-end' }, 'This is a very long text that will be truncated'),
+        Styled({ color: 'blue', overflow: 'ellipsis-start' }, 'This is a very long text that will be truncated'),
+        Styled({ color: 'magenta', overflow: 'ellipsis-middle' }, 'This is a very long text that will be truncated')
       ),
       // Visual indicator
-      grid({ template: ['1*', '1*', '1*'] },
-        fill({ color: 'brightRed', char: '─' }),
-        fill({ color: 'brightBlue', char: '─' }),
-        fill({ color: 'brightMagenta', char: '─' })
+      Grid({ template: ['1*', '1*', '1*'] },
+        fill({ char: '─', color: 'brightRed' }),
+        fill({ char: '─', color: 'brightBlue' }),
+        fill({ char: '─', color: 'brightMagenta' })
       )
     )
   );
 
-  await waitForSpacebar(r);
+  await prompt(r);
 
   // Section 8: When condition (responsive)
   r.add(
-    section({ title: 'Conditional Rendering' },
-      grid({ template: [20, '1*'] },
-        style({ color: 'cyan' }, 'Always visible'),
-        style({ 
+    Section({ title: 'Conditional Rendering' },
+      Grid({ template: [20, '1*'] },
+        Styled({ color: 'cyan' }, 'Always visible'),
+        Styled({ 
           color: 'green', 
           when: (ctx) => ctx.availableWidth > 50 
         }, 'Only if width > 50')
       ),
       // Visual indicator
-      grid({ template: [20, '1*'] },
-        fill({ color: 'brightCyan', char: '─' }),
-        fill({ color: 'brightGreen', char: '─' })
+      Grid({ template: [20, '1*'] },
+        fill({ char: '─', color: 'brightCyan' }),
+        fill({ char: '─', color: 'brightGreen' })
       )
     )
   );
 
-  await waitForSpacebar(r);
+  await prompt(r);
 
   // Section 9: Text alignment (left, center, right)
   r.add(
-    section({ title: 'Text Alignment' },
-      grid({ template: ['1*', '1*', '1*'] },
-        style({ color: 'cyan', align: 'left' }, 'Left'),
-        style({ color: 'green', align: 'center' }, 'Center'),
-        style({ color: 'yellow', align: 'right' }, 'Right')
+    Section({ title: 'Text Alignment' },
+      Grid({ template: ['1*', '1*', '1*'] },
+        Styled({ color: 'cyan', align: 'left' }, 'Left'),
+        Styled({ color: 'green', align: 'center' }, 'Center'),
+        Styled({ color: 'yellow', align: 'right' }, 'Right')
       ),
       // Visual indicator
-      grid({ template: ['1*', '1*', '1*'] },
-        fill({ color: 'brightCyan', char: '─' }),
-        fill({ color: 'brightGreen', char: '─' }),
-        fill({ color: 'brightYellow', char: '─' })
+      Grid({ template: ['1*', '1*', '1*'] },
+        fill({ char: '─', color: 'brightCyan' }),
+        fill({ char: '─', color: 'brightGreen' }),
+        fill({ char: '─', color: 'brightYellow' })
       )
     )
   );
 
-  await waitForSpacebar(r);
+  await prompt(r);
 
   // Section 10: Alignment with short text
   r.add(
-    section({ title: 'Alignment (Short Text)' },
-      grid({ template: [30, 30, 30] },
-        style({ color: 'red', align: 'left' }, 'L'),
-        style({ color: 'blue', align: 'center' }, 'C'),
-        style({ color: 'magenta', align: 'right' }, 'R')
+    Section({ title: 'Alignment (Short Text)' },
+      Grid({ template: [30, 30, 30] },
+        Styled({ color: 'red', align: 'left' }, 'L'),
+        Styled({ color: 'blue', align: 'center' }, 'C'),
+        Styled({ color: 'magenta', align: 'right' }, 'R')
       ),
       // Visual indicator
-      grid({ template: [30, 30, 30] },
-        fill({ color: 'brightRed', char: '─' }),
-        fill({ color: 'brightBlue', char: '─' }),
-        fill({ color: 'brightMagenta', char: '─' })
+      Grid({ template: [30, 30, 30] },
+        fill({ char: '─', color: 'brightRed' }),
+        fill({ char: '─', color: 'brightBlue' }),
+        fill({ char: '─', color: 'brightMagenta' })
       )
     )
   );
 
-  await waitForSpacebar(r);
+  await prompt(r);
 
   // Section 11: Progress bar in grid
   r.add(
-    section({ title: 'Progress Bar' },
-      grid({ template: [20, '1*'] },
-        style({ color: 'cyan' }, 'Installing...'),
+    Section({ title: 'Progress Bar' },
+      Grid({ template: [20, '1*'] },
+        Styled({ color: 'cyan' }, 'Installing...'),
         progressBar({
           current: 75,
           total: 100,
@@ -206,21 +205,21 @@ async function main() {
         })
       ),
       // Visual indicator
-      grid({ template: [20, '1*'] },
-        fill({ color: 'brightCyan', char: '─' }),
-        fill({ color: 'brightGreen', char: '─' })
+      Grid({ template: [20, '1*'] },
+        fill({ char: '─', color: 'brightCyan' }),
+        fill({ char: '─', color: 'brightGreen' })
       )
     )
   );
 
-  await waitForSpacebar(r);
+  await prompt(r);
 
   // Section 12: Multi-line content
   r.add(
-    section({ title: 'Multi-line Content' },
-      grid({ template: [20, '1*'] },
-        style({ color: 'yellow' }, 'Single line'),
-        style({ color: 'blue' }, [
+    Section({ title: 'Multi-line Content' },
+      Grid({ template: [20, '1*'] },
+        Styled({ color: 'yellow' }, 'Single line'),
+        Styled({ color: 'blue' }, [
           'Line 1 of multi-line',
           'Line 2 of multi-line',
           'Line 3 of multi-line',
@@ -228,31 +227,31 @@ async function main() {
         ])
       ),
       // Visual indicator (only for first line since multi-line)
-      grid({ template: [20, '1*'] },
-        fill({ color: 'brightYellow', char: '─' }),
-        fill({ color: 'brightBlue', char: '─' })
+      Grid({ template: [20, '1*'] },
+        fill({ char: '─', color: 'brightYellow' }),
+        fill({ char: '─', color: 'brightBlue' })
       )
     )
   );
 
-  await waitForSpacebar(r);
+  await prompt(r);
 
   // Section 13: Minmax
   r.add(
-    section({ title: 'Minmax Columns' },
-      grid({ template: [{ min: 20, width: '2*' }, '1*'] },
-        style({ color: 'red' }, 'Minmax (min 20, flex 2)'),
-        style({ color: 'blue' }, 'Flex 1')
+    Section({ title: 'Minmax Columns' },
+      Grid({ template: [{ min: 20, width: '2*' }, '1*'] },
+        Styled({ color: 'red' }, 'Minmax (min 20, flex 2)'),
+        Styled({ color: 'blue' }, 'Flex 1')
       ),
       // Visual indicator
-      grid({ template: [{ min: 20, width: '2*' }, '1*'] },
-        fill({ color: 'brightRed', char: '─' }),
-        fill({ color: 'brightBlue', char: '─' })
+      Grid({ template: [{ min: 20, width: '2*' }, '1*'] },
+        fill({ char: '─', color: 'brightRed' }),
+        fill({ char: '─', color: 'brightBlue' })
       )
     )
   );
 
-  await waitForSpacebar(r);
+  await prompt(r);
   r.destroy();
 }
 

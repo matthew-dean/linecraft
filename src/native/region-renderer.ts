@@ -100,8 +100,8 @@ export class RegionRenderer {
 
   updateLines(updates: Array<{ lineNumber: number; content: string }>): void {
     if (updates.length === 0) {
-      return;
-    }
+          return;
+        }
     for (const { lineNumber, content } of updates) {
       if (lineNumber < 1) {
         throw new Error('Line numbers start at 1');
@@ -162,6 +162,33 @@ export class RegionRenderer {
     this.height = newHeight;
   }
 
+  setHeight(height: number): void {
+    this.height = height;
+  }
+
+  shrinkFrame(startIndex: number, count: number): void {
+    this.pendingFrame.splice(startIndex, count);
+    if (this.previousFrame.length >= startIndex + count) {
+      this.previousFrame.splice(startIndex, count);
+    }
+    // Also update previousViewportFrame to reflect the deletion
+    // This ensures the next render knows those lines are gone
+    const normalized = this.getEffectiveFrame();
+    const viewportHeight = Math.max(1, this.viewportHeight);
+    const visibleLines = Math.min(viewportHeight, normalized.length);
+    const newViewportFrame = new Array<string>(viewportHeight).fill('');
+    
+    if (visibleLines > 0) {
+      const startIdx = normalized.length > viewportHeight
+        ? normalized.length - viewportHeight
+        : 0;
+      for (let i = 0; i < visibleLines; i++) {
+        newViewportFrame[i] = normalized[startIdx + i];
+      }
+    }
+    this.previousViewportFrame = newViewportFrame;
+  }
+
   async destroy(clearFirst: boolean = false): Promise<void> {
     if (this.destroyed) {
       return;
@@ -176,9 +203,9 @@ export class RegionRenderer {
       this.resizeCleanup();
       this.resizeCleanup = undefined;
     }
-    if (this.permanentlyDisabled) {
-      return;
-    }
+      if (this.permanentlyDisabled) {
+        return;
+      }
     if (!clearFirst) {
       await this.renderNow();
     }
@@ -366,7 +393,7 @@ export class RegionRenderer {
       let lineContent = '';
       if (op.type === 'delete_line') {
         lineContent = '';
-      } else {
+        } else {
         lineContent = nextFrame[op.line] ?? op.content ?? '';
       }
       this.renderBuffer.write(ansi.moveCursorTo(1, row));
@@ -402,7 +429,7 @@ export class RegionRenderer {
           end++;
         }
         idx = end;
-      } else {
+          } else {
         idx++;
         visual++;
       }

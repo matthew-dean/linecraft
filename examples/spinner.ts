@@ -1,55 +1,45 @@
 // Spinner example using grid
 
-import { region, grid, style } from '../src/index';
-import { DemoSpinner } from './demo-spinner';
-import { waitForSpacebar } from '../src/utils/wait-for-spacebar';
+import { Region, Grid, Styled, Spinner, prompt } from '../src/index';
 
 async function main() {
-  const r = region();
+  const r = Region();
 
-  // Create spinner on line 1
-  const spin = new DemoSpinner(r, 1, {
-    frames: ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'],
-    interval: 80,
+  // Create spinner component (starts animating automatically)
+  const spinner = Spinner({
+    color: 'yellow',
   });
 
-  // Add label next to spinner using grid
+  // Add spinner and label using grid
   r.set(
-    grid({ template: [3, '1*'], columnGap: 1 },
-      style({ color: 'yellow' }, '⠋'), // Spinner will update this
-      style({ color: 'cyan' }, 'Loading...')
+    Grid({ template: [3, '1*'], columnGap: 1 },
+      spinner,
+      Styled({ color: 'cyan' }, 'Loading...')
     )
   );
 
-  // Start spinner
-  spin.start();
-
-  // Update spinner character in the grid
-  let frameIndex = 0;
-  const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-  const interval = setInterval(() => {
-    frameIndex = (frameIndex + 1) % frames.length;
-    r.set(
-      grid({ template: [3, '1*'], columnGap: 1 },
-        style({ color: 'yellow' }, frames[frameIndex]),
-        style({ color: 'cyan' }, 'Loading...')
-      )
-    );
-  }, 80);
-
-  // Simulate work
+  // Simulate work (spinner is already animating)
   await new Promise(resolve => setTimeout(resolve, 3000));
 
-  clearInterval(interval);
-  spin.stop();
+  // Stop the spinner
+  spinner.stop();
+  
+  // Show example of restarting after a prompt
+  await prompt(r, { message: 'restart spinner', key: 'enter' });
+  
+  spinner.start();
+  
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  
+  spinner.stop();
 
   r.set(
-    grid({ template: ['1*'] },
-      style({ color: 'green' }, '✓ Complete!')
+    Grid({ template: ['1*'] },
+      Styled({ color: 'green' }, '✓ Complete!')
     )
   );
 
-  await waitForSpacebar(r);
+  await prompt(r);
   r.destroy(true);
 }
 

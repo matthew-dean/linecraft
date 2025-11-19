@@ -1,6 +1,6 @@
 // Style component for text styling and overflow handling
 
-import type { RenderContext, Component } from '../layout/grid';
+import type { RenderContext, Component } from '../component';
 import type { Color } from '../types';
 import { applyStyle } from '../utils/colors';
 import { truncateEnd, truncateStart, truncateMiddle, wrapText } from '../utils/text';
@@ -17,9 +17,9 @@ export interface StyleOptions {
 }
 
 /**
- * Style component - applies styling and handles overflow
+ * Styled component - applies styling and handles overflow
  */
-export function style(
+export function Styled(
   options: StyleOptions,
   content: string | string[] | Component
 ): Component {

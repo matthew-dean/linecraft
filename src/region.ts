@@ -2,7 +2,7 @@ import { RegionRenderer, type RegionRendererOptions } from './native/region-rend
 import { applyStyle } from './utils/colors';
 import { getTerminalWidth } from './utils/terminal';
 import type { RegionOptions, LineContent } from './types';
-import type { Component } from './layout/grid';
+import type { Component, RenderContext } from './component';
 
 /**
  * Type guard to check if an item is a Component
@@ -38,7 +38,13 @@ function renderComponent(component: Component, region: TerminalRegion, x: number
     region: region,
     columnIndex: x,
     rowIndex: y,
+    // Provide onUpdate callback for animated components (like Spinner)
+    onUpdate: () => {
+      // Re-render the last content to update animated components
+      region.reRenderLastContent();
+    },
   };
+  
   const result = typeof component === 'function' ? component(ctx) : component.render(ctx);
   
   if (result === null) return;
@@ -63,10 +69,45 @@ export class SectionReference {
   ) {}
 
   /**
+   * Delete this section - removes the lines from the region
+   */
+  delete(): void {
+    const renderer = this.region.getRenderer();
+    const wasRenderingDisabled = renderer.disableRendering;
+    renderer.disableRendering = true;
+
+    // Clear all lines in this section
+    const updates: Array<{ lineNumber: number; content: string }> = [];
+    for (let i = 0; i < this.height; i++) {
+      const lineNumber = this.startLine + i;
+      updates.push({ lineNumber, content: '' });
+    }
+
+    // Remove lines from regionLines
+    this.region.removeRegionLines(this.startLine - 1, this.height);
+
+    // Reduce region height
+    this.region.decreaseHeight(this.height);
+    renderer.setHeight(this.region.getInternalHeight());
+
+    // Shrink the frame arrays
+    renderer.shrinkFrame(this.startLine - 1, this.height);
+
+    renderer.disableRendering = wasRenderingDisabled;
+    
+    // Update lines and schedule render
+    if (updates.length > 0 && !wasRenderingDisabled) {
+      renderer.updateLines(updates);
+      // Force a render to clear the lines
+      void renderer.flush();
+    }
+  }
+
+  /**
    * Update the content of this section
    */
   update(content: string | string[] | LineContent[]): void {
-    const renderer = (this.region as any).renderer;
+    const renderer = this.region.getRenderer();
     const wasRenderingDisabled = renderer.disableRendering;
     renderer.disableRendering = true;
 
@@ -84,26 +125,25 @@ export class SectionReference {
       });
     }
 
-    const linesToUpdate = Math.min(lines.length, this.height);
+    // Update all lines in the section (use provided lines, or empty strings for remaining lines)
+    const linesToUpdate = this.height;
     
     // Prepare updates for the renderer
     const updates: Array<{ lineNumber: number; content: string }> = [];
     for (let i = 0; i < linesToUpdate; i++) {
       const lineNumber = this.startLine + i;
-      const styled = lines[i];
+      // Use provided line if available, otherwise empty string to clear
+      const styled = i < lines.length ? lines[i] : '';
       
       updates.push({ lineNumber, content: styled });
       
       // Track in regionLines
-      const region = this.region as any;
-      while (region.regionLines.length < this.startLine + i) {
-        region.regionLines.push({ type: 'static', lineNumber: region.regionLines.length + 1 });
-      }
-      region.regionLines[this.startLine + i - 1] = {
+      this.region.ensureRegionLine(this.startLine + i - 1);
+      this.region.updateRegionLine(this.startLine + i - 1, {
         type: 'static',
         content: styled,
         lineNumber: this.startLine + i
-      };
+      });
     }
 
     renderer.disableRendering = wasRenderingDisabled;
@@ -179,6 +219,56 @@ export class TerminalRegion {
   }
 
   /**
+   * Get the underlying renderer (for internal use by SectionReference)
+   * @internal
+   */
+  getRenderer(): RegionRenderer {
+    return this.renderer;
+  }
+
+  /**
+   * Get the internal height (for internal use by SectionReference)
+   * @internal
+   */
+  getInternalHeight(): number {
+    return this._height;
+  }
+
+  /**
+   * Decrease the region height (for internal use by SectionReference)
+   * @internal
+   */
+  decreaseHeight(amount: number): void {
+    this._height = Math.max(0, this._height - amount);
+  }
+
+  /**
+   * Remove lines from regionLines (for internal use by SectionReference)
+   * @internal
+   */
+  removeRegionLines(startIndex: number, count: number): void {
+    this.regionLines.splice(startIndex, count);
+  }
+
+  /**
+   * Ensure a region line exists at the given index (for internal use by SectionReference)
+   * @internal
+   */
+  ensureRegionLine(index: number): void {
+    while (this.regionLines.length <= index) {
+      this.regionLines.push({ type: 'static', lineNumber: this.regionLines.length + 1 });
+    }
+  }
+
+  /**
+   * Update a region line (for internal use by SectionReference)
+   * @internal
+   */
+  updateRegionLine(index: number, lineInfo: { type: 'component' | 'static', content?: any, lineNumber: number }): void {
+    this.regionLines[index] = lineInfo;
+  }
+
+  /**
    * Internal method to set a single line (used by components and SectionReference)
    * @internal
    */
@@ -242,13 +332,6 @@ export class TerminalRegion {
       : [content];
     
     // Check if first item is a Component (object with render method or function)
-    const isComponent = (item: any): item is Component => {
-      return item !== null && (
-        typeof item === 'function' ||
-        (typeof item === 'object' && 'render' in item && typeof item.render === 'function')
-      );
-    };
-    
     if (allContent.length > 0 && isComponent(allContent[0])) {
       // Component(s)
       this.allComponentDescriptors = [allContent.length > 1 ? allContent : allContent[0]];
@@ -302,6 +385,9 @@ export class TerminalRegion {
             region: this,
             columnIndex: 0,
             rowIndex: currentLine,
+            onUpdate: () => {
+              this.reRenderLastContent();
+            },
           };
           const result = typeof component === 'function' ? component(ctx) : component.render(ctx);
           
@@ -319,7 +405,7 @@ export class TerminalRegion {
         }
       }
       
-      (renderer as any).height = totalHeight;
+      renderer.setHeight(totalHeight);
       
       if (totalHeight > oldHeight) {
         renderer.expandTo(totalHeight);
@@ -362,13 +448,6 @@ export class TerminalRegion {
       : [content];
     
     // Check if first item is a Component
-    const isComponent = (item: any): item is Component => {
-      return item !== null && (
-        typeof item === 'function' ||
-        (typeof item === 'object' && 'render' in item && typeof item.render === 'function')
-      );
-    };
-    
     if (allContent.length > 0 && isComponent(allContent[0])) {
       const width = this.width;
       let totalHeight = 0;
@@ -415,7 +494,7 @@ export class TerminalRegion {
       
       // Update region height BEFORE rendering
       this._height += totalHeight;
-      (renderer as any).height = this._height;
+      renderer.setHeight(this._height);
       
       // Expand region to accommodate new content
       renderer.expandTo(this._height);
@@ -428,7 +507,7 @@ export class TerminalRegion {
       
       // Render each component starting from startLine
       let currentLine = startLine;
-      for (const component of resolvedComponents) {
+      for (const component of components) {
         const height = getComponentHeight(component, this, width);
         renderComponent(component, this, 0, currentLine, width);
         currentLine += height;
@@ -442,13 +521,6 @@ export class TerminalRegion {
     }
     
     // Single Component (object with render method or function)
-    const isComponent = (item: any): item is Component => {
-      return item !== null && (
-        typeof item === 'function' ||
-        (typeof item === 'object' && 'render' in item && typeof item.render === 'function')
-      );
-    };
-    
     if (isComponent(content)) {
       const width = this.width;
       const height = getComponentHeight(content, this, width);
@@ -485,7 +557,7 @@ export class TerminalRegion {
       
       // Update region height BEFORE rendering
       this._height += height;
-      (renderer as any).height = this._height;
+      renderer.setHeight(this._height);
       
       // Expand region to accommodate new content
       renderer.expandTo(this._height);
@@ -494,7 +566,7 @@ export class TerminalRegion {
       const wasRenderingDisabled = renderer.disableRendering;
       renderer.disableRendering = true;
       
-      // Render component
+      // Render component (renderComponent will set up onUpdate callback)
       renderComponent(content, this, 0, startLine, width);
       
       // Re-enable rendering and flush once
@@ -655,13 +727,6 @@ export class TerminalRegion {
         renderer.logToFile(`[reRenderLastContent] CALLED: height=${this._height} width=${width} lastRenderedHeight=${renderer.lastRenderedHeight}`);
       
       // First, calculate total height of ALL content (components + static lines)
-      const isComponent = (item: any): item is Component => {
-        return item !== null && (
-          typeof item === 'function' ||
-          (typeof item === 'object' && 'render' in item && typeof item.render === 'function')
-        );
-      };
-      
       let totalHeight = 0;
       for (const itemOrArray of this.allComponentDescriptors) {
         const items = Array.isArray(itemOrArray) ? itemOrArray : [itemOrArray];
@@ -736,13 +801,13 @@ export class TerminalRegion {
       
       // Update height to match all rendered content
       this._height = totalHeight;
-      (renderer as any).height = totalHeight;
+      renderer.setHeight(totalHeight);
       
       // CRITICAL: DON'T update lastRenderedHeight before flushing
       // This would change the state and make renderNow() think height hasn't increased
       // when it actually has. Let renderNow() update lastRenderedHeight after rendering.
       // This keeps the state consistent with the normal set() path
-      const oldLastRenderedHeight = (renderer as any).lastRenderedHeight;
+      const oldLastRenderedHeight = renderer.lastRenderedHeight;
       renderer.logToFile(`[reRenderLastContent] BEFORE flush: height=${totalHeight} lastRenderedHeight=${oldLastRenderedHeight}`);
       
       // CRITICAL: Re-render static lines (waitForSpacebar, whitespace)

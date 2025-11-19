@@ -1,6 +1,7 @@
 // Section component - wraps content in a box with a tabbed title
 
-import type { RenderContext, Component, callComponent } from '../layout/grid';
+import type { RenderContext, Component } from '../component';
+import { renderChildren } from '../component';
 import type { Color } from '../types';
 import { applyStyle } from '../utils/colors';
 
@@ -17,7 +18,7 @@ export interface SectionOptions {
  * The title appears in a "tab" at the top, and the content is wrapped in a rounded box.
  * Uses modern rounded corners (╭ ╮ ╰ ╯) for a clean look.
  */
-export function section(
+export function Section(
   options: SectionOptions,
   ...children: Component[]
 ): Component {
@@ -37,29 +38,13 @@ export function section(
     const boxWidth = availableWidth;
     const contentWidth = Math.max(0, boxWidth - 2 - (padding * 2)); // minus borders and padding
     
-    // Render children to get content
-    const contentLines: string[] = [];
-    for (const child of children) {
-      const result = callComponent(child, {
-        ...ctx,
-        availableWidth: contentWidth,
-        rowIndex: contentLines.length,
-      });
-      
-      if (result === null) continue;
-      
-      if (Array.isArray(result)) {
-        contentLines.push(...result);
-      } else {
-        contentLines.push(result);
-      }
-    }
+    // Render children - simple and clean!
+    const contentLines = renderChildren(children, {
+      ...ctx,
+      availableWidth: contentWidth,
+    });
     
-    if (contentLines.length === 0) {
-      return null;
-    }
-    
-    // Build the section with tab and box
+    // Build the section with tab and box (even if empty)
     const lines: string[] = [];
     
     // Tab line: ╭─ Title ────────────────╮
@@ -76,15 +61,21 @@ export function section(
     // Content lines with borders
     const vertical = applyStyle('│', { color: borderColor });
     const paddingSpaces = ' '.repeat(padding);
+    const emptyContentLine = vertical + paddingSpaces + ' '.repeat(contentWidth) + paddingSpaces + vertical;
     
+    // Top padding: empty lines with borders
+    for (let i = 0; i < padding; i++) {
+      lines.push(emptyContentLine);
+    }
+    
+    // Content lines - children already know their available width
     for (const contentLine of contentLines) {
-      // Pad content line to contentWidth
-      const plainContent = contentLine.replace(/\x1b\[[0-9;]*m/g, '');
-      const paddedContent = plainContent.length < contentWidth
-        ? contentLine + ' '.repeat(contentWidth - plainContent.length)
-        : contentLine;
-      
-      lines.push(vertical + paddingSpaces + paddedContent + paddingSpaces + vertical);
+      lines.push(vertical + paddingSpaces + contentLine + paddingSpaces + vertical);
+    }
+    
+    // Bottom padding: empty lines with borders
+    for (let i = 0; i < padding; i++) {
+      lines.push(emptyContentLine);
     }
     
     // Bottom border: ╰───────────────────────╯
