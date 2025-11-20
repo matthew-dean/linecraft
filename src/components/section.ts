@@ -10,13 +10,30 @@ export interface SectionOptions {
   titleColor?: Color;
   borderColor?: Color;
   padding?: number; // Padding inside the box (default: 1)
+  left?: boolean; // Show left border (default: true)
+  right?: boolean; // Show right border (default: true)
+  top?: boolean; // Show top border (default: true)
+  bottom?: boolean; // Show bottom border (default: true)
 }
 
 /**
- * Section component - wraps content in a rounded box with a tabbed title
+ * Section component - wraps content in a box with a tabbed title
  * 
- * The title appears in a "tab" at the top, and the content is wrapped in a rounded box.
- * Uses modern rounded corners (╭ ╮ ╰ ╯) for a clean look.
+ * The title appears in a "tab" at the top, and the content is wrapped in a box.
+ * Uses rounded corners (╭ ╮ ╰ ╯) for a clean look. You can control which borders
+ * are shown using `left`, `right`, `top`, and `bottom` options.
+ * 
+ * @example
+ * // Default: all borders shown
+ * Section({ title: 'My Section' }, ...)
+ * 
+ * @example
+ * // Only left and right borders (no top/bottom)
+ * Section({ title: 'My Section', top: false, bottom: false }, ...)
+ * 
+ * @example
+ * // Only left border
+ * Section({ title: 'My Section', right: false, top: false, bottom: false }, ...)
  */
 export function Section(
   options: SectionOptions,
@@ -28,6 +45,10 @@ export function Section(
       titleColor = 'brightCyan',
       borderColor = 'brightBlack',
       padding = 1,
+      left = true,
+      right = true,
+      top = true,
+      bottom = true,
     } = options;
 
     const availableWidth = ctx.availableWidth;
@@ -36,7 +57,9 @@ export function Section(
     
     // Calculate box width (full available width)
     const boxWidth = availableWidth;
-    const contentWidth = Math.max(0, boxWidth - 2 - (padding * 2)); // minus borders and padding
+    // Calculate content width: subtract borders and padding
+    const borderWidth = (left ? 1 : 0) + (right ? 1 : 0);
+    const contentWidth = Math.max(0, boxWidth - borderWidth - (padding * 2));
     
     // Render children - simple and clean!
     const contentLines = renderChildren(children, {
@@ -47,42 +70,156 @@ export function Section(
     // Build the section with tab and box (even if empty)
     const lines: string[] = [];
     
-    // Tab line: ╭─ Title ────────────────╮
-    const tabTopLeft = applyStyle('╭', { color: borderColor });
-    const tabTopRight = applyStyle('╮', { color: borderColor });
+    // Always use rounded corners when showing them
+    const topLeftChar = '╭';
+    const topRightChar = '╮';
+    const bottomLeftChar = '╰';
+    const bottomRightChar = '╯';
+    
     const tabHorizontal = applyStyle('─', { color: borderColor });
-    const tabTitle = applyStyle(titleText, { color: titleColor });
-    
-    // Calculate space after title
-    const spaceAfterTitle = Math.max(0, boxWidth - titleWidth - 2); // minus corners
-    const tabLine = tabTopLeft + tabTitle + tabHorizontal.repeat(spaceAfterTitle) + tabTopRight;
-    lines.push(tabLine);
-    
-    // Content lines with borders
     const vertical = applyStyle('│', { color: borderColor });
     const paddingSpaces = ' '.repeat(padding);
-    const emptyContentLine = vertical + paddingSpaces + ' '.repeat(contentWidth) + paddingSpaces + vertical;
+    
+    // Top border/tab line: ╭─ Title ────────────────╮
+    if (top) {
+      const tabTitle = applyStyle(titleText, { color: titleColor });
+      let tabLine = '';
+      
+      // Top-left corner: always shown when top line is visible (top is true here)
+      // Also shown if left border is visible
+      tabLine += applyStyle(topLeftChar, { color: borderColor });
+      
+      // Title
+      tabLine += tabTitle;
+      
+      // Horizontal line after title
+      const spaceAfterTitle = Math.max(0, boxWidth - titleWidth - 1 - 1); // minus both corners
+      tabLine += tabHorizontal.repeat(spaceAfterTitle);
+      
+      // Top-right corner: always shown when top line is visible (top is true here)
+      // Also shown if right border is visible
+      tabLine += applyStyle(topRightChar, { color: borderColor });
+      
+      lines.push(tabLine);
+    }
+    
+    // Calculate which line is first and last (excluding top/bottom border lines)
+    const totalContentLines = padding + contentLines.length + padding;
+    let lineIndex = 0;
     
     // Top padding: empty lines with borders
     for (let i = 0; i < padding; i++) {
-      lines.push(emptyContentLine);
+      const isFirstLine = lineIndex === 0;
+      const isLastLine = lineIndex === totalContentLines - 1;
+      let line = '';
+      
+      // Left border: show top-left corner on first line if left is visible (unless top already added it)
+      if (left && isFirstLine && !top) {
+        line += applyStyle(topLeftChar, { color: borderColor });
+      } else if (left && isLastLine && !bottom) {
+        // Left border: show bottom-left corner on last line if left is visible (unless bottom already added it)
+        line += applyStyle(bottomLeftChar, { color: borderColor });
+      } else if (left) {
+        line += vertical;
+      }
+      
+      line += paddingSpaces + ' '.repeat(contentWidth) + paddingSpaces;
+      
+      // Right border: show top-right corner on first line if right is visible (unless top already added it)
+      if (right && isFirstLine && !top) {
+        line += applyStyle(topRightChar, { color: borderColor });
+      } else if (right && isLastLine && !bottom) {
+        // Right border: show bottom-right corner on last line if right is visible (unless bottom already added it)
+        line += applyStyle(bottomRightChar, { color: borderColor });
+      } else if (right) {
+        line += vertical;
+      }
+      
+      lines.push(line);
+      lineIndex++;
     }
     
     // Content lines - children already know their available width
-    for (const contentLine of contentLines) {
-      lines.push(vertical + paddingSpaces + contentLine + paddingSpaces + vertical);
+    for (let i = 0; i < contentLines.length; i++) {
+      const isFirstLine = lineIndex === 0;
+      const isLastLine = lineIndex === totalContentLines - 1;
+      const contentLine = contentLines[i];
+      let line = '';
+      
+      // Left border: show top-left corner on first line if left is visible (unless top already added it)
+      if (left && isFirstLine && !top) {
+        line += applyStyle(topLeftChar, { color: borderColor });
+      } else if (left && isLastLine && !bottom) {
+        // Left border: show bottom-left corner on last line if left is visible (unless bottom already added it)
+        line += applyStyle(bottomLeftChar, { color: borderColor });
+      } else if (left) {
+        line += vertical;
+      }
+      
+      line += paddingSpaces + contentLine + paddingSpaces;
+      
+      // Right border: show top-right corner on first line if right is visible (unless top already added it)
+      if (right && isFirstLine && !top) {
+        line += applyStyle(topRightChar, { color: borderColor });
+      } else if (right && isLastLine && !bottom) {
+        // Right border: show bottom-right corner on last line if right is visible (unless bottom already added it)
+        line += applyStyle(bottomRightChar, { color: borderColor });
+      } else if (right) {
+        line += vertical;
+      }
+      
+      lines.push(line);
+      lineIndex++;
     }
     
     // Bottom padding: empty lines with borders
     for (let i = 0; i < padding; i++) {
-      lines.push(emptyContentLine);
+      const isFirstLine = lineIndex === 0;
+      const isLastLine = lineIndex === totalContentLines - 1;
+      let line = '';
+      
+      // Left border: show top-left corner on first line if left is visible (unless top already added it)
+      if (left && isFirstLine && !top) {
+        line += applyStyle(topLeftChar, { color: borderColor });
+      } else if (left && isLastLine && !bottom) {
+        // Left border: show bottom-left corner on last line if left is visible (unless bottom already added it)
+        line += applyStyle(bottomLeftChar, { color: borderColor });
+      } else if (left) {
+        line += vertical;
+      }
+      
+      line += paddingSpaces + ' '.repeat(contentWidth) + paddingSpaces;
+      
+      // Right border: show top-right corner on first line if right is visible (unless top already added it)
+      if (right && isFirstLine && !top) {
+        line += applyStyle(topRightChar, { color: borderColor });
+      } else if (right && isLastLine && !bottom) {
+        // Right border: show bottom-right corner on last line if right is visible (unless bottom already added it)
+        line += applyStyle(bottomRightChar, { color: borderColor });
+      } else if (right) {
+        line += vertical;
+      }
+      
+      lines.push(line);
+      lineIndex++;
     }
     
     // Bottom border: ╰───────────────────────╯
-    const bottomLeft = applyStyle('╰', { color: borderColor });
-    const bottomRight = applyStyle('╯', { color: borderColor });
-    const bottomLine = bottomLeft + tabHorizontal.repeat(Math.max(0, boxWidth - 2)) + bottomRight;
-    lines.push(bottomLine);
+    if (bottom) {
+      let bottomLine = '';
+      
+      // Bottom-left corner: always shown when bottom line is visible
+      bottomLine += applyStyle(bottomLeftChar, { color: borderColor });
+      
+      // Horizontal line
+      const horizontalWidth = Math.max(0, boxWidth - 1 - 1); // minus both corners
+      bottomLine += tabHorizontal.repeat(horizontalWidth);
+      
+      // Bottom-right corner: always shown when bottom line is visible
+      bottomLine += applyStyle(bottomRightChar, { color: borderColor });
+      
+      lines.push(bottomLine);
+    }
     
     return lines;
   };
