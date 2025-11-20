@@ -1,5 +1,11 @@
 # Development Rules
 
+## Component Philosophy
+- We're not building a full UI library - we're providing basic "looks good" UI components
+- Fewer options, only options that look good
+- Components should be simple and opinionated, not endlessly configurable
+- Focus on the finest examples that demonstrate the component well
+
 ## Code Quality
 
 ### No `(as any)` Casts

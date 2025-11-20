@@ -5,6 +5,7 @@ import * as ansi from './ansi';
 import { RenderBuffer } from './buffer';
 import { Throttle } from './throttle';
 import { getTerminalHeight as getDefaultTerminalHeight } from '../utils/terminal';
+import { truncateToWidth } from '../utils/text';
 
 export interface RegionRendererOptions {
   stdout?: NodeJS.WriteStream;
@@ -71,7 +72,7 @@ export class RegionRenderer {
     this.width = this.viewportWidth;
     this.effectiveWidth = this.viewportWidth;
     return this.width;
-  }
+        }
 
   getHeight(): number {
     return this.height;
@@ -83,8 +84,8 @@ export class RegionRenderer {
 
   setThrottleFps(fps: number): void {
     this.throttle.setFps(fps);
-  }
-
+        }
+        
   setLine(lineNumber: number, content: string): void {
     if (lineNumber < 1) {
       throw new Error('Line numbers start at 1');
@@ -96,7 +97,7 @@ export class RegionRenderer {
       this.height = lineNumber;
     }
     this.scheduleRender();
-  }
+        }
 
   updateLines(updates: Array<{ lineNumber: number; content: string }>): void {
     if (updates.length === 0) {
@@ -129,8 +130,8 @@ export class RegionRenderer {
       throw new Error('Line numbers start at 1');
     }
     return this.pendingFrame[lineNumber - 1] ?? '';
-  }
-
+    }
+    
   clearLine(lineNumber: number): void {
     if (lineNumber < 1) {
       throw new Error('Line numbers start at 1');
@@ -148,8 +149,8 @@ export class RegionRenderer {
       this.pendingFrame[i] = '';
     }
     this.scheduleRender();
-  }
-
+    }
+    
   async flush(): Promise<void> {
     await this.renderNow();
   }
@@ -170,22 +171,22 @@ export class RegionRenderer {
     this.pendingFrame.splice(startIndex, count);
     if (this.previousFrame.length >= startIndex + count) {
       this.previousFrame.splice(startIndex, count);
-    }
+  }
     // Clear previousViewportFrame so next render recalculates from scratch
     // This ensures deleted lines are properly handled
     this.previousViewportFrame = [];
-  }
+        }
 
   async destroy(clearFirst: boolean = false): Promise<void> {
     if (this.destroyed) {
       return;
-    }
+        }
     this.destroyed = true;
     RegionRenderer.activeRegions.delete(this);
     if (this.renderTimer) {
       clearTimeout(this.renderTimer);
       this.renderTimer = null;
-    }
+      }
     if (this.resizeCleanup) {
       this.resizeCleanup();
       this.resizeCleanup = undefined;
@@ -205,7 +206,7 @@ export class RegionRenderer {
   public logToFile(message: string): void {
     if (!this.debugLogPath) {
       return;
-    }
+        }
     try {
       if (!this.debugLogCleared) {
         fs.writeFileSync(
@@ -235,7 +236,7 @@ export class RegionRenderer {
     const cleanup = (): void => {
       for (const region of RegionRenderer.activeRegions) {
         region.destroy(true).catch(() => {});
-      }
+    }
       RegionRenderer.activeRegions.clear();
     };
     process.once('exit', cleanup);
@@ -249,8 +250,8 @@ export class RegionRenderer {
     }
     while (this.previousFrame.length < size) {
       this.previousFrame.push('');
+      }
     }
-  }
 
   private scheduleRender(): void {
     if (this.disableRendering || this.permanentlyDisabled || this.destroyed) {
@@ -291,7 +292,7 @@ export class RegionRenderer {
       this.copyPendingToPrevious();
       this.lastRenderedHeight = this.height;
     } finally {
-      this.isRendering = false;
+        this.isRendering = false;
     }
   }
 
@@ -305,10 +306,10 @@ export class RegionRenderer {
     const normalized = this.getEffectiveFrame();
     const visibleLines = Math.min(viewportHeight, normalized.length);
     const frame = new Array<string>(viewportHeight).fill('');
-
+        
     if (visibleLines === 0) {
       return frame;
-    }
+        }
 
     const startIndex = normalized.length > viewportHeight
       ? normalized.length - viewportHeight
@@ -319,7 +320,7 @@ export class RegionRenderer {
     }
 
     return frame;
-  }
+          }
 
   private mapLineToViewportRow(lineNumber: number): number | null {
     const viewportHeight = Math.max(1, this.viewportHeight);
@@ -344,12 +345,12 @@ export class RegionRenderer {
   showCursorAt(lineNumber: number, column: number): void {
     if (this.permanentlyDisabled) {
       return;
-    }
+        }
     this.ensureTerminalState();
     const row = this.mapLineToViewportRow(lineNumber);
     if (row === null) {
       return;
-    }
+          }
     const col = Math.max(1, Math.min(column, this.viewportWidth));
     this.stdout.write(ansi.moveCursorTo(col, row));
     this.stdout.write(ansi.SHOW_CURSOR);
@@ -363,7 +364,7 @@ export class RegionRenderer {
       frame.push('');
     }
     return frame;
-  }
+        }
 
   private applyDiff(nextFrame: string[]): void {
     const ops = diffFrames(this.previousViewportFrame, nextFrame);
@@ -371,7 +372,7 @@ export class RegionRenderer {
     for (const op of ops) {
       if (op.type === 'no_change') {
         continue;
-      }
+          }
       if (!wrote) {
         this.renderBuffer.write(ansi.HIDE_CURSOR);
         wrote = true;
@@ -380,9 +381,9 @@ export class RegionRenderer {
       let lineContent = '';
       if (op.type === 'delete_line') {
         lineContent = '';
-        } else {
+          } else {
         lineContent = nextFrame[op.line] ?? op.content ?? '';
-      }
+          }
       this.renderBuffer.write(ansi.moveCursorTo(1, row));
       this.renderBuffer.write(ansi.CLEAR_LINE);
       if (lineContent.length > 0) {
@@ -393,39 +394,11 @@ export class RegionRenderer {
     if (wrote) {
       this.renderBuffer.flush();
       this.hideCursor();
-    }
+          }
   }
 
   private truncateContent(content: string, maxWidth: number): string {
-    if (maxWidth <= 0) {
-      return '';
-    }
-    const plain = this.stripAnsi(content);
-    if (plain.length <= maxWidth) {
-      return content;
-    }
-    let visual = 0;
-    let idx = 0;
-    while (idx < content.length && visual < maxWidth) {
-      if (content[idx] === '\x1b') {
-        let end = idx + 1;
-        while (end < content.length && content[end] !== 'm') {
-          end++;
-        }
-        if (end < content.length) {
-          end++;
-        }
-        idx = end;
-          } else {
-        idx++;
-        visual++;
-      }
-    }
-    return content.slice(0, idx);
-  }
-
-  private stripAnsi(value: string): string {
-    return value.replace(/\x1b\[[0-9;]*m/g, '');
+    return truncateToWidth(content, maxWidth);
   }
 
   private initializeTerminalState(): void {
@@ -438,7 +411,7 @@ export class RegionRenderer {
     this.stdout.write(ansi.moveCursorTo(1, 1));
     this.autoWrapDisabled = true;
     this.inAlternateScreen = true;
-  }
+        }
 
   private ensureTerminalState(): void {
     if (!this.inAlternateScreen) {
@@ -447,7 +420,7 @@ export class RegionRenderer {
     if (!this.autoWrapDisabled) {
       this.stdout.write(ansi.DISABLE_AUTO_WRAP);
       this.autoWrapDisabled = true;
-    }
+        }
   }
 
   private leaveAlternateScreen(clearFirst: boolean): void {
@@ -472,10 +445,10 @@ export class RegionRenderer {
       if (trimmedLines.length > 0) {
         const output = trimmedLines.join('\n');
         this.stdout.write(`${output}\n`);
+          }
+        }
       }
-    }
-  }
-
+      
   private setupResizeHandler(): void {
     if (!this.stdout.isTTY || typeof this.stdout.on !== 'function') {
       return;
@@ -495,7 +468,7 @@ export class RegionRenderer {
         this.stdout.off('resize', handler);
       } else if (typeof this.stdout.removeListener === 'function') {
         this.stdout.removeListener('resize', handler);
-      }
+  }
     };
   }
 
@@ -527,7 +500,7 @@ export class RegionRenderer {
   private readViewportHeight(): number {
     if (this.stdout.isTTY && typeof this.stdout.rows === 'number' && this.stdout.rows > 0) {
       return this.stdout.rows;
-    }
+      }
     if (process.stdout.isTTY && typeof process.stdout.rows === 'number' && process.stdout.rows > 0) {
       return process.stdout.rows;
     }

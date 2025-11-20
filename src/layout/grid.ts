@@ -3,7 +3,7 @@
 
 import type { Color, FillChar } from '../types';
 import { applyStyle } from '../utils/colors';
-import { truncateEnd, truncateStart, truncateMiddle, wrapText, getTrimmedTextWidth } from '../utils/text';
+import { truncateEnd, truncateStart, truncateMiddle, wrapText, getTrimmedTextWidth, stripAnsi } from '../utils/text';
 import type { RenderContext, Component } from '../component';
 import { callComponent, createChildContext } from '../component';
 
@@ -38,6 +38,7 @@ function getSpaceBetweenChar(
 export type GridTemplateEntry = 
   | number  // Fixed width: 20
   | 'auto'  // Auto width (fit content)
+  | '*'  // Flex unit shorthand (same as '1*')
   | `${number}*`  // Flex unit: '1*', '2*'
   | { min: number; width: string };  // Minmax: { min: 40, width: '2*' }
 
@@ -74,12 +75,16 @@ function parseTemplateEntry(entry: GridTemplateEntry): TrackSize {
   }
   
   if (typeof entry === 'string') {
+    // Shorthand: '*' means '1*'
+    if (entry === '*') {
+      return { type: 'flex', value: 0, flexRatio: 1 };
+    }
     // Parse flex unit: '1*', '2*', etc.
     const match = entry.match(/^(\d+)\*$/);
     if (match) {
       return { type: 'flex', value: 0, flexRatio: parseInt(match[1], 10) };
     }
-    throw new Error(`Invalid flex unit: ${entry}. Use format like '1*', '2*'`);
+    throw new Error(`Invalid flex unit: ${entry}. Use format like '*', '1*', '2*'`);
   }
   
   // Minmax: { min: 40, width: '2*' }
@@ -413,7 +418,7 @@ export function grid(
             const result = results[partIdx];
             partIdx++;
             const content = result === null ? '' : (typeof result === 'string' ? result : '');
-            const plainContent = content.replace(/\x1b\[[0-9;]*m/g, '');
+            const plainContent = stripAnsi(content);
             totalAutoWidth += plainContent.length;
             autoContents.push(content);
             
@@ -463,7 +468,7 @@ export function grid(
         
         const line = lineParts.join('');
         // Pad to full width to ensure right column is at the end
-        const plainLine = line.replace(/\x1b\[[0-9;]*m/g, '');
+        const plainLine = stripAnsi(line);
         const paddedLine = plainLine.length < ctx.availableWidth 
           ? line + ' '.repeat(ctx.availableWidth - plainLine.length)
           : line;
@@ -500,7 +505,7 @@ export function grid(
           if (isAuto) {
             lineParts.push(columnContent);
           } else {
-            const plainContent = columnContent.replace(/\x1b\[[0-9;]*m/g, '');
+            const plainContent = stripAnsi(columnContent);
             let paddedContent: string;
             // If content is empty and this is a flex column with spaceBetween, fill it
             if (plainContent.length === 0 && spaceBetween && columnWidth > 0 && isFlex) {

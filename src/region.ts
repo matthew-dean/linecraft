@@ -391,7 +391,7 @@ export class TerminalRegion {
             } else {
               this.setLine(currentLine, result);
             }
-            currentLine += height;
+          currentLine += height;
           }
         }
       }
