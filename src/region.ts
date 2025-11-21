@@ -174,6 +174,7 @@ export class TerminalRegion {
     const rendererOptions: RegionRendererOptions = {
       stdout: options.stdout,
       disableRendering: options.disableRendering,
+      debugLog: options.debugLog,
       // CRITICAL: Pass callback to re-render last content during keep-alive and resize
       // This ensures ALL components (grid) are re-rendered with current width
       // The region orchestrates this - components don't manage their own re-rendering
@@ -741,27 +742,51 @@ export class TerminalRegion {
       // totalHeight should be at least as large as the highest static line number
       totalHeight = Math.max(totalHeight, maxStaticLineNumber);
       
+      // CRITICAL: Collect static lines BEFORE sizing frames, so we know the final height
+      // Find all static lines that need to be re-rendered, sorted by original line number
+      const staticLines: Array<{ originalLineNumber: number; content: string }> = [];
+      for (let i = 0; i < this.regionLines.length; i++) {
+        const lineInfo = this.regionLines[i];
+        if (lineInfo.type === 'static' && lineInfo.content !== undefined) {
+          staticLines.push({
+            originalLineNumber: lineInfo.lineNumber,
+            content: lineInfo.content as string,
+          });
+        }
+      }
+      
+      // Sort static lines by original line number to preserve order
+      staticLines.sort((a, b) => a.originalLineNumber - b.originalLineNumber);
+      
+      // Calculate final height: components + static lines
+      const estimatedFinalHeight = totalHeight + staticLines.length;
+      
       // CRITICAL: Ensure frames are the correct size BEFORE re-rendering
-      // This prevents overwriting or truncating content incorrectly
-      while (renderer.pendingFrame.length < totalHeight) {
+      // Use estimated final height to avoid truncating static lines
+      while (renderer.pendingFrame.length < estimatedFinalHeight) {
         renderer.pendingFrame.push('');
       }
-      while (renderer.previousFrame.length < totalHeight) {
+      while (renderer.previousFrame.length < estimatedFinalHeight) {
         renderer.previousFrame.push('');
       }
       
-      // Truncate frames to exact height (in case they're too large)
-      renderer.pendingFrame = renderer.pendingFrame.slice(0, totalHeight);
-      renderer.previousFrame = renderer.previousFrame.slice(0, totalHeight);
+      // Don't truncate frames - we'll expand as needed when rendering static lines
       
       // CRITICAL: Don't clear previousFrame on resize/re-render
       // We need to preserve previousFrame so renderNow() can detect if content actually changed
       // If we clear it, renderNow() will always think content changed and re-render unnecessarily
       // The previousFrame will be updated after renderNow() completes
       
-      // Clear all lines before re-rendering
-      for (let i = 0; i < totalHeight; i++) {
+      // CRITICAL: Clear all lines before re-rendering
+      // We need to clear the ENTIRE pendingFrame, not just up to totalHeight,
+      // because old content might be beyond totalHeight and cause corruption
+      for (let i = 0; i < renderer.pendingFrame.length; i++) {
         renderer.pendingFrame[i] = '';
+      }
+      // Also ensure pendingFrame is exactly the right size
+      renderer.pendingFrame = renderer.pendingFrame.slice(0, estimatedFinalHeight);
+      while (renderer.pendingFrame.length < estimatedFinalHeight) {
+        renderer.pendingFrame.push('');
       }
       
       // CRITICAL: Disable auto-rendering during component rendering
@@ -772,14 +797,21 @@ export class TerminalRegion {
       
       // Now re-render ALL components starting from line 1
       let currentLine = 1;
-      for (const itemOrArray of this.allComponentDescriptors) {
+      renderer.logToFile(`[reRenderLastContent] Re-rendering ${this.allComponentDescriptors.length} component descriptor(s)`);
+      for (let descIdx = 0; descIdx < this.allComponentDescriptors.length; descIdx++) {
+        const itemOrArray = this.allComponentDescriptors[descIdx];
         // Each entry can be a single component or an array of components (for multi-line sections)
         const items = Array.isArray(itemOrArray) ? itemOrArray : [itemOrArray];
         
+        renderer.logToFile(`[reRenderLastContent] Descriptor ${descIdx}: ${items.length} item(s), starting at line ${currentLine}`);
+        
         // Re-render each component in this section
-        for (const item of items) {
+        for (let itemIdx = 0; itemIdx < items.length; itemIdx++) {
+          const item = items[itemIdx];
           if (isComponent(item)) {
             const componentHeight = getComponentHeight(item, this, width);
+            
+            renderer.logToFile(`[reRenderLastContent] Rendering component ${itemIdx} at line ${currentLine}, height=${componentHeight}`);
             
             // Render component at current line
             renderComponent(item, this, 0, currentLine, width);
@@ -790,31 +822,69 @@ export class TerminalRegion {
         }
       }
       
-      // Update height to match all rendered content
-      this._height = totalHeight;
-      renderer.setHeight(totalHeight);
+      renderer.logToFile(`[reRenderLastContent] Finished rendering components, currentLine=${currentLine}`);
+      
+      // After re-rendering components, re-render static lines
+      // Static lines should come AFTER all components
+      // (staticLines was already collected above)
+      
+      // Re-render static lines starting after all components
+      // currentLine is where the last component ended, so static lines start there
+      let staticLinePosition = currentLine;
+      for (const staticLine of staticLines) {
+        // Ensure pendingFrame has enough lines
+        while (renderer.pendingFrame.length < staticLinePosition) {
+          renderer.pendingFrame.push('');
+        }
+        renderer.pendingFrame[staticLinePosition - 1] = staticLine.content;
+        staticLinePosition++;
+      }
+      
+      // Update total height to include static lines
+      const finalHeight = Math.max(totalHeight, staticLinePosition - 1);
+      
+      // Update regionLines to reflect new positions of static lines
+      // First, rebuild regionLines: components first, then static lines
+      this.regionLines = [];
+      
+      // Add component entries (they're already rendered, so we just track them)
+      for (let i = 0; i < currentLine - 1; i++) {
+        this.regionLines.push({ type: 'component', lineNumber: i + 1 });
+      }
+      
+      // Add static lines at their new positions
+      let newStaticLinePosition = currentLine;
+      for (const staticLine of staticLines) {
+        this.regionLines.push({
+          type: 'static',
+          content: staticLine.content,
+          lineNumber: newStaticLinePosition,
+        });
+        newStaticLinePosition++;
+      }
+      
+      // Update height to match all rendered content (components + static lines)
+      const oldHeight = this._height;
+      this._height = finalHeight;
+      renderer.setHeight(finalHeight);
+      
+      // CRITICAL: If content height changed significantly, reset previousViewportFrame
+      // This prevents the diff algorithm from comparing mismatched viewport positions
+      // When content wraps/unwraps, the viewport shows different logical lines,
+      // so we need a fresh diff comparison
+      if (Math.abs(finalHeight - oldHeight) > 0) {
+        const rendererInternal = renderer as any;
+        // Reset previousViewportFrame to force full redraw with correct viewport positioning
+        rendererInternal.previousViewportFrame = [];
+        rendererInternal.lastRenderedHeight = 0;
+      }
       
       // CRITICAL: DON'T update lastRenderedHeight before flushing
       // This would change the state and make renderNow() think height hasn't increased
       // when it actually has. Let renderNow() update lastRenderedHeight after rendering.
       // This keeps the state consistent with the normal set() path
       const oldLastRenderedHeight = renderer.lastRenderedHeight;
-      renderer.logToFile(`[reRenderLastContent] BEFORE flush: height=${totalHeight} lastRenderedHeight=${oldLastRenderedHeight}`);
-      
-      // CRITICAL: Re-render static lines (waitForSpacebar, whitespace)
-      // These are tracked in regionLines with type 'static'
-      for (let i = 0; i < this.regionLines.length; i++) {
-        const lineInfo = this.regionLines[i];
-        if (lineInfo.type === 'static' && lineInfo.content !== undefined) {
-          // Re-render this static line
-          const lineNumber = i + 1;
-          // Ensure pendingFrame has enough lines
-          while (renderer.pendingFrame.length < lineNumber) {
-            renderer.pendingFrame.push('');
-          }
-          renderer.pendingFrame[lineNumber - 1] = lineInfo.content;
-        }
-      }
+      renderer.logToFile(`[reRenderLastContent] BEFORE flush: height=${finalHeight} oldHeight=${oldHeight} lastRenderedHeight=${oldLastRenderedHeight} staticLines=${staticLines.length}`);
       
       // Re-enable rendering and flush once
       renderer.disableRendering = wasRenderingDisabled;

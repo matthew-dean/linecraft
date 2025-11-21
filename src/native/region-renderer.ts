@@ -92,6 +92,18 @@ export class RegionRenderer {
     }
     const index = lineNumber - 1;
     this.ensureFrameSize(index + 1);
+    
+    // Log if we're overwriting non-empty content (potential duplication)
+    if (this.pendingFrame[index] && this.pendingFrame[index].trim().length > 0 && content.trim().length > 0) {
+      const oldContent = this.pendingFrame[index].substring(0, 40);
+      const newContent = content.substring(0, 40);
+      if (oldContent !== newContent) {
+        this.logToFile(`[setLine] WARNING: Overwriting line ${lineNumber} - old: "${oldContent}", new: "${newContent}"`);
+      } else {
+        this.logToFile(`[setLine] Writing same content to line ${lineNumber}: "${newContent}"`);
+      }
+    }
+    
     this.pendingFrame[index] = content;
     if (lineNumber > this.height) {
       this.height = lineNumber;
@@ -287,12 +299,71 @@ export class RegionRenderer {
     try {
       this.ensureTerminalState();
       const frame = this.buildViewportFrame();
-      this.applyDiff(frame);
+      
+      // CRITICAL: If previousViewportFrame is empty (e.g., on resize), do a full redraw
+      // On resize, viewport dimensions change and content may wrap differently,
+      // causing the viewport to show different logical lines. Since we control all rendering,
+      // we can simply clear and redraw the entire viewport fresh.
+      if (this.previousViewportFrame.length === 0) {
+        const viewportHeight = Math.max(1, this.viewportHeight);
+        const normalized = this.getEffectiveFrame();
+        this.logToFile(`[renderNow] FULL REDRAW - viewportHeight: ${viewportHeight}, frame.length: ${frame.length}, normalized.length: ${normalized.length}, height: ${this.height}`);
+        this.logToFile(`[renderNow] Frame content (first 5): ${frame.slice(0, 5).map((l, i) => `[${i}]: "${l.substring(0, 50)}"`).join(', ')}`);
+        this.logToFile(`[renderNow] Frame content (last 5): ${frame.slice(-5).map((l, i) => `[${frame.length - 5 + i}]: "${l.substring(0, 50)}"`).join(', ')}`);
+        
+        // Full redraw: clear and write all viewport lines fresh
+        // Instead of ERASE_SCREEN (which might have issues during resize),
+        // we clear each line individually for more reliable behavior
+        this.renderBuffer.write(ansi.HIDE_CURSOR);
+        
+        // Clear all viewport lines first (from bottom to top to avoid cursor issues)
+        this.logToFile(`[renderNow] Clearing ${viewportHeight} lines (from bottom to top)`);
+        for (let i = viewportHeight - 1; i >= 0; i--) {
+          const row = i + 1;
+          this.renderBuffer.write(ansi.moveCursorTo(1, row));
+          this.renderBuffer.write(ansi.CLEAR_LINE);
+        }
+        
+        // Now write all lines in the frame (frame.length should equal viewportHeight)
+        const linesToWrite = Math.min(frame.length, viewportHeight);
+        this.logToFile(`[renderNow] Writing ${linesToWrite} lines to viewport`);
+        for (let i = 0; i < linesToWrite; i++) {
+          const row = i + 1;
+          const lineContent = frame[i] ?? '';
+          this.renderBuffer.write(ansi.moveCursorTo(1, row));
+          if (lineContent.length > 0) {
+            this.renderBuffer.write(this.truncateContent(lineContent, this.effectiveWidth));
+            this.renderBuffer.write(ansi.RESET);
+          }
+          // Log first few and last few lines being written
+          if (i < 3 || i >= linesToWrite - 3) {
+            this.logToFile(`[renderNow] Writing row ${row}: "${lineContent.substring(0, 60)}"`);
+          }
+        }
+        
+        // CRITICAL: Clear any lines beyond what we wrote (if viewport is larger than frame)
+        // This ensures we don't have leftover content from previous renders
+        if (linesToWrite < viewportHeight) {
+          this.logToFile(`[renderNow] Clearing ${viewportHeight - linesToWrite} extra lines (${linesToWrite} to ${viewportHeight - 1})`);
+          for (let i = linesToWrite; i < viewportHeight; i++) {
+            const row = i + 1;
+            this.renderBuffer.write(ansi.moveCursorTo(1, row));
+            this.renderBuffer.write(ansi.CLEAR_LINE);
+          }
+        }
+        
+          this.renderBuffer.flush();
+        this.hideCursor();
+        } else {
+        // Normal diff-based rendering (for incremental updates)
+        this.applyDiff(frame);
+      }
+      
       this.previousViewportFrame = [...frame];
       this.copyPendingToPrevious();
       this.lastRenderedHeight = this.height;
     } finally {
-        this.isRendering = false;
+      this.isRendering = false;
     }
   }
 
@@ -308,6 +379,7 @@ export class RegionRenderer {
     const frame = new Array<string>(viewportHeight).fill('');
         
     if (visibleLines === 0) {
+      this.logToFile(`[buildViewportFrame] No visible lines - normalized.length: ${normalized.length}, viewportHeight: ${viewportHeight}`);
       return frame;
         }
 
@@ -315,8 +387,17 @@ export class RegionRenderer {
       ? normalized.length - viewportHeight
       : 0;
 
+    this.logToFile(`[buildViewportFrame] normalized.length: ${normalized.length}, viewportHeight: ${viewportHeight}, startIndex: ${startIndex}, visibleLines: ${visibleLines}`);
+
     for (let i = 0; i < visibleLines; i++) {
       frame[i] = normalized[startIndex + i];
+    }
+    
+    // Log what we're putting in the frame
+    if (startIndex > 0 || visibleLines < normalized.length) {
+      this.logToFile(`[buildViewportFrame] Frame shows lines ${startIndex + 1} to ${startIndex + visibleLines} of ${normalized.length} total lines`);
+      this.logToFile(`[buildViewportFrame] First frame line: "${frame[0]?.substring(0, 50)}"`);
+      this.logToFile(`[buildViewportFrame] Last frame line: "${frame[visibleLines - 1]?.substring(0, 50)}"`);
     }
 
     return frame;
@@ -363,6 +444,17 @@ export class RegionRenderer {
     while (frame.length < target) {
       frame.push('');
     }
+    // Log if frame seems corrupted (has content but in wrong order)
+    if (frame.length > 0 && frame.some((line, i) => line.length > 0)) {
+      const nonEmptyLines = frame.map((line, i) => ({ index: i, content: line.substring(0, 50) })).filter(l => l.content.length > 0);
+      if (nonEmptyLines.length > 1) {
+        // Check if first non-empty line looks like it should be later (e.g., contains "Press SPACEBAR" or is a border)
+        const firstNonEmpty = nonEmptyLines[0];
+        if (firstNonEmpty.content.includes('Press SPACEBAR') || firstNonEmpty.content.includes('╰') || firstNonEmpty.content.includes('│')) {
+          this.logToFile(`[getEffectiveFrame] WARNING: Frame might be corrupted - first non-empty line at index ${firstNonEmpty.index}: "${firstNonEmpty.content}"`);
+        }
+      }
+    }
     return frame;
         }
 
@@ -372,29 +464,33 @@ export class RegionRenderer {
     for (const op of ops) {
       if (op.type === 'no_change') {
         continue;
-          }
+      }
       if (!wrote) {
         this.renderBuffer.write(ansi.HIDE_CURSOR);
         wrote = true;
       }
       const row = op.line + 1;
-      let lineContent = '';
+      
       if (op.type === 'delete_line') {
-        lineContent = '';
-          } else {
-        lineContent = nextFrame[op.line] ?? op.content ?? '';
-          }
-      this.renderBuffer.write(ansi.moveCursorTo(1, row));
-      this.renderBuffer.write(ansi.CLEAR_LINE);
-      if (lineContent.length > 0) {
-        this.renderBuffer.write(this.truncateContent(lineContent, this.effectiveWidth));
-        this.renderBuffer.write(ansi.RESET);
+        // Delete line: clear it completely using CLEAR_LINE
+        this.renderBuffer.write(ansi.moveCursorTo(1, row));
+        this.renderBuffer.write(ansi.CLEAR_LINE);
+        // Note: After delete, all lines below shift up, so they'll be redrawn by subsequent ops
+        } else {
+        // Full line update: clear and redraw
+        const lineContent = nextFrame[op.line] ?? op.content ?? '';
+        this.renderBuffer.write(ansi.moveCursorTo(1, row));
+        this.renderBuffer.write(ansi.CLEAR_LINE);
+        if (lineContent.length > 0) {
+          this.renderBuffer.write(this.truncateContent(lineContent, this.effectiveWidth));
+          this.renderBuffer.write(ansi.RESET);
+        }
       }
     }
     if (wrote) {
-      this.renderBuffer.flush();
+          this.renderBuffer.flush();
       this.hideCursor();
-          }
+    }
   }
 
   private truncateContent(content: string, maxWidth: number): string {
@@ -454,13 +550,38 @@ export class RegionRenderer {
       return;
     }
     const handler = () => {
+      const oldViewportHeight = this.viewportHeight;
+      const oldViewportWidth = this.viewportWidth;
       this.updateViewportMetrics();
-      this.previousViewportFrame = Array(Math.max(1, this.viewportHeight)).fill('');
+      const newViewportHeight = this.viewportHeight;
+      const newViewportWidth = this.viewportWidth;
+      
+      this.logToFile(`[resize] ========================================`);
+      this.logToFile(`[resize] OLD: height=${oldViewportHeight}, width=${oldViewportWidth}`);
+      this.logToFile(`[resize] NEW: height=${newViewportHeight}, width=${newViewportWidth}`);
+      this.logToFile(`[resize] Content height: ${this.height}, pendingFrame.length: ${this.pendingFrame.length}`);
+      this.logToFile(`[resize] previousViewportFrame.length: ${this.previousViewportFrame.length}`);
+      if (this.previousViewportFrame.length > 0) {
+        this.logToFile(`[resize] Previous frame (first 3): ${this.previousViewportFrame.slice(0, 3).map((l, i) => `[${i}]: "${l.substring(0, 40)}"`).join(', ')}`);
+        this.logToFile(`[resize] Previous frame (last 3): ${this.previousViewportFrame.slice(-3).map((l, i) => `[${this.previousViewportFrame.length - 3 + i}]: "${l.substring(0, 40)}"`).join(', ')}`);
+      }
+      
+      // CRITICAL: On resize, clear the screen and do a full redraw
+      // This bypasses the diff algorithm which can get confused when:
+      // 1. Viewport dimensions change
+      // 2. Content wraps differently, changing logical line positions
+      // 3. The viewport frame represents different logical lines
+      
+      // Clear previousViewportFrame to signal renderNow() to do a full redraw
+      this.previousViewportFrame = [];
       this.lastRenderedHeight = 0;
+      
+      // Trigger re-render of all content with new width
+      // NOTE: onKeepAlive() will call reRenderLastContent() which calls flush(),
+      // so we don't need to call scheduleRender() here - that would cause double rendering
       if (this.onKeepAlive) {
         this.onKeepAlive();
       }
-      this.scheduleRender();
     };
     this.stdout.on('resize', handler);
     this.resizeCleanup = () => {
@@ -468,7 +589,7 @@ export class RegionRenderer {
         this.stdout.off('resize', handler);
       } else if (typeof this.stdout.removeListener === 'function') {
         this.stdout.removeListener('resize', handler);
-  }
+      }
     };
   }
 

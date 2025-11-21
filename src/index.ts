@@ -10,6 +10,7 @@ export type { FillOptions } from './components/fill';
 export { Section, type SectionOptions } from './components/section';
 export { Spinner, type SpinnerOptions } from './components/spinner';
 export { Segments, type SegmentsOptions, type Segment } from './components/segments';
+export { CodeDebug, type CodeDebugOptions, type CodeDebugType } from './components/code-debug';
 // progressBar is exported below as a function
 export { prompt } from './utils/prompt';
 export type {

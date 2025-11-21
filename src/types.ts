@@ -34,6 +34,7 @@ export interface RegionOptions {
   height?: number; // Default: 1 (expands as needed)
   stdout?: NodeJS.WriteStream; // Default: process.stdout
   disableRendering?: boolean; // For tests - prevents actual rendering
+  debugLog?: string; // Optional path to debug log file
 }
 
 export interface ProgressBarOptions {
