@@ -28,7 +28,7 @@
     "test:ts": "vitest",
     "example": "node scripts/run-example.js",
     "record": "vhs",
-    "record:all": "vhs docs/examples/*.tape"
+    "record:all": "node scripts/record-all.js"
   },
   "keywords": [
     "terminal",

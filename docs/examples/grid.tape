@@ -1,13 +1,17 @@
 Output docs/examples/grid.gif
-Set FontSize 14
-Set Width 1200
-Set Height 600
-Set Theme "Catppuccin Mocha"
-Set Padding 20
+Set FontSize 16
+Set Width 900
+Set Height 500
+Set Theme "Dracula"
+Set Padding 30
 
-Type "pnpm example grid-responsive"
+Type "pnpm example grid-all-features"
 Enter
-Sleep 3s
+Sleep 2s
+Type " "
+Sleep 1s
+Type " "
+Sleep 1s
 Type " "
 Sleep 1s
 Type " "

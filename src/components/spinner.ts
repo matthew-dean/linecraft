@@ -21,7 +21,7 @@ export function Spinner(options: SpinnerOptions = {}): {
   stop: () => void;
 } {
   const {
-    frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'],
+    frames = ['⠇', '⠋', '⠙', '⠴', '⠋', '⠙', '⠸', '⠴', '⠦'],
     interval = 80,
     color = 'yellow',
     autoStart = true,

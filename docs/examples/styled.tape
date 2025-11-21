@@ -1,9 +1,9 @@
 Output docs/examples/styled.gif
-Set FontSize 14
-Set Width 1000
-Set Height 400
-Set Theme "Catppuccin Mocha"
-Set Padding 20
+Set FontSize 16
+Set Width 800
+Set Height 300
+Set Theme "Dracula"
+Set Padding 30
 
 Type "pnpm example styled"
 Enter

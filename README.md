@@ -246,13 +246,13 @@ r.set(Segments({
 
 Fill available space with a character:
 
-![Fill Example](docs/examples/fill.gif)
-
 ```typescript
 import { fill } from 'linecraft';
 
 r.set(fill({ char: '─', color: 'brightBlack' }));
 ```
+
+**Note:** The `fill` component is typically used within grids to fill available space. See the Grid example above for usage.
 
 ### Grid
 

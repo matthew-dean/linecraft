@@ -19,7 +19,7 @@ async function main() {
       )
     )
   );
-  await prompt(r, { message: 'Press spacebar for next style...' });
+  await prompt(r, { message: 'next style' });
 
   // Style 2: Braces (classic and clean)
   r.set(
@@ -35,7 +35,7 @@ async function main() {
       )
     )
   );
-  await prompt(r, { message: 'Press spacebar for next style...' });
+  await prompt(r, { message: 'next style' });
 
   // Style 3: Half circles (mirrored)
   r.set(
@@ -51,7 +51,7 @@ async function main() {
       )
     )
   );
-  await prompt(r, { message: 'Press spacebar for next style...' });
+  await prompt(r, { message: 'next style' });
 
   // Style 4: Dots
   r.set(
@@ -67,7 +67,7 @@ async function main() {
       )
     )
   );
-  await prompt(r, { message: 'Press spacebar for next style...' });
+  await prompt(r, { message: 'next style' });
 
   // Style 5: Asterisks
   r.set(
@@ -83,7 +83,7 @@ async function main() {
       )
     )
   );
-  await prompt(r, { message: 'Press spacebar to exit...' });
+  await prompt(r, { message: 'exit' });
 
   r.destroy(true);
 }

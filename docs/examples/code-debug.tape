@@ -1,9 +1,9 @@
 Output docs/examples/code-debug.gif
-Set FontSize 14
-Set Width 1200
-Set Height 800
-Set Theme "Catppuccin Mocha"
-Set Padding 20
+Set FontSize 16
+Set Width 900
+Set Height 500
+Set Theme "Dracula"
+Set Padding 30
 
 Type "pnpm example code-debug"
 Enter

@@ -1,9 +1,9 @@
 Output docs/examples/spinner.gif
-Set FontSize 14
-Set Width 1000
-Set Height 500
-Set Theme "Catppuccin Mocha"
-Set Padding 20
+Set FontSize 16
+Set Width 800
+Set Height 350
+Set Theme "Dracula"
+Set Padding 30
 
 Type "pnpm example spinner"
 Enter

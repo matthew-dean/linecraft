@@ -2,6 +2,27 @@
 
 This guide explains how to create animated GIF recordings of terminal examples using [vhs](https://github.com/charmbracelet/vhs).
 
+## Installation
+
+**⚠️ You must install vhs before using the recording scripts!**
+
+**Install vhs:**
+```bash
+# macOS (recommended)
+brew install vhs
+
+# Linux (download binary)
+# Visit https://github.com/charmbracelet/vhs/releases
+
+# Or via Go
+go install github.com/charmbracelet/vhs@latest
+```
+
+Verify installation:
+```bash
+vhs --version
+```
+
 ## Quick Start
 
 All tape files are pre-configured in `docs/examples/`. To record a specific example:
@@ -17,20 +38,6 @@ vhs docs/examples/styled.tape
 To record all examples:
 ```bash
 pnpm record:all
-```
-
-## Installation
-
-**Install vhs:**
-```bash
-# macOS
-brew install vhs
-
-# Linux (download binary)
-# Visit https://github.com/charmbracelet/vhs/releases
-
-# Or via Go
-go install github.com/charmbracelet/vhs@latest
 ```
 
 ## Basic Usage
