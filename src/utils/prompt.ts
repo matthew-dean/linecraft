@@ -2,7 +2,8 @@
 
 import type { TerminalRegion } from '../region';
 import type { Color } from '../types';
-import { Styled } from '../components/styled';
+import { Prompt } from '../components/prompt';
+import { ComponentReference } from '../region';
 
 export interface PromptOptions {
   message?: string; // e.g., 'continue', 'proceed', 'next'
@@ -50,7 +51,7 @@ function getKeyDisplayName(key: 'spacebar' | 'enter' | 'q' | 'any'): string {
  * Wait for user to press a key before continuing
  * 
  * Shows a prompt message and waits for the specified key press.
- * Integrates with the region to show the prompt and cursor properly.
+ * Uses a Prompt component so it re-renders correctly on resize.
  */
 export async function prompt(
   region: TerminalRegion,
@@ -65,25 +66,20 @@ export async function prompt(
   const keyDisplayName = getKeyDisplayName(key);
   const keyCodes = getKeyCode(key);
 
-  // Prepare prompt inside region before listening for input
-  // Use Styled component to render the prompt text with color
-  const styleComponent = Styled({ color: promptColor }, `Press ${keyDisplayName} to ${message}...`);
-  const promptResult = styleComponent({
-    availableWidth: Infinity,
-    region: region,
-    columnIndex: 0,
-    rowIndex: 0,
+  // Create and add prompt as a component (so it re-renders correctly on resize)
+  const promptComponent = Prompt({
+    message,
+    key: keyDisplayName,
+    color: promptColor,
   });
-  const promptText = typeof promptResult === 'string' ? promptResult : (Array.isArray(promptResult) ? promptResult[0] : '');
   
-  // Add prompt and get reference so we can clear it later
-  const promptSection = region.add(['', promptText]);
+  const promptRef = region.add(promptComponent);
   await region.flush();
   
+  // Calculate cursor position: prompt is 2 lines (blank + text), cursor goes at end of text line
   const promptLineNumber = region.height;
-  // Calculate column position: strip ANSI codes to get actual text length
-  const plainText = promptText.replace(/\x1b\[[0-9;]*m/g, '');
-  const promptColumn = plainText.length + 1;
+  const promptText = `Press ${keyDisplayName} to ${message}...`;
+  const promptColumn = promptText.length + 1;
   region.showCursorAt(promptLineNumber, promptColumn);
 
   return new Promise((resolve) => {
@@ -113,14 +109,18 @@ export async function prompt(
       const matches = keyCodes.length === 0 || keyCodes.includes(keyPress);
       
       if (matches) {
-        // Delete the prompt lines completely
-        promptSection.delete();
+        // Delete the prompt component
+        if (promptRef instanceof ComponentReference) {
+          promptRef.delete();
+        }
         cleanup();
         resolve();
       } else if (keyPress === '\u0003') { // \u0003 is Ctrl+C
         // Ctrl+C should exit immediately and restore terminal state
         // Delete prompt before exiting
-        promptSection.delete();
+        if (promptRef instanceof ComponentReference) {
+          promptRef.delete();
+        }
         cleanup();
         process.exit(130); // Standard exit code for SIGINT
       }
@@ -128,7 +128,9 @@ export async function prompt(
     
     const onSIGINT = () => {
       // Delete prompt before cleanup
-      promptSection.delete();
+      if (promptRef instanceof ComponentReference) {
+        promptRef.delete();
+      }
       cleanup();
       resolve();
     };

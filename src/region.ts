@@ -30,14 +30,15 @@ function getComponentHeight(component: Component, region: TerminalRegion, width:
 }
 
 /**
- * Render a component to the region at the specified position
+ * Render a component and return its content (pure function)
+ * The caller is responsible for writing the content to the appropriate position
  */
-function renderComponent(component: Component, region: TerminalRegion, x: number, y: number, width: number): void {
+function renderComponent(component: Component, region: TerminalRegion, width: number): string[] {
   const ctx = {
     availableWidth: width,
     region: region,
-    columnIndex: x,
-    rowIndex: y,
+    columnIndex: 0,
+    rowIndex: 0, // Components don't know their position - caller decides
     // Provide onUpdate callback for animated components (like Spinner)
     onUpdate: () => {
       // Re-render the last content to update animated components
@@ -47,14 +48,57 @@ function renderComponent(component: Component, region: TerminalRegion, x: number
   
   const result = typeof component === 'function' ? component(ctx) : component.render(ctx);
   
-  if (result === null) return;
+  if (result === null) return [];
   
+  // Components return their content - caller writes it to the correct position
   if (Array.isArray(result)) {
-    for (let i = 0; i < result.length; i++) {
-      region.setLine(y + i, result[i]);
-    }
+    return result.map(line => 
+      typeof line === 'string' 
+        ? line 
+        : applyStyle(line.text, line.style)
+    );
   } else {
-    region.setLine(y, result);
+    const styled = typeof result === 'string'
+      ? result
+      : applyStyle(result.text, result.style);
+    return [styled];
+  }
+}
+
+/**
+ * Reference to a component in the region that can be removed
+ */
+export class ComponentReference {
+  constructor(
+    private region: TerminalRegion,
+    private componentIndex: number,
+    private height: number
+  ) {}
+
+  /**
+   * Delete this component - removes it from the region
+   */
+  delete(): void {
+    const renderer = this.region.getRenderer();
+    const wasRenderingDisabled = renderer.disableRendering;
+    renderer.disableRendering = true;
+
+    // Remove component from allComponentDescriptors
+    this.region.removeComponent(this.componentIndex);
+
+    // Reduce region height
+    this.region.decreaseHeight(this.height);
+    renderer.setHeight(this.region.getInternalHeight());
+
+    // Re-render to update the display
+    this.region.reRenderLastContent();
+
+    renderer.disableRendering = wasRenderingDisabled;
+    
+    // Force a render
+    if (!wasRenderingDisabled) {
+      void renderer.flush();
+    }
   }
 }
 
@@ -76,7 +120,7 @@ export class SectionReference {
     const wasRenderingDisabled = renderer.disableRendering;
     renderer.disableRendering = true;
 
-    // Remove lines from regionLines
+    // Remove lines from explicitlyAddedLines
     this.region.removeRegionLines(this.startLine - 1, this.height);
 
     // Reduce region height
@@ -128,10 +172,9 @@ export class SectionReference {
       
       updates.push({ lineNumber, content: styled });
       
-      // Track in regionLines
-      this.region.ensureRegionLine(this.startLine + i - 1);
-      this.region.updateRegionLine(this.startLine + i - 1, {
-        type: 'static',
+      // Track in explicitlyAddedLines
+      this.region.ensureExplicitlyAddedLine(this.startLine + i - 1);
+      this.region.updateExplicitlyAddedLine(this.startLine + i - 1, {
         content: styled,
         lineNumber: this.startLine + i
       });
@@ -160,9 +203,10 @@ export class TerminalRegion {
   // Track ALL component descriptors that have been set/added, so we can re-render them
   // This is an array of descriptors (or arrays of descriptors for multi-line sections)
   private allComponentDescriptors: any[] = [];
-  // Track all lines in the region (component + waitForSpacebar + any whitespace)
-  // This allows us to re-render the entire region correctly
-  private regionLines: Array<{ type: 'component' | 'static', content?: any, lineNumber: number }> = [];
+  // Track explicitly added content (prompts, whitespace added via add() or setLine())
+  // Components are re-rendered from allComponentDescriptors, so they don't need to be tracked here
+  // TODO: With signals, we'll track signal dependencies and re-render only what changed
+  private explicitlyAddedLines: Array<{ content: string; lineNumber: number }> = [];
   // Prevent concurrent re-renders (e.g., multiple resize events firing rapidly)
   private isReRendering: boolean = false;
 
@@ -235,20 +279,30 @@ export class TerminalRegion {
   }
 
   /**
-   * Remove lines from regionLines (for internal use by SectionReference)
+   * Remove lines from explicitlyAddedLines (for internal use by SectionReference)
    * @internal
    */
   removeRegionLines(startIndex: number, count: number): void {
-    this.regionLines.splice(startIndex, count);
+    this.explicitlyAddedLines.splice(startIndex, count);
+  }
+
+  /**
+   * Remove a component from allComponentDescriptors (for internal use by ComponentReference)
+   * @internal
+   */
+  removeComponent(componentIndex: number): void {
+    if (componentIndex >= 0 && componentIndex < this.allComponentDescriptors.length) {
+      this.allComponentDescriptors.splice(componentIndex, 1);
+    }
   }
 
   /**
    * Ensure a region line exists at the given index (for internal use by SectionReference)
    * @internal
    */
-  ensureRegionLine(index: number): void {
-    while (this.regionLines.length <= index) {
-      this.regionLines.push({ type: 'static', lineNumber: this.regionLines.length + 1 });
+  ensureExplicitlyAddedLine(index: number): void {
+    while (this.explicitlyAddedLines.length <= index) {
+      this.explicitlyAddedLines.push({ content: '', lineNumber: this.explicitlyAddedLines.length + 1 });
     }
   }
 
@@ -256,8 +310,8 @@ export class TerminalRegion {
    * Update a region line (for internal use by SectionReference)
    * @internal
    */
-  updateRegionLine(index: number, lineInfo: { type: 'component' | 'static', content?: any, lineNumber: number }): void {
-    this.regionLines[index] = lineInfo;
+  updateExplicitlyAddedLine(index: number, lineInfo: { content: string; lineNumber: number }): void {
+    this.explicitlyAddedLines[index] = lineInfo;
   }
 
   /**
@@ -281,13 +335,12 @@ export class TerminalRegion {
     const text = typeof content === 'string' ? content : content.text;
     const styled = applyStyle(text, typeof content === 'object' ? content.style : undefined);
 
-    // CRITICAL: Track this line as static content (not part of component)
+    // Track this line as explicitly added content (via setLine/add)
     // This allows us to preserve it during re-renders
-    while (this.regionLines.length < lineNumber) {
-      this.regionLines.push({ type: 'static', lineNumber: this.regionLines.length + 1 });
+    while (this.explicitlyAddedLines.length < lineNumber) {
+      this.explicitlyAddedLines.push({ content: '', lineNumber: this.explicitlyAddedLines.length + 1 });
     }
-    this.regionLines[lineNumber - 1] = { 
-      type: 'static', 
+    this.explicitlyAddedLines[lineNumber - 1] = { 
       content: styled,
       lineNumber 
     };
@@ -357,10 +410,13 @@ export class TerminalRegion {
       }
       
       this._height = totalHeight;
-      this.regionLines = [];
-      for (let i = 0; i < totalHeight; i++) {
-        this.regionLines[i] = { type: 'component', lineNumber: i + 1 };
-      }
+      
+      // CRITICAL: set() does a FULL REPLACE, so clear ALL explicitlyAddedLines
+      // Components are tracked in allComponentDescriptors and re-rendered from there
+      // Any old explicitlyAddedLines entries are stale and should be removed
+      this.explicitlyAddedLines = [];
+      
+      // Don't track component lines in explicitlyAddedLines - they're re-rendered from allComponentDescriptors
       
       // CRITICAL: Disable auto-rendering during component rendering
       // Components call setLine() which triggers scheduleRender(), but we want
@@ -369,31 +425,22 @@ export class TerminalRegion {
       renderer.disableRendering = true;
       
       // Render each component on its line
+      // CRITICAL: Write directly to pendingFrame, don't use setLine() which adds to explicitlyAddedLines
       let currentLine = 1;
       for (const component of allContent) {
         if (isComponent(component)) {
-          const ctx = {
-            availableWidth: width,
-            region: this,
-            columnIndex: 0,
-            rowIndex: currentLine,
-            onUpdate: () => {
-              this.reRenderLastContent();
-            },
-          };
-          const result = typeof component === 'function' ? component(ctx) : component.render(ctx);
-          
-          if (result !== null) {
-            const height = Array.isArray(result) ? result.length : 1;
-            if (Array.isArray(result)) {
-              for (let i = 0; i < result.length; i++) {
-                this.setLine(currentLine + i, result[i]);
-              }
-            } else {
-              this.setLine(currentLine, result);
+          const componentLines = renderComponent(component, this, width);
+          // Write component content directly to pendingFrame (don't use setLine which tracks in explicitlyAddedLines)
+          for (let i = 0; i < componentLines.length; i++) {
+            const lineNumber = currentLine + i;
+            const index = lineNumber - 1;
+            renderer.ensureFrameSize(index + 1);
+            renderer.pendingFrame[index] = componentLines[i];
+            if (lineNumber > renderer.height) {
+              renderer.height = lineNumber;
             }
-          currentLine += height;
           }
+          currentLine += componentLines.length;
         }
       }
       
@@ -431,9 +478,9 @@ export class TerminalRegion {
   /**
    * Add content to the region, appending it after existing content.
    * This is useful for adding multiple sections without overwriting previous content.
-   * Returns a SectionReference that can be used to update the content later.
+   * Returns a SectionReference or ComponentReference that can be used to update/delete the content later.
    */
-  add(content: string | LineContent[] | any, ...additionalLines: any[]): SectionReference {
+  add(content: string | LineContent[] | any, ...additionalLines: any[]): SectionReference | ComponentReference {
     // Check if we have multiple grid descriptors
     const allContent = additionalLines.length > 0 
       ? [content, ...additionalLines]
@@ -475,13 +522,11 @@ export class TerminalRegion {
         renderer.pendingFrame[this._height + i] = '';
       }
       
-      // Update regionLines
-      for (let i = 0; i < totalHeight; i++) {
-        this.regionLines.push({ type: 'component', lineNumber: this._height + i + 1 });
-      }
+      // Don't track component lines in regionLines - they're re-rendered from allComponentDescriptors
       
       // Track this new content
       const descriptorsToAdd = allContent.length > 1 ? allContent : allContent[0];
+      const componentIndex = this.allComponentDescriptors.length;
       this.allComponentDescriptors.push(descriptorsToAdd);
       
       // Update region height BEFORE rendering
@@ -501,7 +546,17 @@ export class TerminalRegion {
       let currentLine = startLine;
       for (const component of components) {
         const height = getComponentHeight(component, this, width);
-        renderComponent(component, this, 0, currentLine, width);
+        const componentLines = renderComponent(component, this, width);
+        // Write component content to pendingFrame at the correct position
+        for (let i = 0; i < componentLines.length; i++) {
+          const lineNumber = currentLine + i;
+          const index = lineNumber - 1;
+          renderer.ensureFrameSize(index + 1);
+          renderer.pendingFrame[index] = componentLines[i];
+          if (lineNumber > renderer.height) {
+            renderer.height = lineNumber;
+          }
+        }
         currentLine += height;
       }
       
@@ -509,7 +564,7 @@ export class TerminalRegion {
       renderer.disableRendering = wasRenderingDisabled;
       // Note: flush() is async but we don't await here - caller should await if needed
       void this.renderer.flush();
-      return new SectionReference(this, startLine, totalHeight);
+      return new ComponentReference(this, componentIndex, totalHeight);
     }
     
     // Single Component (object with render method or function)
@@ -539,12 +594,10 @@ export class TerminalRegion {
         renderer.pendingFrame[this._height + i] = '';
       }
       
-      // Update regionLines
-      for (let i = 0; i < height; i++) {
-        this.regionLines.push({ type: 'component', lineNumber: this._height + i + 1 });
-      }
+      // Don't track component lines in regionLines - they're re-rendered from allComponentDescriptors
       
       // Track this new content
+      const componentIndex = this.allComponentDescriptors.length;
       this.allComponentDescriptors.push(content);
       
       // Update region height BEFORE rendering
@@ -559,13 +612,23 @@ export class TerminalRegion {
       renderer.disableRendering = true;
       
       // Render component (renderComponent will set up onUpdate callback)
-      renderComponent(content, this, 0, startLine, width);
+      const componentLines = renderComponent(content, this, width);
+      // Write component content to pendingFrame at the correct position
+      for (let i = 0; i < componentLines.length; i++) {
+        const lineNumber = startLine + i;
+        const index = lineNumber - 1;
+        renderer.ensureFrameSize(index + 1);
+        renderer.pendingFrame[index] = componentLines[i];
+        if (lineNumber > renderer.height) {
+          renderer.height = lineNumber;
+        }
+      }
       
       // Re-enable rendering and flush once
       renderer.disableRendering = wasRenderingDisabled;
       // Note: flush() is async but we don't await here - caller should await if needed
       void this.renderer.flush();
-      return new SectionReference(this, startLine, height);
+      return new ComponentReference(this, componentIndex, height);
     }
 
     // String/array handling - append after existing content
@@ -594,15 +657,14 @@ export class TerminalRegion {
         }
         renderer.pendingFrame[lineIndex] = lines[i];
         
-        // Track in regionLines
-        while (this.regionLines.length < startLine + i) {
-          this.regionLines.push({ type: 'static', lineNumber: this.regionLines.length + 1 });
-        }
-        this.regionLines[startLine + i - 1] = {
-          type: 'static',
-          content: lines[i],
-          lineNumber: startLine + i
-        };
+      // Track in explicitlyAddedLines
+      while (this.regionLines.length < startLine + i) {
+        this.regionLines.push({ content: '', lineNumber: this.regionLines.length + 1 });
+      }
+      this.regionLines[startLine + i - 1] = {
+        content: lines[i],
+        lineNumber: startLine + i
+      };
       }
       
       // Update region height tracking
@@ -646,12 +708,11 @@ export class TerminalRegion {
         }
         renderer.pendingFrame[lineIndex] = lineContent;
         
-        // Track in regionLines
-        while (this.regionLines.length < startLine + i) {
-          this.regionLines.push({ type: 'static', lineNumber: this.regionLines.length + 1 });
+        // Track in explicitlyAddedLines
+        while (this.explicitlyAddedLines.length < startLine + i) {
+          this.explicitlyAddedLines.push({ content: '', lineNumber: this.explicitlyAddedLines.length + 1 });
         }
-        this.regionLines[startLine + i - 1] = {
-          type: 'static',
+        this.explicitlyAddedLines[startLine + i - 1] = {
           content: lineContent,
           lineNumber: startLine + i
         };
@@ -732,34 +793,44 @@ export class TerminalRegion {
       
       // CRITICAL: Include static lines (waitForSpacebar, whitespace) in total height
       // Count how many static lines exist beyond the component height
-      let maxStaticLineNumber = 0;
-      for (let i = 0; i < this.regionLines.length; i++) {
-        const lineInfo = this.regionLines[i];
-        if (lineInfo.type === 'static' && lineInfo.content !== undefined) {
-          maxStaticLineNumber = Math.max(maxStaticLineNumber, lineInfo.lineNumber);
+      let maxExplicitLineNumber = 0;
+      for (let i = 0; i < this.explicitlyAddedLines.length; i++) {
+        const lineInfo = this.explicitlyAddedLines[i];
+        if (lineInfo.content) {
+          maxExplicitLineNumber = Math.max(maxExplicitLineNumber, lineInfo.lineNumber);
         }
       }
-      // totalHeight should be at least as large as the highest static line number
-      totalHeight = Math.max(totalHeight, maxStaticLineNumber);
+      // totalHeight should be at least as large as the highest explicitly added line number
+      totalHeight = Math.max(totalHeight, maxExplicitLineNumber);
       
-      // CRITICAL: Collect static lines BEFORE sizing frames, so we know the final height
-      // Find all static lines that need to be re-rendered, sorted by original line number
-      const staticLines: Array<{ originalLineNumber: number; content: string }> = [];
-      for (let i = 0; i < this.regionLines.length; i++) {
-        const lineInfo = this.regionLines[i];
-        if (lineInfo.type === 'static' && lineInfo.content !== undefined) {
-          staticLines.push({
+      // CRITICAL: Collect explicitly added lines BEFORE sizing frames, so we know the final height
+      // explicitlyAddedLines ONLY contains explicitly added content (prompts, etc.)
+      // Components are re-rendered from allComponentDescriptors, so they're not tracked here
+      // TODO: With signals, we'll track signal dependencies and re-render only what changed
+      const explicitlyAddedLines: Array<{ originalLineNumber: number; content: string }> = [];
+      
+      // CRITICAL: Collect ALL explicitly added lines that have content
+      // We'll render them AFTER all components, regardless of their original line numbers
+      // The original line numbers are just for preserving order, not for filtering
+      // This ensures prompts and other explicitly added content always appear at the end
+      for (let i = 0; i < this.explicitlyAddedLines.length; i++) {
+        const lineInfo = this.explicitlyAddedLines[i];
+        if (lineInfo.content && lineInfo.content.trim() !== '') {
+          explicitlyAddedLines.push({
             originalLineNumber: lineInfo.lineNumber,
-            content: lineInfo.content as string,
+            content: lineInfo.content,
           });
+          renderer.logToFile(`[reRenderLastContent] Found explicitly added line at index ${i} (original line ${lineInfo.lineNumber}): "${lineInfo.content.substring(0, 40)}"`);
         }
       }
       
-      // Sort static lines by original line number to preserve order
-      staticLines.sort((a, b) => a.originalLineNumber - b.originalLineNumber);
+      // Sort explicitly added lines by original line number to preserve order
+      explicitlyAddedLines.sort((a, b) => a.originalLineNumber - b.originalLineNumber);
       
-      // Calculate final height: components + static lines
-      const estimatedFinalHeight = totalHeight + staticLines.length;
+      renderer.logToFile(`[reRenderLastContent] Collected ${explicitlyAddedLines.length} explicitly added lines (will render after components)`);
+      
+      // Calculate final height: components + explicitly added lines
+      const estimatedFinalHeight = totalHeight + explicitlyAddedLines.length;
       
       // CRITICAL: Ensure frames are the correct size BEFORE re-rendering
       // Use estimated final height to avoid truncating static lines
@@ -780,6 +851,11 @@ export class TerminalRegion {
       // CRITICAL: Clear all lines before re-rendering
       // We need to clear the ENTIRE pendingFrame, not just up to totalHeight,
       // because old content might be beyond totalHeight and cause corruption
+      renderer.logToFile(`[reRenderLastContent] BEFORE CLEAR: pendingFrame.length=${renderer.pendingFrame.length}, first 5 lines:`);
+      for (let i = 0; i < Math.min(5, renderer.pendingFrame.length); i++) {
+        renderer.logToFile(`[reRenderLastContent]   [${i}]: "${renderer.pendingFrame[i].substring(0, 50)}"`);
+      }
+      
       for (let i = 0; i < renderer.pendingFrame.length; i++) {
         renderer.pendingFrame[i] = '';
       }
@@ -788,6 +864,8 @@ export class TerminalRegion {
       while (renderer.pendingFrame.length < estimatedFinalHeight) {
         renderer.pendingFrame.push('');
       }
+      
+      renderer.logToFile(`[reRenderLastContent] AFTER CLEAR: pendingFrame.length=${renderer.pendingFrame.length}, estimatedFinalHeight=${estimatedFinalHeight}`);
       
       // CRITICAL: Disable auto-rendering during component rendering
       // Components call setLine() which triggers scheduleRender(), but we want
@@ -813,8 +891,29 @@ export class TerminalRegion {
             
             renderer.logToFile(`[reRenderLastContent] Rendering component ${itemIdx} at line ${currentLine}, height=${componentHeight}`);
             
-            // Render component at current line
-            renderComponent(item, this, 0, currentLine, width);
+            // Render component (pure - just returns content)
+            const componentLines = renderComponent(item, this, width);
+            
+            // Write component content to pendingFrame at the correct position
+            for (let i = 0; i < componentLines.length; i++) {
+              const lineNumber = currentLine + i;
+              const index = lineNumber - 1;
+              renderer.ensureFrameSize(index + 1);
+              
+              // DEBUG: Log what we're writing and where
+              const oldContent = renderer.pendingFrame[index] ? renderer.pendingFrame[index].substring(0, 40) : '(empty)';
+              const newContent = componentLines[i].substring(0, 40);
+              if (oldContent !== newContent && oldContent !== '(empty)') {
+                renderer.logToFile(`[reRenderLastContent] WARNING: Overwriting component line ${lineNumber} (index ${index}) - old: "${oldContent}", new: "${newContent}"`);
+              } else {
+                renderer.logToFile(`[reRenderLastContent] Writing component line ${lineNumber} (index ${index}): "${newContent}"`);
+              }
+              
+              renderer.pendingFrame[index] = componentLines[i];
+              if (lineNumber > renderer.height) {
+                renderer.height = lineNumber;
+              }
+            }
             
             // Move to next line
             currentLine += componentHeight;
@@ -824,43 +923,60 @@ export class TerminalRegion {
       
       renderer.logToFile(`[reRenderLastContent] Finished rendering components, currentLine=${currentLine}`);
       
-      // After re-rendering components, re-render static lines
-      // Static lines should come AFTER all components
-      // (staticLines was already collected above)
+      // DEBUG: Log pendingFrame state after component rendering
+      renderer.logToFile(`[reRenderLastContent] AFTER COMPONENT RENDER: pendingFrame.length=${renderer.pendingFrame.length}`);
+      for (let i = 0; i < Math.min(10, renderer.pendingFrame.length); i++) {
+        const content = renderer.pendingFrame[i] ? renderer.pendingFrame[i].substring(0, 50) : '(empty)';
+        renderer.logToFile(`[reRenderLastContent]   [${i}] (line ${i + 1}): "${content}"`);
+      }
       
-      // Re-render static lines starting after all components
-      // currentLine is where the last component ended, so static lines start there
-      let staticLinePosition = currentLine;
-      for (const staticLine of staticLines) {
+      // After re-rendering components, re-render explicitly added lines
+      // Explicitly added lines should come AFTER all components
+      // (explicitlyAddedLines was already collected above)
+      
+      // Re-render explicitly added lines starting after all components
+      // currentLine is where the last component ended, so explicitly added lines start there
+      let explicitLinePosition = currentLine;
+      renderer.logToFile(`[reRenderLastContent] Re-rendering ${explicitlyAddedLines.length} explicitly added lines starting at line ${explicitLinePosition}`);
+      for (const explicitLine of explicitlyAddedLines) {
         // Ensure pendingFrame has enough lines
-        while (renderer.pendingFrame.length < staticLinePosition) {
+        while (renderer.pendingFrame.length < explicitLinePosition) {
           renderer.pendingFrame.push('');
         }
-        renderer.pendingFrame[staticLinePosition - 1] = staticLine.content;
-        staticLinePosition++;
+        const index = explicitLinePosition - 1;
+        const oldContent = renderer.pendingFrame[index] ? renderer.pendingFrame[index].substring(0, 40) : '(empty)';
+        const newContent = explicitLine.content.substring(0, 40);
+        if (oldContent !== newContent && oldContent !== '(empty)') {
+          renderer.logToFile(`[reRenderLastContent] WARNING: Overwriting explicitly added line ${explicitLinePosition} (index ${index}, original ${explicitLine.originalLineNumber}) - old: "${oldContent}", new: "${newContent}"`);
+        } else {
+          renderer.logToFile(`[reRenderLastContent] Writing explicitly added line ${explicitLinePosition} (index ${index}, original ${explicitLine.originalLineNumber}): "${newContent}"`);
+        }
+        renderer.pendingFrame[index] = explicitLine.content;
+        explicitLinePosition++;
       }
       
-      // Update total height to include static lines
-      const finalHeight = Math.max(totalHeight, staticLinePosition - 1);
-      
-      // Update regionLines to reflect new positions of static lines
-      // First, rebuild regionLines: components first, then static lines
-      this.regionLines = [];
-      
-      // Add component entries (they're already rendered, so we just track them)
-      for (let i = 0; i < currentLine - 1; i++) {
-        this.regionLines.push({ type: 'component', lineNumber: i + 1 });
+      // DEBUG: Log pendingFrame state after explicitly added line rendering
+      renderer.logToFile(`[reRenderLastContent] AFTER EXPLICITLY ADDED LINES: pendingFrame.length=${renderer.pendingFrame.length}`);
+      for (let i = 0; i < Math.min(10, renderer.pendingFrame.length); i++) {
+        const content = renderer.pendingFrame[i] ? renderer.pendingFrame[i].substring(0, 50) : '(empty)';
+        renderer.logToFile(`[reRenderLastContent]   [${i}] (line ${i + 1}): "${content}"`);
       }
       
-      // Add static lines at their new positions
-      let newStaticLinePosition = currentLine;
-      for (const staticLine of staticLines) {
-        this.regionLines.push({
-          type: 'static',
-          content: staticLine.content,
-          lineNumber: newStaticLinePosition,
+      // Update total height to include explicitly added lines
+      const finalHeight = Math.max(totalHeight, explicitLinePosition - 1);
+      
+      // Update explicitlyAddedLines to reflect new positions
+      // Only track explicitly added lines - components are re-rendered from allComponentDescriptors
+      this.explicitlyAddedLines = [];
+      
+      // Add explicitly added lines at their new positions (after all components)
+      let newExplicitLinePosition = currentLine;
+      for (const explicitLine of explicitlyAddedLines) {
+        this.explicitlyAddedLines.push({
+          content: explicitLine.content,
+          lineNumber: newExplicitLinePosition,
         });
-        newStaticLinePosition++;
+        newExplicitLinePosition++;
       }
       
       // Update height to match all rendered content (components + static lines)
@@ -884,7 +1000,7 @@ export class TerminalRegion {
       // when it actually has. Let renderNow() update lastRenderedHeight after rendering.
       // This keeps the state consistent with the normal set() path
       const oldLastRenderedHeight = renderer.lastRenderedHeight;
-      renderer.logToFile(`[reRenderLastContent] BEFORE flush: height=${finalHeight} oldHeight=${oldHeight} lastRenderedHeight=${oldLastRenderedHeight} staticLines=${staticLines.length}`);
+      renderer.logToFile(`[reRenderLastContent] BEFORE flush: height=${finalHeight} oldHeight=${oldHeight} lastRenderedHeight=${oldLastRenderedHeight} explicitlyAddedLines=${explicitlyAddedLines.length}`);
       
       // Re-enable rendering and flush once
       renderer.disableRendering = wasRenderingDisabled;

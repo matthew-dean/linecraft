@@ -99,7 +99,7 @@ export class RegionRenderer {
       const newContent = content.substring(0, 40);
       if (oldContent !== newContent) {
         this.logToFile(`[setLine] WARNING: Overwriting line ${lineNumber} - old: "${oldContent}", new: "${newContent}"`);
-      } else {
+    } else {
         this.logToFile(`[setLine] Writing same content to line ${lineNumber}: "${newContent}"`);
       }
     }
@@ -256,14 +256,14 @@ export class RegionRenderer {
     process.once('SIGTERM', cleanup);
   }
 
-  private ensureFrameSize(size: number): void {
+  ensureFrameSize(size: number): void {
     while (this.pendingFrame.length < size) {
       this.pendingFrame.push('');
     }
     while (this.previousFrame.length < size) {
       this.previousFrame.push('');
-      }
     }
+  }
 
   private scheduleRender(): void {
     if (this.disableRendering || this.permanentlyDisabled || this.destroyed) {

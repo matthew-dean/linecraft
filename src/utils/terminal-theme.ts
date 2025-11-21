@@ -34,12 +34,17 @@ export function isDarkTerminal(): boolean {
 /**
  * Get an appropriate muted color for line numbers based on terminal theme
  * 
- * On dark terminals: returns 'black' (darker, more subtle)
- * On light terminals: returns 'brightBlack' (lighter gray, more visible)
+ * On dark terminals: returns 'brightBlack' (muted gray, visible but not prominent)
+ * On light terminals: returns 'black' (darker gray, visible but not prominent)
+ * 
+ * These colors provide good contrast while remaining subtle and not distracting
+ * from the main code content.
  * 
  * @returns Color name suitable for line numbers
  */
 export function getLineNumberColor(): 'black' | 'brightBlack' {
-  return isDarkTerminal() ? 'black' : 'brightBlack';
+  // On dark terminals, use brightBlack (muted gray) for visibility
+  // On light terminals, use black (darker gray) for visibility
+  return isDarkTerminal() ? 'brightBlack' : 'black';
 }
 

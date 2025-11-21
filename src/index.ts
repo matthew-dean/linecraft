@@ -1,4 +1,4 @@
-export { TerminalRegion, SectionReference } from './region';
+export { TerminalRegion, SectionReference, ComponentReference } from './region';
 export { getTerminalWidth, getTerminalHeight, isTTY, onResize } from './utils/terminal';
 // Grid system
 export { grid as Grid } from './layout/grid';
