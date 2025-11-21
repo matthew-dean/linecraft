@@ -37,9 +37,9 @@ export function diffFrames(prev: string[], curr: string[]): DiffOp[] {
       if (prevLine === currLine) {
         // No change, but if we had reflow above, we need to redraw
         if (needsReflow) {
-          ops.push({ type: 'update_line', line: i, content: currLine });
-        } else {
-          ops.push({ type: 'no_change' });
+        ops.push({ type: 'update_line', line: i, content: currLine });
+      } else {
+        ops.push({ type: 'no_change' });
         }
       } else {
         // Line changed

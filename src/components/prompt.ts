@@ -32,8 +32,8 @@ export function Prompt(options: PromptOptions): Component {
       return ['', styledResult];
     } else if (Array.isArray(styledResult)) {
       return ['', ...styledResult];
-    } else {
+  } else {
       return ['', promptText];
-    }
+  }
   };
 }

@@ -88,6 +88,8 @@ r.destroy();     // Clean up and restore terminal
 
 Apply colors, bold, italic, and more to text:
 
+![Styled Example](docs/examples/styled.gif)
+
 ```typescript
 import { Styled } from 'linecraft';
 
@@ -110,6 +112,8 @@ r.set(Styled({
 ### Section
 
 Wrap content in a beautiful bordered box with optional title:
+
+![Section Example](docs/examples/section.gif)
 
 ```typescript
 import { Section } from 'linecraft';
@@ -143,6 +147,8 @@ r.set(Section(
 
 Display code errors and warnings with beautiful formatting, line numbers, and context:
 
+[![asciicast](https://asciinema.org/a/code-debug-example.svg)](https://asciinema.org/a/code-debug-example)
+
 ```typescript
 import { CodeDebug } from 'linecraft';
 
@@ -175,6 +181,8 @@ r.set(CodeDebug({
 
 Animated spinner for loading states:
 
+![Spinner Example](docs/examples/spinner.gif)
+
 ```typescript
 import { Spinner } from 'linecraft';
 
@@ -196,6 +204,8 @@ spinner.delete();
 
 Beautiful progress bars with labels:
 
+![ProgressBar Example](docs/examples/progressbar.gif)
+
 ```typescript
 import { progressBar } from 'linecraft';
 
@@ -216,6 +226,8 @@ r.set(progressBar({
 
 Create segmented displays (like oh-my-zsh style prompts):
 
+![Segments Example](docs/examples/segments.gif)
+
 ```typescript
 import { Segments } from 'linecraft';
 
@@ -234,6 +246,8 @@ r.set(Segments({
 
 Fill available space with a character:
 
+![Fill Example](docs/examples/fill.gif)
+
 ```typescript
 import { fill } from 'linecraft';
 
@@ -243,6 +257,8 @@ r.set(fill({ char: '─', color: 'brightBlack' }));
 ### Grid
 
 Create responsive grid layouts:
+
+![Grid Example](docs/examples/grid.gif)
 
 ```typescript
 import { Grid } from 'linecraft';
@@ -346,6 +362,8 @@ pnpm example <name>
 ## 🤝 Contributing
 
 Contributions welcome! Please open an issue or PR.
+
+**Creating example recordings?** See [docs/creating-recordings.md](docs/creating-recordings.md) for a guide on using vhs to create animated GIFs.
 
 ## 📄 License
 

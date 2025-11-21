@@ -1,0 +1,6 @@
+# vhs ignore file - files to ignore when running vhs commands
+node_modules/
+lib/
+*.log
+.git/
+
