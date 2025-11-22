@@ -12,7 +12,6 @@ export default defineConfig({
       exclude: [
         'node_modules/',
         'lib/',
-        'zig-out/',
         '**/*.d.ts',
         '**/*.test.ts',
         '**/types/**',

@@ -41,6 +41,30 @@ r.set(
 r.destroy(true);
 ```
 
+## Performance
+
+Linecraft is built for high-performance terminal rendering from Node.js. The renderer includes several optimizations to minimize terminal updates and CPU usage:
+
+### Frame Diffing
+Only updates lines that actually changed. Unchanged lines are skipped entirely, reducing terminal writes by up to 90% for static content.
+
+### Render Throttling
+Uses high-resolution timing (`process.hrtime.bigint()`) to limit frame rate (default: 30 FPS). Prevents excessive rendering during rapid updates while maintaining smooth animations.
+
+### Batched ANSI Operations
+All ANSI escape sequences are batched into a single `stdout.write()` call per frame, minimizing syscalls and improving throughput.
+
+### Efficient Cursor Movement
+Optimized ANSI cursor positioning that only moves when necessary. The renderer tracks viewport state to avoid redundant cursor movements.
+
+### Viewport Management
+Only renders visible lines within the terminal viewport. Content that extends beyond the viewport is efficiently managed without unnecessary rendering.
+
+### Auto-Wrap Disabled
+Disables terminal auto-wrap to prevent unwanted line breaks, ensuring precise control over terminal output layout.
+
+These optimizations make Linecraft suitable for real-time terminal UIs, progress displays, and animated components without overwhelming the terminal or consuming excessive CPU.
+
 ## Core API
 
 ### Region
@@ -103,7 +127,7 @@ r.set(Styled({
 
 Wrap content in a bordered box with an optional title.
 
-![Section Example](docs/examples/section.gif)
+![Section Example](https://raw.githubusercontent.com/matthew-dean/linecraft/main/docs/examples/section.gif)
 
 ```typescript
 import { Section } from 'linecraft';
@@ -128,7 +152,7 @@ r.set(Section(
 
 Display code errors and warnings with line numbers, context, and clickable file paths.
 
-![CodeDebug Example](docs/examples/code-debug.gif)
+![CodeDebug Example](https://raw.githubusercontent.com/matthew-dean/linecraft/main/docs/examples/code-debug.gif)
 
 ```typescript
 import { CodeDebug } from 'linecraft';
@@ -161,7 +185,7 @@ r.set(CodeDebug({
 
 Animated spinners for loading states. Includes built-in styles or use custom frames.
 
-![Spinner Example](docs/examples/spinner.gif)
+![Spinner Example](https://raw.githubusercontent.com/matthew-dean/linecraft/main/docs/examples/spinner.gif)
 
 ```typescript
 import { Spinner } from 'linecraft';
@@ -194,7 +218,7 @@ Spinners automatically stop when components are replaced or the region is destro
 
 Progress bars with customizable colors and styling.
 
-![ProgressBar Example](docs/examples/progressbar.gif)
+![ProgressBar Example](https://raw.githubusercontent.com/matthew-dean/linecraft/main/docs/examples/progressbar.gif)
 
 ```typescript
 import { progressBar } from 'linecraft';
@@ -219,7 +243,7 @@ r.set(progressBar({
 
 Create segmented displays (like oh-my-zsh style prompts).
 
-![Segments Example](docs/examples/segments.gif)
+![Segments Example](https://raw.githubusercontent.com/matthew-dean/linecraft/main/docs/examples/segments.gif)
 
 ```typescript
 import { Segments } from 'linecraft';
@@ -242,7 +266,7 @@ r.set(Segments({
 
 Create responsive grid layouts. Children automatically wrap to new rows when they exceed the number of explicit columns.
 
-![Grid Example](docs/examples/grid.gif)
+![Grid Example](https://raw.githubusercontent.com/matthew-dean/linecraft/main/docs/examples/grid.gif)
 
 ```typescript
 import { Grid } from 'linecraft';
@@ -285,7 +309,7 @@ r.set(Grid({
 
 Fill available space with a character. Typically used within grids.
 
-![Fill Example](docs/examples/fill.gif)
+![Fill Example](https://raw.githubusercontent.com/matthew-dean/linecraft/main/docs/examples/fill.gif)
 
 ```typescript
 import { fill } from 'linecraft';
