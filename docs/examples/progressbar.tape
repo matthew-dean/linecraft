@@ -1,12 +1,13 @@
 Output docs/examples/progressbar.gif
 Set FontSize 16
-Set Width 800
-Set Height 300
-Set Theme "Dracula"
+Set Width 900
+Set Height 500
+Set Theme "nord"
 Set Padding 30
 
-Type "pnpm example basic-progress"
+Type "pnpm example progress"
 Enter
-Sleep 6s
+Sleep 8s
 Type " "
+Sleep 8s
 

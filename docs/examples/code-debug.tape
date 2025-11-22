@@ -2,7 +2,7 @@ Output docs/examples/code-debug.gif
 Set FontSize 16
 Set Width 900
 Set Height 500
-Set Theme "Dracula"
+Set Theme "nord"
 Set Padding 30
 
 Type "pnpm example code-debug"

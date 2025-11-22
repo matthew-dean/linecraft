@@ -9,6 +9,7 @@ export interface RenderContext {
   columnIndex: number;     // Which grid column (0-based)
   rowIndex: number;         // Which grid row (0-based, for multi-line)
   onUpdate?: () => void;   // Optional callback for components to trigger re-renders when their state changes
+  onCleanup?: (callback: () => void) => void;  // Optional callback for components to register cleanup (called when component is removed/replaced)
 }
 
 /**

@@ -4,12 +4,21 @@ import type { Component, RenderContext } from '../component';
 import type { Color } from '../types';
 import { applyStyle } from '../utils/colors';
 
+export type SpinnerStyle = 'classic-dots' | 'bouncing-bar';
+
 export interface SpinnerOptions {
-  frames?: string[];
+  style?: SpinnerStyle; // Built-in animation style
+  frames?: string[]; // Custom frames (overrides style if provided)
   interval?: number;
   color?: Color;
   autoStart?: boolean; // Start animating automatically (default: true)
 }
+
+// Built-in spinner frame definitions
+const SPINNER_FRAMES: Record<SpinnerStyle, string[]> = {
+  'classic-dots': ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'], // Clockwise rotation with 3 connected dots
+  'bouncing-bar': ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█', '▇', '▆', '▅', '▄', '▃', '▂'],
+};
 
 /**
  * Create a spinner component that manages its own animation state
@@ -21,15 +30,20 @@ export function Spinner(options: SpinnerOptions = {}): {
   stop: () => void;
 } {
   const {
-    frames = ['⠇', '⠋', '⠙', '⠴', '⠋', '⠙', '⠸', '⠴', '⠦'],
+    style,
+    frames,
     interval = 80,
     color = 'yellow',
     autoStart = true,
   } = options;
 
+  // Determine which frames to use: custom frames override style
+  const finalFrames = frames ?? (style ? SPINNER_FRAMES[style] : ['⠇', '⠋', '⠙', '⠴', '⠋', '⠙', '⠸', '⠴', '⠦']);
+
   let currentFrameIndex = 0;
   let intervalId: NodeJS.Timeout | null = null;
   let onUpdateCallback: (() => void) | null = null;
+  let cleanupRegistered = false;
 
   const render: Component = (ctx: RenderContext) => {
     // Store the onUpdate callback from context (set by region)
@@ -41,7 +55,15 @@ export function Spinner(options: SpinnerOptions = {}): {
       }
     }
     
-    const frame = frames[currentFrameIndex];
+    // Register cleanup callback to stop the interval when component is removed (only once)
+    if (ctx.onCleanup && !cleanupRegistered) {
+      cleanupRegistered = true;
+      ctx.onCleanup(() => {
+        stop();
+      });
+    }
+    
+    const frame = finalFrames[currentFrameIndex];
     if (color) {
       return applyStyle(frame, { color });
     }
@@ -54,7 +76,7 @@ export function Spinner(options: SpinnerOptions = {}): {
     }
 
     intervalId = setInterval(() => {
-      currentFrameIndex = (currentFrameIndex + 1) % frames.length;
+      currentFrameIndex = (currentFrameIndex + 1) % finalFrames.length;
       // Trigger re-render using the callback from RenderContext
       if (onUpdateCallback) {
         onUpdateCallback();

@@ -48,3 +48,20 @@ export function getLineNumberColor(): 'black' | 'brightBlack' {
   return isDarkTerminal() ? 'brightBlack' : 'black';
 }
 
+/**
+ * Get a colored line number color based on terminal theme
+ * 
+ * On dark terminals: returns 'blue' (muted, less contrasty blue)
+ * On light terminals: returns 'brightBlue' (muted, less contrasty blue)
+ * 
+ * This provides a subtle, less contrasty color for line numbers that still
+ * has a blue shade, working well in both dark and light terminal themes.
+ * 
+ * @returns Color name suitable for colored line numbers
+ */
+export function getColoredLineNumberColor(): 'blue' | 'brightBlue' {
+  // On dark terminals, use blue (muted, less contrasty than cyan)
+  // On light terminals, use brightBlue (lighter, less contrasty than blue)
+  return isDarkTerminal() ? 'blue' : 'brightBlue';
+}
+

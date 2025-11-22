@@ -176,6 +176,25 @@ async function main() {
   );
   await prompt(r);
 
+  // Example 11: Large line numbers (999, 1000, 1001) - testing right alignment
+  r.set(
+    CodeDebug({
+      startLine: 1000,
+      startColumn: 10,
+      endLine: 1000,
+      endColumn: 20,
+      errorLine: '    const result = calculateValue();',
+      lineBefore: '  function process() {',
+      lineAfter: '    return result;',
+      message: 'Testing large line numbers to ensure proper right alignment',
+      filePath: 'src/large-file.ts',
+      fullPath: path.join(baseDir, 'src/large-file.ts'),
+      baseDir,
+      type: 'error',
+    })
+  );
+  await prompt(r);
+
   r.destroy(true);
 }
 

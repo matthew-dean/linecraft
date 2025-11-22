@@ -76,20 +76,20 @@ async function main() {
 
   await prompt(r);
 
-  // Section 5: SpaceBetween with different character
+  // Section 5: Multiple rows with aligned columns
   r.add(
-    Section({ title: 'Space Between (Flex Column)' },
-      Grid({ template: [20, '1*', 20], columnGap: 2, spaceBetween: { char: '·', color: 'brightCyan' } },
+    Section({ title: 'Multiple Rows with Aligned Columns' },
+      Grid({ 
+        columns: [20, 20],  // 2 explicit columns - children wrap to new rows
+        columnGap: 2,
+        rowGap: 1,
+        spaceBetween: { char: '·', color: 'brightCyan' } 
+      },
         Styled({ color: 'cyan' }, 'Left'),
-        Styled({ color: 'brightBlack' }, ''),
-        Styled({ color: 'cyan' }, 'Right')
+        Styled({ color: 'cyan' }, 'Right'),
+        fill({ char: '─', color: 'brightCyan' }),
+        fill({ char: '─', color: 'brightCyan' }),
       ),
-      // Visual indicator
-      Grid({ template: [20, '1*', 20], columnGap: 2 },
-        fill({ char: '─', color: 'brightCyan' }),
-        fill({ char: '─', color: 'brightCyan' }),
-        fill({ char: '─', color: 'brightCyan' })
-      )
     )
   );
 

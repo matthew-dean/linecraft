@@ -2,7 +2,7 @@ Output docs/examples/spinner.gif
 Set FontSize 16
 Set Width 800
 Set Height 350
-Set Theme "Dracula"
+Set Theme "nord"
 Set Padding 30
 
 Type "pnpm example spinner"

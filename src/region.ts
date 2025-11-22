@@ -34,6 +34,9 @@ function getComponentHeight(component: Component, region: TerminalRegion, width:
  * The caller is responsible for writing the content to the appropriate position
  */
 function renderComponent(component: Component, region: TerminalRegion, width: number): string[] {
+  // Track cleanup callback for this component
+  let cleanupCallback: (() => void) | undefined;
+  
   const ctx = {
     availableWidth: width,
     region: region,
@@ -44,9 +47,17 @@ function renderComponent(component: Component, region: TerminalRegion, width: nu
       // Re-render the last content to update animated components
       region.reRenderLastContent();
     },
+    // Provide onCleanup callback for components to register cleanup
+    onCleanup: (callback: () => void) => {
+      cleanupCallback = callback;
+      region.registerComponentCleanup(callback);
+    },
   };
   
   const result = typeof component === 'function' ? component(ctx) : component.render(ctx);
+  
+  // If component registered a cleanup callback, it's already stored in region
+  // (cleanupCallback is just for reference, the region already has it)
   
   if (result === null) return [];
   
@@ -203,6 +214,8 @@ export class TerminalRegion {
   // Track ALL component descriptors that have been set/added, so we can re-render them
   // This is an array of descriptors (or arrays of descriptors for multi-line sections)
   private allComponentDescriptors: any[] = [];
+  // Track cleanup callbacks registered by components (called when components are removed/replaced)
+  private componentCleanupCallbacks: Array<() => void> = [];
   // Track explicitly added content (prompts, whitespace added via add() or setLine())
   // Components are re-rendered from allComponentDescriptors, so they don't need to be tracked here
   // TODO: With signals, we'll track signal dependencies and re-render only what changed
@@ -287,11 +300,36 @@ export class TerminalRegion {
   }
 
   /**
+   * Register a cleanup callback for a component (called when component is removed/replaced)
+   * @internal
+   */
+  registerComponentCleanup(callback: () => void): void {
+    this.componentCleanupCallbacks.push(callback);
+  }
+
+  /**
+   * Call all registered cleanup callbacks and clear them
+   * @internal
+   */
+  private cleanupAllComponents(): void {
+    for (const callback of this.componentCleanupCallbacks) {
+      try {
+        callback();
+      } catch (err) {
+        // Ignore errors in cleanup callbacks
+        console.error('Error in component cleanup callback:', err);
+      }
+    }
+    this.componentCleanupCallbacks = [];
+  }
+
+  /**
    * Remove a component from allComponentDescriptors (for internal use by ComponentReference)
    * @internal
    */
   removeComponent(componentIndex: number): void {
     if (componentIndex >= 0 && componentIndex < this.allComponentDescriptors.length) {
+      // Cleanup is handled by cleanupAllComponents when components are replaced
       this.allComponentDescriptors.splice(componentIndex, 1);
     }
   }
@@ -378,6 +416,9 @@ export class TerminalRegion {
     
     // Check if first item is a Component (object with render method or function)
     if (allContent.length > 0 && isComponent(allContent[0])) {
+      // Cleanup: Call cleanup callbacks from old components before replacing
+      this.cleanupAllComponents();
+      
       // Component(s)
       this.allComponentDescriptors = [allContent.length > 1 ? allContent : allContent[0]];
       
@@ -743,9 +784,12 @@ export class TerminalRegion {
     this.renderer.clear();
   }
 
+  /**
+   * Force immediate render of any pending updates (bypasses throttle)
+   * Returns a promise that resolves when rendering is complete
+   * @internal - Internal method, not part of public API
+   */
   async flush(): Promise<void> {
-    // Force immediate render of any pending updates (bypasses throttle)
-    // Returns a promise that resolves when rendering is complete
     await this.renderer.flush();
   }
 
@@ -1017,6 +1061,8 @@ export class TerminalRegion {
   }
 
   async destroy(clearFirst: boolean = false): Promise<void> {
+    // Cleanup: Call all component cleanup callbacks before destroying
+    this.cleanupAllComponents();
     await this.renderer.destroy(clearFirst);
   }
 }

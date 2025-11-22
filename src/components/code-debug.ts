@@ -7,7 +7,7 @@ import { applyStyle } from '../utils/colors';
 import { truncateEnd, truncateStart, wrapText, stripAnsi, truncateToWidth } from '../utils/text';
 import { fileLink } from '../utils/file-link';
 import { Section } from './section';
-import { getLineNumberColor } from '../utils/terminal-theme';
+import { getLineNumberColor, getColoredLineNumberColor } from '../utils/terminal-theme';
 
 export type CodeDebugType = 'error' | 'warning' | 'info';
 
@@ -199,15 +199,18 @@ export function CodeDebug(options: CodeDebugOptions): Component {
     const colorScheme = colors[type];
     
     // Get appropriate line number color based on terminal theme
-    const lineNumberColor = getLineNumberColor();
+    const lineNumberColor = getColoredLineNumberColor(); // For line numbers (colored)
     
-    // Calculate available width for code (reserve space for line numbers and 2 spaces)
-    const lineNumWidth = Math.max(
-      String(startLine + 1).length,
-      String(startLine).length,
-      lineBefore !== null && lineBefore !== undefined ? String(startLine - 1).length : 0,
-      lineAfter !== null && lineAfter !== undefined ? String(startLine + 1).length : 0
-    );
+    // Calculate available width for code (reserve space for line numbers, separator, and spaces)
+    // Calculate the maximum width needed for any line number that will be displayed
+    const lineNumbersToCheck: number[] = [startLine];
+    if (lineBefore !== null && lineBefore !== undefined) {
+      lineNumbersToCheck.push(startLine - 1);
+    }
+    if (lineAfter !== null && lineAfter !== undefined) {
+      lineNumbersToCheck.push(startLine + 1);
+    }
+    const lineNumWidth = Math.max(...lineNumbersToCheck.map(n => String(n).length));
     const codeAreaWidth = availableWidth - lineNumWidth - 2; // -2 for "  " (2 spaces)
     
     // Calculate visible range for error line

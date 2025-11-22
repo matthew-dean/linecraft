@@ -150,13 +150,52 @@ Sleep 4s
 - `Backspace` - Press backspace
 - `ArrowUp`, `ArrowDown`, `ArrowLeft`, `ArrowRight` - Arrow keys
 
+## Recording Responsive Behavior
+
+To record demos that show responsive behavior (like terminal resizing), you have two options:
+
+### Option 1: Manual Recording (Recommended for Responsive Demos)
+
+For demos that respond to terminal resizing, use `vhs record` to capture your actual terminal interactions:
+
+```bash
+# Start recording
+vhs record > docs/examples/reactive-resize.tape
+
+# Run your demo
+pnpm example reactive-resize
+
+# Resize your terminal window manually to show responsiveness
+# Press Ctrl+C or type 'exit' when done
+
+# Generate GIF
+vhs docs/examples/reactive-resize.tape
+```
+
+This captures the actual resize events and terminal responses.
+
+### Option 2: Scripted Resize (If Supported)
+
+Some versions of vhs may support changing dimensions mid-recording:
+
+```tape
+Set Width 600
+# ... run demo ...
+Set Width 900  # Change width
+Sleep 1s
+Set Width 400  # Change again
+```
+
+**Note**: This may not work in all vhs versions. Test first or use Option 1.
+
 ## Tips
 
 1. **Adjust timing**: Use `Sleep` commands to give enough time for animations to complete
 2. **Set appropriate dimensions**: Match width/height to your terminal size for best results
-3. **Use themes**: Popular themes include "Catppuccin Mocha", "Dracula", "Nord", "One Dark"
+3. **Use themes**: Popular themes include "Nord", "Catppuccin Mocha", "Dracula", "One Dark"
 4. **Test interactively**: Run the example manually first to understand timing
 5. **Padding**: Add padding for better visual appearance in the GIF
+6. **Responsive demos**: Use `vhs record` for demos that need actual terminal resizing
 
 ## Resources
 

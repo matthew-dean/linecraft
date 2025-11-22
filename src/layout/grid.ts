@@ -43,11 +43,37 @@ export type GridTemplateEntry =
   | { min: number; width: string };  // Minmax: { min: 40, width: '2*' }
 
 export interface GridOptions {
-  /** Column template: fixed widths, flex units, or minmax */
-  template: GridTemplateEntry[];
+  /** Explicit column definitions (like CSS grid-template-columns) */
+  columns?: GridTemplateEntry[];
+  
+  /** Size for implicitly created columns when there are more children than explicit columns (like CSS grid-auto-columns) */
+  autoColumns?: GridTemplateEntry;
+  
+  /** 
+   * Column template (deprecated, use `columns` + `autoColumns` instead)
+   * When using `template`, the last value acts as the `autoColumns` value for implicitly created columns.
+   * Example: `template: [20, 20]` means 2 explicit columns of 20, and auto columns will also be 20.
+   */
+  template?: GridTemplateEntry[];
+  
+  /** 
+   * Explicit row definitions (like CSS grid-template-rows)
+   * If not specified, rows are created automatically as needed (auto-wrapping).
+   * When specified, children wrap to new rows when explicit columns are filled.
+   */
+  rows?: number[]; // Row heights in lines (e.g., [1, 1] for two 1-line rows)
+  
+  /** 
+   * Height for implicitly created rows when there are more children than explicit rows (like CSS grid-auto-rows)
+   * Defaults to 1 line if not specified.
+   */
+  autoRows?: number;
   
   /** Spaces between columns (default: 0) */
   columnGap?: number;
+  
+  /** Spaces between rows (default: 0) */
+  rowGap?: number;
   
   /** Characters to draw between columns (fills blank space until next column) */
   spaceBetween?: FillChar | FillChar[];
@@ -103,13 +129,41 @@ function parseTemplateEntry(entry: GridTemplateEntry): TrackSize {
  * Calculate column widths from template
  * Reference: https://www.w3.org/TR/css-grid-1/#track-sizing
  */
-function expandTemplate(template: GridTemplateEntry[], count: number): GridTemplateEntry[] {
+function expandTemplate(
+  columns: GridTemplateEntry[] | undefined,
+  autoColumns: GridTemplateEntry | undefined,
+  template: GridTemplateEntry[] | undefined,
+  count: number
+): GridTemplateEntry[] {
+  // Priority: if columns/autoColumns are specified, use those (new API)
+  // Otherwise, if template is specified, use it where last value acts as autoColumns
+  // Otherwise, default to empty columns with '1*' autoColumns
+  
+  let explicitColumns: GridTemplateEntry[];
+  let autoColumn: GridTemplateEntry;
+  
+  if (columns !== undefined || autoColumns !== undefined) {
+    // New API: explicit columns and/or autoColumns
+    explicitColumns = columns ?? [];
+    autoColumn = autoColumns ?? '1*';
+  } else if (template !== undefined) {
+    // Deprecated API: template where last value acts as autoColumns
+    explicitColumns = template;
+    autoColumn = template.length > 0 ? template[template.length - 1] : '1*';
+  } else {
+    // No columns specified: default to empty with '1*' autoColumns
+    explicitColumns = [];
+    autoColumn = '1*';
+  }
+  
   const expanded: GridTemplateEntry[] = [];
   for (let i = 0; i < count; i++) {
-    if (i < template.length) {
-      expanded.push(template[i]);
+    if (i < explicitColumns.length) {
+      expanded.push(explicitColumns[i]);
     } else {
-      expanded.push(template[template.length - 1] ?? '1*');
+      // Apply the same autoColumn value to all implicitly created columns
+      // (CSS Grid's grid-auto-columns is a single value applied to all auto columns)
+      expanded.push(autoColumn);
     }
   }
   if (expanded.length === 0) {
@@ -291,7 +345,17 @@ export function grid(
     return child;
   });
   return (ctx: RenderContext) => {
-    const { template, columnGap = 0, spaceBetween, justify = 'start' } = options;
+    const { 
+      columns, 
+      autoColumns, 
+      template, 
+      rows,
+      autoRows = 1,
+      columnGap = 0, 
+      rowGap = 0,
+      spaceBetween, 
+      justify = 'start' 
+    } = options;
     
     // Filter out null children (from when conditions)
     const validChildren = convertedChildren.filter(c => c !== null && c !== undefined);
@@ -300,8 +364,117 @@ export function grid(
       return null;
     }
     
+    // Determine number of explicit columns
+    const explicitColumns = columns ?? template ?? [];
+    const numColumns = explicitColumns.length > 0 ? explicitColumns.length : 1;
+    
+    // Group children into rows (wrap when exceeding numColumns)
+    const rowsData: Component[][] = [];
+    for (let i = 0; i < validChildren.length; i += numColumns) {
+      rowsData.push(validChildren.slice(i, i + numColumns));
+    }
+    
+    // If we have multiple rows, render them separately and stack vertically
+    if (rowsData.length > 1) {
+      // Calculate column widths based on the first row (all rows use same column widths for alignment)
+      const firstRowChildren = rowsData[0] ?? [];
+      const expandedTemplate = expandTemplate(columns, autoColumns, template, firstRowChildren.length);
+      const tracks = expandedTemplate.map(parseTemplateEntry);
+      
+      // Measure content widths for column sizing (use first row as reference)
+      const autoContentWidths = measureAutoContentWidths(
+        tracks,
+        firstRowChildren,
+        (index) => createChildContext(ctx, {
+          availableWidth: Number.POSITIVE_INFINITY,
+          columnIndex: index,
+          rowIndex: 0,
+        })
+      );
+      const columnWidths = calculateColumnWidths(
+        tracks,
+        ctx.availableWidth,
+        columnGap,
+        autoContentWidths
+      );
+      
+      // Render each row
+      const allRowLines: string[] = [];
+      for (let rowIdx = 0; rowIdx < rowsData.length; rowIdx++) {
+        const rowChildren = rowsData[rowIdx];
+        const rowHeight = rows?.[rowIdx] ?? autoRows;
+        
+        // Render this row's children
+        const rowResults: (string | string[] | null)[] = [];
+        for (let colIdx = 0; colIdx < rowChildren.length; colIdx++) {
+          const child = rowChildren[colIdx];
+          const width = columnWidths[colIdx] ?? 0;
+          
+          const childCtx = createChildContext(ctx, {
+            availableWidth: width,
+            columnIndex: colIdx,
+            rowIndex: rowIdx,
+          });
+          
+          const result = callComponent(child, childCtx);
+          rowResults.push(result);
+        }
+        
+        // Build row lines (handle multi-line children)
+        const maxRowLines = Math.max(
+          ...rowResults.map(r => Array.isArray(r) ? r.length : 1),
+          rowHeight
+        );
+        
+        for (let lineIdx = 0; lineIdx < maxRowLines; lineIdx++) {
+          const lineParts: string[] = [];
+          for (let colIdx = 0; colIdx < rowChildren.length; colIdx++) {
+            const result = rowResults[colIdx];
+            const columnWidth = columnWidths[colIdx] ?? 0;
+            
+            let columnContent: string;
+            if (result === null) {
+              columnContent = ' '.repeat(columnWidth);
+            } else if (Array.isArray(result)) {
+              columnContent = result[lineIdx] ?? '';
+            } else {
+              columnContent = lineIdx === 0 ? result : '';
+            }
+            
+            const plainContent = stripAnsi(columnContent);
+            const paddedContent = plainContent.length < columnWidth
+              ? columnContent + ' '.repeat(columnWidth - plainContent.length)
+              : columnContent;
+            lineParts.push(paddedContent);
+            
+            // Add column gap
+            if (colIdx < rowChildren.length - 1 && columnGap > 0) {
+              lineParts.push(' '.repeat(columnGap));
+            }
+          }
+          
+          const line = lineParts.join('');
+          const plainLine = stripAnsi(line);
+          const paddedLine = plainLine.length < ctx.availableWidth
+            ? line + ' '.repeat(ctx.availableWidth - plainLine.length)
+            : line;
+          allRowLines.push(paddedLine);
+        }
+        
+        // Add row gap (except after last row)
+        if (rowIdx < rowsData.length - 1 && rowGap > 0) {
+          for (let i = 0; i < rowGap; i++) {
+            allRowLines.push(' '.repeat(ctx.availableWidth));
+          }
+        }
+      }
+      
+      return allRowLines;
+    }
+    
+    // Single row rendering (original logic)
     // Calculate column widths
-    const expandedTemplate = expandTemplate(template, validChildren.length);
+    const expandedTemplate = expandTemplate(columns, autoColumns, template, validChildren.length);
     const tracks = expandedTemplate.map(parseTemplateEntry);
     const autoContentWidths = measureAutoContentWidths(
       tracks,

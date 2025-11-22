@@ -1,103 +1,93 @@
 # Linecraft
 
-> **Beautiful, high-performance terminal UI library for Node.js** 🎨
+Build terminal UIs with components. Create progress bars, spinners, code error displays, and responsive layouts without the hassle.
 
-Linecraft makes it easy to build stunning terminal interfaces with components, layouts, and responsive design. Create progress bars, spinners, code debuggers, and more with a clean, component-based API.
-
-## ✨ Features
-
-- 🎯 **Component-based** - Build UIs with reusable components
-- 📐 **Responsive layouts** - Automatic resizing and reflow
-- 🎨 **Beautiful styling** - Colors, borders, and typography
-- ⚡ **High performance** - Efficient diffing and minimal terminal updates
-- 🔧 **Type-safe** - Full TypeScript support
-- 🎭 **Flexible** - Works with any terminal that supports ANSI codes
-
-## 📦 Installation
+## Installation
 
 ```bash
 npm install linecraft
 # or
 pnpm add linecraft
-# or
-yarn add linecraft
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ```typescript
-import { Region, Styled, Spinner } from 'linecraft';
+import { Region, Styled, Spinner, Section, Grid } from 'linecraft';
 
 const r = Region();
 
-// Add styled text
-r.set(Styled({ color: 'brightCyan', bold: true }, 'Hello, Linecraft!'));
+// Set some content
+r.set(
+  Section({ title: 'Hello' },
+    Grid({ template: [20, '1*'], columnGap: 2 },
+      Styled({ color: 'cyan' }, 'Status:'),
+      Styled({ color: 'green' }, 'Ready')
+    )
+  )
+);
 
 // Add a spinner
-const spinner = r.add(Spinner({ frames: ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'] }));
-await new Promise(resolve => setTimeout(resolve, 2000));
-spinner.delete();
+r.set(
+  Section({ title: 'Loading' },
+    Grid({ template: [3, '1*'], columnGap: 1 },
+      Spinner({ style: 'classic-dots', color: 'green' }),
+      Styled({ color: 'white' }, 'Installing packages...')
+    )
+  )
+);
 
-r.destroy();
+// Clean up when done
+r.destroy(true);
 ```
 
-## 📚 Core API
+## Core API
 
-### Creating a Region
+### Region
 
-A `Region` is a managed area of the terminal that handles rendering, resizing, and component lifecycle.
+A region is a managed area of your terminal. It handles rendering, resizing, and component updates.
 
 ```typescript
-import { Region } from 'linecraft';
-
 const r = Region({
-  width: 80,        // Optional: auto-detects terminal width
+  width: 80,        // Optional: auto-detects if not set
   height: 1,        // Optional: expands as needed
-  debugLog: 'debug.log' // Optional: log rendering operations
+  debugLog: 'debug.log' // Optional: log rendering for debugging
 });
 ```
 
 ### Setting Content
 
-Use `set()` to replace all content, or `add()` to append:
-
 ```typescript
 // Replace all content
 r.set('Hello, world!');
 
-// Append content
-r.add('Line 1');
-r.add('Line 2');
+// Or use components
+r.set(Styled({ color: 'green' }, 'Success!'));
 
-// Add components
-r.set(MyComponent());
-const ref = r.add(AnotherComponent());
-ref.delete(); // Remove later
+// Append content (returns a reference you can use to delete later)
+const ref = r.add('Line 2');
+ref.delete(); // Remove it
 ```
 
-### Flushing and Cleanup
+### Cleanup
 
 ```typescript
-await r.flush(); // Ensure all pending renders complete
-r.destroy();     // Clean up and restore terminal
+r.destroy(true); // Clean up and restore terminal (true = clear first)
 ```
 
-## 🧩 Built-in Components
+## Components
 
 ### Styled
 
-Apply colors, bold, italic, and more to text:
-
-![Styled Example](docs/examples/styled.gif)
+Apply colors and styling to text.
 
 ```typescript
 import { Styled } from 'linecraft';
 
 r.set(Styled({ 
   color: 'brightGreen', 
-  bold: true,
-  backgroundColor: 'black'
-}, 'Bold green text on black'));
+  bold: true
+}, 'Bold green text'));
 ```
 
 **Options:**
@@ -111,7 +101,7 @@ r.set(Styled({
 
 ### Section
 
-Wrap content in a beautiful bordered box with optional title:
+Wrap content in a bordered box with an optional title.
 
 ![Section Example](docs/examples/section.gif)
 
@@ -119,16 +109,7 @@ Wrap content in a beautiful bordered box with optional title:
 import { Section } from 'linecraft';
 
 r.set(Section(
-  {
-    title: 'My Section',
-    titleColor: 'brightCyan',
-    borderColor: 'brightBlack',
-    padding: 1,
-    left: true,
-    right: true,
-    top: true,
-    bottom: true
-  },
+  { title: 'My Section' },
   'Content goes here'
 ));
 ```
@@ -145,9 +126,9 @@ r.set(Section(
 
 ### CodeDebug
 
-Display code errors and warnings with beautiful formatting, line numbers, and context:
+Display code errors and warnings with line numbers, context, and clickable file paths.
 
-[![asciicast](https://asciinema.org/a/code-debug-example.svg)](https://asciinema.org/a/code-debug-example)
+![CodeDebug Example](docs/examples/code-debug.gif)
 
 ```typescript
 import { CodeDebug } from 'linecraft';
@@ -164,8 +145,7 @@ r.set(CodeDebug({
   filePath: 'src/loaders/data.ts',
   fullPath: '/absolute/path/to/src/loaders/data.ts',
   baseDir: process.cwd(),
-  type: 'error', // 'error' | 'warning' | 'info'
-  maxColumn: 100 // Optional: force truncation before this column
+  type: 'error' // 'error' | 'warning' | 'info'
 }));
 ```
 
@@ -179,30 +159,40 @@ r.set(CodeDebug({
 
 ### Spinner
 
-Animated spinner for loading states:
+Animated spinners for loading states. Includes built-in styles or use custom frames.
 
 ![Spinner Example](docs/examples/spinner.gif)
 
 ```typescript
 import { Spinner } from 'linecraft';
 
-const spinner = r.add(Spinner({
-  frames: ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'],
-  interval: 80
+// Built-in styles
+r.set(Spinner({
+  style: 'classic-dots', // or 'bouncing-bar'
+  color: 'green',
+  interval: 100
 }));
 
-// Later...
-spinner.stop();
-spinner.delete();
+// Custom frames
+r.set(Spinner({
+  frames: ['⠋', '⠙', '⠹', '⠸'],
+  color: 'yellow',
+  interval: 80
+}));
 ```
 
 **Options:**
-- `frames?: string[]` - Array of characters to cycle through
-- `interval?: number` - Milliseconds between frames (default: 100)
+- `style?: 'classic-dots' | 'bouncing-bar'` - Built-in animation style
+- `frames?: string[]` - Custom frames (overrides style if provided)
+- `interval?: number` - Milliseconds between frames (default: 80)
+- `color?: Color` - Spinner color
+- `autoStart?: boolean` - Start automatically (default: true)
+
+Spinners automatically stop when components are replaced or the region is destroyed.
 
 ### ProgressBar
 
-Beautiful progress bars with labels:
+Progress bars with customizable colors and styling.
 
 ![ProgressBar Example](docs/examples/progressbar.gif)
 
@@ -212,19 +202,22 @@ import { progressBar } from 'linecraft';
 r.set(progressBar({
   current: 75,
   total: 100,
-  label: 'Processing',
-  width: 50,
-  style: {
-    complete: '█',
-    incomplete: '░',
-    brackets: ['[', ']']
-  }
+  barColor: 'green',
+  bracketColor: 'brightBlack',
+  percentColor: 'yellow'
 }));
 ```
 
+**Options:**
+- `current: number` - Current progress value
+- `total: number` - Total/max value
+- `barColor?: Color` - Color of the filled bar
+- `bracketColor?: Color` - Color of brackets
+- `percentColor?: Color` - Color of percentage text
+
 ### Segments
 
-Create segmented displays (like oh-my-zsh style prompts):
+Create segmented displays (like oh-my-zsh style prompts).
 
 ![Segments Example](docs/examples/segments.gif)
 
@@ -233,18 +226,66 @@ import { Segments } from 'linecraft';
 
 r.set(Segments({
   segments: [
-    { text: 'user@host', color: 'brightGreen', backgroundColor: 'blue' },
-    { text: '~/projects', color: 'white', backgroundColor: 'brightBlue' },
-    { text: 'main', color: 'black', backgroundColor: 'white' }
+    { content: 'user@host', color: 'brightGreen', backgroundColor: 'blue' },
+    { content: '~/projects', color: 'white', backgroundColor: 'brightBlue' },
+    { content: 'main', color: 'black', backgroundColor: 'white' }
   ],
-  separator: { char: '▶', color: 'blue' },
-  style: 'round'
+  borderStyle: 'cap' // 'cap' | 'brace' | 'round' | 'square' | 'none'
 }));
 ```
 
+**Options:**
+- `segments: Array<{ content: string, color?: Color, backgroundColor?: Color, borderStyle?: BorderStyle }>` - Array of segments
+- `borderStyle?: BorderStyle` - Style for segment borders ('cap', 'brace', 'round', 'square', 'none')
+
+### Grid
+
+Create responsive grid layouts. Children automatically wrap to new rows when they exceed the number of explicit columns.
+
+![Grid Example](docs/examples/grid.gif)
+
+```typescript
+import { Grid } from 'linecraft';
+
+// Basic grid
+r.set(Grid({ template: [20, '1*'], columnGap: 2 },
+  Styled({ color: 'cyan' }, 'Label:'),
+  Styled({ color: 'yellow' }, 'Value')
+));
+
+// Multiple rows (children wrap automatically)
+r.set(Grid({ 
+  columns: [20, 20],  // 2 columns per row
+  autoColumns: 20,     // Size for extra columns
+  columnGap: 2,
+  rowGap: 1
+},
+  Styled({ color: 'cyan' }, 'Left'),
+  Styled({ color: 'cyan' }, 'Right'),
+  fill({ char: '─', color: 'brightCyan' }),
+  fill({ char: '─', color: 'brightCyan' })
+));
+```
+
+**Options:**
+- `columns?: GridTemplateEntry[]` - Explicit column definitions (like CSS `grid-template-columns`)
+- `autoColumns?: GridTemplateEntry` - Size for implicitly created columns (like CSS `grid-auto-columns`)
+- `columnGap?: number` - Spaces between columns (default: 0)
+- `rowGap?: number` - Spaces between rows (default: 0)
+- `spaceBetween?: FillChar | FillChar[]` - Characters to draw between columns
+- `justify?: 'start' | 'end' | 'center' | 'space-between'` - Justify content
+
+**Template entries:**
+- Fixed width: `20`, `30`
+- Flex units: `'1*'`, `'2*'` (like CSS `1fr`, `2fr`)
+- Minmax: `{ min: 40, width: '2*' }`
+- Auto: `'auto'` (content-based sizing)
+
 ### Fill
 
-Fill available space with a character:
+Fill available space with a character. Typically used within grids.
+
+![Fill Example](docs/examples/fill.gif)
 
 ```typescript
 import { fill } from 'linecraft';
@@ -252,37 +293,11 @@ import { fill } from 'linecraft';
 r.set(fill({ char: '─', color: 'brightBlack' }));
 ```
 
-**Note:** The `fill` component is typically used within grids to fill available space. See the Grid example above for usage.
+## Utilities
 
-### Grid
+### Prompt
 
-Create responsive grid layouts:
-
-![Grid Example](docs/examples/grid.gif)
-
-```typescript
-import { Grid } from 'linecraft';
-
-r.set(Grid({
-  columns: [
-    { width: 'auto' },
-    { width: '1fr' },
-    { width: 'auto' }
-  ],
-  gap: 1,
-  children: [
-    Styled({ color: 'red' }, 'Left'),
-    Styled({ color: 'green' }, 'Center'),
-    Styled({ color: 'blue' }, 'Right')
-  ]
-}));
-```
-
-## 🎯 Advanced Usage
-
-### Prompt Utility
-
-Wait for user input:
+Wait for user input before continuing.
 
 ```typescript
 import { prompt } from 'linecraft';
@@ -294,43 +309,20 @@ await prompt(r, {
 });
 ```
 
-### Custom Components
-
-Components are just functions that return strings or arrays:
-
-```typescript
-function MyComponent(): Component {
-  return (ctx: RenderContext) => {
-    return `Hello! Width: ${ctx.availableWidth}`;
-  };
-}
-
-r.set(MyComponent());
-```
-
-### Responsive Behavior
-
-Regions automatically re-render on terminal resize. Components receive updated widths and reflow accordingly:
-
-```typescript
-// This component will automatically re-render when terminal resizes
-r.set(Styled({ overflow: 'wrap' }, longText));
-```
-
-## 🎨 Colors
+## Colors
 
 Available colors:
 - `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`
 - `brightBlack`, `brightRed`, `brightGreen`, `brightYellow`, `brightBlue`, `brightMagenta`, `brightCyan`, `brightWhite`
 
-## 📖 Examples
+## Examples
 
-Check out the `examples/` directory for more examples:
+Check out the `examples/` directory:
 
-- `basic-progress.ts` - Progress bars
+- `progress.ts` - Progress bars (basic and multi-lane)
 - `spinner.ts` - Animated spinners
 - `code-debug.ts` - Code error display
-- `grid-*.ts` - Grid layout examples
+- `grid-all-features.ts` - Grid layout examples
 - `segments.ts` - Segmented displays
 
 Run examples with:
@@ -338,37 +330,31 @@ Run examples with:
 pnpm example <name>
 ```
 
-## 🔧 API Reference
+## API Reference
 
 ### Region Methods
 
 - `set(content)` - Replace all content
-- `add(content)` - Append content, returns `SectionReference` or `ComponentReference`
-- `setLine(lineNumber, content)` - Set a specific line
-- `flush()` - Ensure all renders complete
+- `add(content)` - Append content, returns `ComponentReference` or `SectionReference`
 - `destroy(clearFirst?)` - Clean up and restore terminal
-- `get width` - Current region width
-- `get height` - Current region height
+- `width` - Current region width (read-only)
+- `height` - Current region height (read-only)
 
-### Component Reference
+### ComponentReference
 
 - `delete()` - Remove the component from the region
 
-### Section Reference
+### SectionReference
 
 - `update(content)` - Update the section content
 - `delete()` - Remove the section from the region
 
-## 🤝 Contributing
+## Contributing
 
 Contributions welcome! Please open an issue or PR.
 
 **Creating example recordings?** See [docs/creating-recordings.md](docs/creating-recordings.md) for a guide on using vhs to create animated GIFs.
 
-## 📄 License
+## License
 
 MIT
-
----
-
-**Made with ❤️ for beautiful terminal UIs**
