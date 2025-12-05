@@ -381,4 +381,15 @@ Contributions welcome! Please open an issue or PR.
 
 ## License
 
-MIT
+This project is licensed under the **Fair Labor License (FLL) v1.1**.
+
+- If you are an individual with a net worth under **$1M USD**, or  
+- Your organization is **Fair Labor Compliant** (your CEO or highest-paid executive makes no more than **15×** your median employee’s total annual compensation),
+
+then you may use this software **for free**, subject to the terms of the license.
+
+If you do **not** meet these conditions and use this software in production or for business value, you must obtain a **paid license**, for example via [fllicense.org](https://fllicense.org).
+
+You may freely evaluate and test this software for up to **90 days** before deciding.
+
+See the full license text in [`LICENSE`](./LICENSE).

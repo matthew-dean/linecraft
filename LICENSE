@@ -1,29 +1,59 @@
-FLL
+Fair Labor License (FLL) v1.1
 
-Copyright (c) 2025 Linecraft Contributors
+© 2025 Linecraft Contributors
 
-Fair Labor License (FLL) v1.0
+SPDX-License-Identifier: LicenseRef-FLL-1.1
 
-1. License Grant
-Subject to the conditions outlined in this license, the author(s) grant permission to any individual or company to use, reproduce, and modify this software free of charge.
+1. Purpose  
+The Fair Labor License exists to ensure that free and open software does not contribute to extreme labor inequality. When organizations compensate their workers fairly, this software is free to use. When they do not, they must purchase a license — ensuring that value created through labor is not taken without accountability.
 
-2. Eligibility Criteria
-This license is available free of charge under the following conditions:
+2. License Grant  
+Subject to the conditions in this license, the author(s) grant permission to any individual or organization to use, reproduce, modify, and distribute this software.
 
-a. Individuals:
-The individual’s total net worth must be under $1 million USD at the time of use.
+3. Evaluation Use Exception  
+Anyone may download, install, and use the software solely for evaluation and testing purposes. Evaluation use may not exceed 90 days and may not include operational, commercial, or production use.
 
-b. Companies:
-The CEO’s total annual compensation must be less than fifteen (15) times the total annual compensation of the company’s median employee.
+4. Fair Compensation Condition (Eligibility for Free Use)  
+This software is free to use for any individual or organization that meets at least one of the following conditions at the time of operational use:
 
-3. License Purchase Requirement
-If an individual or company does not meet the eligibility criteria specified in Section 2, they must obtain a paid license from the author(s) or an authorized distributor before using, reproducing, or modifying this software.
+a. Individuals  
+The individual’s net worth is under 1 million USD.
 
-4. Compliance
-The licensee is responsible for ensuring compliance with the eligibility criteria. Misrepresentation of eligibility will result in the immediate termination of the rights granted under this license.
+b. Organizations  
+The organization is Fair Labor Compliant, defined as:
+- The CEO’s (or highest-paid executive’s) total annual compensation is no more than fifteen (15) times the total annual compensation of the organization’s median employee, and  
+- Eligibility is assessed on a consolidated basis, including all parent and subsidiary entities under common control or brand identity.
 
-5. No Warranty
-This software is provided “as is,” without warranty of any kind, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose, and noninfringement.
+Definitions  
+- “Total annual compensation” includes wages, bonuses, overtime, equity or stock-based compensation, and employer-provided benefits.  
+- “Median employee” refers to the worker whose compensation is the exact midpoint of all workers, including part-time and contract labor when they constitute a majority of operational personnel.  
+- “Operational use” means deployment or use of the software in any product, system, or service that provides business value, revenue, or ongoing internal operations beyond evaluation, whether used directly or indirectly, including when incorporated as a dependency or component of another product, system, or service.
 
-6. Limitation of Liability
-In no event shall the author(s) be liable for any claim, damages, or other liability, whether in an action of contract, tort, or otherwise, arising from, out of, or in connection with the software or the use or other dealings in the software.
+5. Paid License Requirement  
+If an individual or organization does not meet the Fair Compensation Condition at the time of operational use, they must obtain a paid license from the author(s) or an authorized licensing provider such as fllicense.org before such use begins.
+
+Unauthorized operational use constitutes copyright infringement.
+
+6. Self-Attestation and Documentation  
+Licensees utilizing the software under the free-use provisions must self-attest compliance and maintain documentation supporting eligibility. Upon request by the author(s) or a licensing provider, documentation must be provided within 30 days.
+
+Failure to provide documentation is considered a material breach of this license.
+
+7. Change in Eligibility / Cure Period  
+If a licensee’s eligibility changes, they must:
+- Either purchase a paid license within 30 days, or  
+- Immediately cease operational use of the software.
+
+Restoring eligibility restores the rights granted under this license.
+
+8. No Misrepresentation  
+Licensees may not claim to be Fair Labor Compliant, nor use the Fair Labor License name or abbreviations in sales, marketing, or investor materials, unless they meet the Fair Compensation Condition.
+
+9. No Warranty  
+This software is provided “as is”, without warranty of any kind, express or implied, including merchantability, fitness for a particular purpose, and noninfringement. Use is at your own risk.
+
+10. Limitation of Liability  
+In no event shall the author(s) be liable for any claim, damages, or liability arising from the software or its use.
+
+11. Governing Law  
+This license is governed by the copyright law applicable in the jurisdiction of the author(s).

@@ -1,6 +1,6 @@
 {
   "name": "linecraft",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "High-performance terminal UI library for Node.js",
   "type": "module",
   "main": "./lib/index.js",
@@ -22,7 +22,13 @@
     "type": "git",
     "url": "https://github.com/matthew-dean/linecraft.git"
   },
-  "license": "FLL",
+  "license": "LicenseRef-FLL-1.1",
+  "licenses": [
+    {
+      "type": "LicenseRef-FLL-1.1",
+      "url": "https://fllicense.org"
+    }
+  ],
   "scripts": {
     "build:ts": "tsc -p tsconfig.build.json",
     "build": "pnpm build:ts",
