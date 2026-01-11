@@ -1,13 +1,13 @@
 // Code debug component for displaying code errors/warnings with context
 
-import type { RenderContext, Component } from '../component';
-import { callComponent } from '../component';
-import type { Color } from '../types';
-import { applyStyle } from '../utils/colors';
-import { truncateEnd, truncateStart, wrapText, stripAnsi, truncateToWidth } from '../utils/text';
-import { fileLink } from '../utils/file-link';
-import { Section } from './section';
-import { getLineNumberColor, getColoredLineNumberColor } from '../utils/terminal-theme';
+import type { RenderContext, Component } from '../component.js';
+import { callComponent } from '../component.js';
+import type { Color } from '../types.js';
+import { applyStyle } from '../utils/colors.js';
+import { truncateEnd, truncateStart, wrapText, stripAnsi, truncateToWidth } from '../utils/text.js';
+import { fileLink } from '../utils/file-link.js';
+import { Section } from './section.js';
+import { getLineNumberColor, getColoredLineNumberColor } from '../utils/terminal-theme.js';
 
 export type CodeDebugType = 'error' | 'warning' | 'info';
 

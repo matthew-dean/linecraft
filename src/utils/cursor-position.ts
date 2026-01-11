@@ -1,8 +1,8 @@
 // Utility to query terminal cursor position using ANSI DSR (Device Status Report)
 // This allows us to get the actual cursor position after resize/scroll events
 
-import { QUERY_CURSOR_POSITION } from '../native/ansi';
-import { logToFile } from './debug-log';
+import { QUERY_CURSOR_POSITION } from '../native/ansi.js';
+import { logToFile } from './debug-log.js';
 
 export interface CursorPosition {
   row: number;

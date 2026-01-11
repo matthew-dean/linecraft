@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import * as ansi from './ansi';
+import * as ansi from './ansi.js';
 
 describe('ANSI', () => {
   describe('moveCursorTo', () => {

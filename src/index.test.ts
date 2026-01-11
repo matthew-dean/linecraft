@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createRegion, createProgressBar, Spinner } from './index';
-import { TerminalRegion } from './region';
+import { createRegion, createProgressBar, Spinner } from './index.js';
+import { TerminalRegion } from './region.js';
 
 describe('createRegion', () => {
   it('should create a TerminalRegion instance', () => {

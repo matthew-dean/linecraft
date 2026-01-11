@@ -1,4 +1,4 @@
-import type { TerminalRegion } from './region';
+import type { TerminalRegion } from './region.js';
 
 /**
  * RenderContext provides information needed for rendering

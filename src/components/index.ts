@@ -1,6 +1,6 @@
 // Component helpers and utilities
 
 // Re-export component classes and functions
-export { showPrompt } from './prompt';
-export { Section, type SectionOptions } from './section';
+export { Prompt, type PromptOptions } from './prompt.js';
+export { Section, type SectionOptions } from './section.js';
 

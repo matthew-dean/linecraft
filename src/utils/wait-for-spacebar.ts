@@ -1,5 +1,5 @@
-import type { TerminalRegion } from '../region';
-import { logToFile } from './debug-log';
+import type { TerminalRegion } from '../region.js';
+import { logToFile } from './debug-log.js';
 
 /**
  * Wait for spacebar press before continuing

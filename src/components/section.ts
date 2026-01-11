@@ -1,9 +1,9 @@
 // Section component - wraps content in a box with a tabbed title
 
-import type { RenderContext, Component } from '../component';
-import { renderChildren } from '../component';
-import type { Color } from '../types';
-import { applyStyle } from '../utils/colors';
+import type { RenderContext, Component } from '../component.js';
+import { renderChildren } from '../component.js';
+import type { Color } from '../types.js';
+import { applyStyle } from '../utils/colors.js';
 
 export interface SectionOptions {
   title: string;

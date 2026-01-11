@@ -1,8 +1,8 @@
 // Fill component - fills available width with a character
 
-import type { RenderContext, Component } from '../component';
-import type { Color, FillChar } from '../types';
-import { applyStyle } from '../utils/colors';
+import type { RenderContext, Component } from '../component.js';
+import type { Color, FillChar } from '../types.js';
+import { applyStyle } from '../utils/colors.js';
 
 export interface FillOptions {
   backgroundColor?: Color;

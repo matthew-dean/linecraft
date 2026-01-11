@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { TerminalRegion } from './region';
+import { TerminalRegion } from './region.js';
 
 describe('TerminalRegion', () => {
   let region: TerminalRegion;

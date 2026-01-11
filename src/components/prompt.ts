@@ -1,9 +1,9 @@
 // Prompt component - improved API for prompts like "Press SPACEBAR"
 
-import type { TerminalRegion } from '../region';
-import type { Color } from '../types';
-import type { Component } from '../component';
-import { Styled } from './styled';
+import type { TerminalRegion } from '../region.js';
+import type { Color } from '../types.js';
+import type { Component } from '../component.js';
+import { Styled } from './styled.js';
 
 export interface PromptOptions {
   message: string;

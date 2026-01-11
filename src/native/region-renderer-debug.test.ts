@@ -1,7 +1,7 @@
 // Debug test to understand viewport frame calculation during resize
 
 import { describe, it, expect } from 'vitest';
-import { RegionRenderer } from './region-renderer';
+import { RegionRenderer } from './region-renderer.js';
 
 describe('Viewport frame calculation during resize', () => {
   it('should show correct lines when content height changes', () => {

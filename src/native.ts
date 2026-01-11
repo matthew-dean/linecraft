@@ -2,9 +2,9 @@
 // This file is kept for backward compatibility but now just re-exports
 // the native TypeScript implementation
 
-export { RegionRenderer as NativeRegion } from './native/region-renderer';
-export * from './native/diff';
-export * from './native/ansi';
-export * from './native/buffer';
-export * from './native/throttle';
+export { RegionRenderer as NativeRegion } from './native/region-renderer.js';
+export * from './native/diff.js';
+export * from './native/ansi.js';
+export * from './native/buffer.js';
+export * from './native/throttle.js';
 

@@ -1,9 +1,9 @@
 // Segments component - OhMyZsh/Powerline-style colored segments with angled dividers
 
-import type { RenderContext, Component } from '../component';
-import type { Color } from '../types';
-import { applyStyle } from '../utils/colors';
-import { truncateToWidth } from '../utils/text';
+import type { RenderContext, Component } from '../component.js';
+import type { Color } from '../types.js';
+import { applyStyle } from '../utils/colors.js';
+import { truncateToWidth } from '../utils/text.js';
 
 // Simple border styles - only the ones that look good
 export type BorderStyle = 'cap' | 'capHalf' | 'brace' | 'dot' | 'asterisk';

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { RenderBuffer } from './buffer';
+import { RenderBuffer } from './buffer.js';
 
 describe('RenderBuffer', () => {
 

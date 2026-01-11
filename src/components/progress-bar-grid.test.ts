@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { progressBar } from './progress-bar-grid';
-import { TerminalRegion } from '../region';
+import { progressBar } from './progress-bar-grid.js';
+import { TerminalRegion } from '../region.js';
 
 describe('ProgressBar (Grid)', () => {
   let region: TerminalRegion;
