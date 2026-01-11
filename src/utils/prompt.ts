@@ -1,9 +1,9 @@
 // Prompt utility - wait for user input with readable key names
 
-import type { TerminalRegion } from '../region';
-import type { Color } from '../types';
-import { Prompt } from '../components/prompt';
-import { ComponentReference } from '../region';
+import type { TerminalRegion } from '../region.js';
+import type { Color } from '../types.js';
+import { Prompt } from '../components/prompt.js';
+import { ComponentReference } from '../region.js';
 
 export interface PromptOptions {
   message?: string; // e.g., 'continue', 'proceed', 'next'

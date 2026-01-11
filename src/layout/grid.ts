@@ -1,11 +1,11 @@
 // CSS Grid-based layout system for terminal components
 // Simplified grid that eliminates circular measurement complexity
 
-import type { Color, FillChar } from '../types';
-import { applyStyle } from '../utils/colors';
-import { truncateEnd, truncateStart, truncateMiddle, wrapText, getTrimmedTextWidth, stripAnsi } from '../utils/text';
-import type { RenderContext, Component } from '../component';
-import { callComponent, createChildContext } from '../component';
+import type { Color, FillChar } from '../types.js';
+import { applyStyle } from '../utils/colors.js';
+import { truncateEnd, truncateStart, truncateMiddle, wrapText, getTrimmedTextWidth, stripAnsi } from '../utils/text.js';
+import type { RenderContext, Component } from '../component.js';
+import { callComponent, createChildContext } from '../component.js';
 
 /**
  * Extract character and color from spaceBetween option for a specific gap index

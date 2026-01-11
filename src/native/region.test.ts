@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { RegionRenderer } from './region-renderer';
+import { RegionRenderer } from './region-renderer.js';
 
 describe('RegionRenderer', () => {
   let mockStdout: NodeJS.WriteStream;

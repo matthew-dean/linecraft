@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Styled } from './styled';
-import { TerminalRegion } from '../region';
+import { Styled } from './styled.js';
+import { TerminalRegion } from '../region.js';
 
 describe('Style Component', () => {
   let region: TerminalRegion;

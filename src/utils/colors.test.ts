@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { applyStyle } from './colors';
-import type { TextStyle } from '../types';
+import { applyStyle } from './colors.js';
+import type { TextStyle } from '../types.js';
 
 describe('applyStyle', () => {
   it('should return text unchanged when no style is provided', () => {

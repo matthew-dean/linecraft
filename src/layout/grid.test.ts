@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { grid as Grid } from './grid';
-import { Styled } from '../components/styled';
-import { TerminalRegion } from '../region';
-import { callComponent } from '../component';
+import { grid as Grid } from './grid.js';
+import { Styled } from '../components/styled.js';
+import { TerminalRegion } from '../region.js';
+import { callComponent } from '../component.js';
 
 describe('Grid Layout', () => {
   let region: TerminalRegion;

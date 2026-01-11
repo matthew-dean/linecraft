@@ -1,10 +1,10 @@
 // Progress bar component using grid system
 
-import type { Component, RenderContext } from '../component';
-import type { Color } from '../types';
-import { Styled } from './styled';
-import { grid as Grid } from '../layout/grid';
-import { applyStyle } from '../utils/colors';
+import type { Component, RenderContext } from '../component.js';
+import type { Color } from '../types.js';
+import { Styled } from './styled.js';
+import { grid as Grid } from '../layout/grid.js';
+import { applyStyle } from '../utils/colors.js';
 
 export interface ProgressBarOptions {
   current: number;

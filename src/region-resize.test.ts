@@ -1,8 +1,8 @@
 // Unit tests for resize/reflow bug reproduction
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { TerminalRegion } from './region';
-import { Styled } from './components/styled';
+import { TerminalRegion } from './region.js';
+import { Styled } from './components/styled.js';
 
 describe('Region resize and reflow', () => {
   let mockStdout: NodeJS.WriteStream;

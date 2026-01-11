@@ -1,11 +1,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { diffFrames } from './diff';
-import * as ansi from './ansi';
-import { RenderBuffer } from './buffer';
-import { Throttle } from './throttle';
-import { getTerminalHeight as getDefaultTerminalHeight } from '../utils/terminal';
-import { truncateToWidth } from '../utils/text';
+import { diffFrames } from './diff.js';
+import * as ansi from './ansi.js';
+import { RenderBuffer } from './buffer.js';
+import { Throttle } from './throttle.js';
+import { getTerminalHeight as getDefaultTerminalHeight } from '../utils/terminal.js';
+import { truncateToWidth } from '../utils/text.js';
 
 export interface RegionRendererOptions {
   stdout?: NodeJS.WriteStream;

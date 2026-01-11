@@ -1,8 +1,8 @@
-import { RegionRenderer, type RegionRendererOptions } from './native/region-renderer';
-import { applyStyle } from './utils/colors';
-import { getTerminalWidth } from './utils/terminal';
-import type { RegionOptions, LineContent } from './types';
-import type { Component, RenderContext } from './component';
+import { RegionRenderer, type RegionRendererOptions } from './native/region-renderer.js';
+import { applyStyle } from './utils/colors.js';
+import { getTerminalWidth } from './utils/terminal.js';
+import type { RegionOptions, LineContent } from './types.js';
+import type { Component, RenderContext } from './component.js';
 
 /**
  * Type guard to check if an item is a Component

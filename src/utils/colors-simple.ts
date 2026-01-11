@@ -1,7 +1,7 @@
 // Simple color formatting API - less markup required
 
-import { applyStyle } from './colors';
-import type { Color } from '../types';
+import { applyStyle } from './colors.js';
+import type { Color } from '../types.js';
 
 /**
  * Simple color formatting using template-like syntax

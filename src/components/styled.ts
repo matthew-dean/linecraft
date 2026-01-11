@@ -1,9 +1,9 @@
 // Style component for text styling and overflow handling
 
-import type { RenderContext, Component } from '../component';
-import type { Color } from '../types';
-import { applyStyle } from '../utils/colors';
-import { truncateEnd, truncateStart, truncateMiddle, wrapText } from '../utils/text';
+import type { RenderContext, Component } from '../component.js';
+import type { Color } from '../types.js';
+import { applyStyle } from '../utils/colors.js';
+import { truncateEnd, truncateStart, truncateMiddle, wrapText } from '../utils/text.js';
 
 export interface StyleOptions {
   color?: Color;

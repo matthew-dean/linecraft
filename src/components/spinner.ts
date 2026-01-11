@@ -1,8 +1,8 @@
 // Spinner component - manages its own animation state
 
-import type { Component, RenderContext } from '../component';
-import type { Color } from '../types';
-import { applyStyle } from '../utils/colors';
+import type { Component, RenderContext } from '../component.js';
+import type { Color } from '../types.js';
+import { applyStyle } from '../utils/colors.js';
 
 export type SpinnerStyle = 'classic-dots' | 'bouncing-bar';
 

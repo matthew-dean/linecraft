@@ -1,30 +1,30 @@
-export { TerminalRegion, SectionReference, ComponentReference } from './region';
-export { getTerminalWidth, getTerminalHeight, isTTY, onResize } from './utils/terminal';
+export { TerminalRegion, SectionReference, ComponentReference } from './region.js';
+export { getTerminalWidth, getTerminalHeight, isTTY, onResize } from './utils/terminal.js';
 // Grid system
-export { grid as Grid } from './layout/grid';
-export { Styled } from './components/styled';
-export type { GridOptions } from './layout/grid';
-export type { StyleOptions } from './components/styled';
-export { fill } from './components/fill';
-export type { FillOptions } from './components/fill';
-export { Section, type SectionOptions } from './components/section';
-export { Spinner, type SpinnerOptions } from './components/spinner';
-export { Segments, type SegmentsOptions, type Segment } from './components/segments';
-export { CodeDebug, type CodeDebugOptions, type CodeDebugType } from './components/code-debug';
+export { grid as Grid } from './layout/grid.js';
+export { Styled } from './components/styled.js';
+export type { GridOptions } from './layout/grid.js';
+export type { StyleOptions } from './components/styled.js';
+export { fill } from './components/fill.js';
+export type { FillOptions } from './components/fill.js';
+export { Section, type SectionOptions } from './components/section.js';
+export { Spinner, type SpinnerOptions } from './components/spinner.js';
+export { Segments, type SegmentsOptions, type Segment } from './components/segments.js';
+export { CodeDebug, type CodeDebugOptions, type CodeDebugType } from './components/code-debug.js';
 // progressBar is exported below as a function
-export { prompt } from './utils/prompt';
+export { prompt } from './utils/prompt.js';
 export type {
   RegionOptions,
   LineContent,
   TextStyle,
   Color,
   ProgressBarOptions,
-} from './types';
+} from './types.js';
 
-import { TerminalRegion } from './region';
-import { progressBar as progressBarGrid } from './components/progress-bar-grid';
-import type { RegionOptions, ProgressBarOptions } from './types';
-import type { ProgressBarOptions as ProgressBarGridOptions } from './components/progress-bar-grid';
+import { TerminalRegion } from './region.js';
+import { progressBar as progressBarGrid } from './components/progress-bar-grid.js';
+import type { RegionOptions, ProgressBarOptions } from './types.js';
+import type { ProgressBarOptions as ProgressBarGridOptions } from './components/progress-bar-grid.js';
 
 export function Region(options?: RegionOptions): TerminalRegion {
   return new TerminalRegion(options);
