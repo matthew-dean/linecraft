@@ -55,6 +55,10 @@ export function applyStyle(text: string, style?: TextStyle): string {
     codes.push('1');
   }
 
+  if (style.dim) {
+    codes.push('2'); // Dim/faint intensity
+  }
+
   if (style.italic) {
     codes.push('3');
   }

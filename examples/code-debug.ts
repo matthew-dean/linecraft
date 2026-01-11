@@ -7,13 +7,14 @@ async function main() {
   const r = Region({ debugLog: 'debug.log' });
   const baseDir = process.cwd();
 
-  // Example 1: Simple error at start of line
+  // Example 1: Simple error at start of line with error code
   r.set(
     CodeDebug({
       startLine: 5,
       startColumn: 1,
       errorLine: 'const x = undefined;',
       message: 'Variable is declared but never used',
+      errorCode: 'no-unused-vars',
       filePath: 'src/utils/helper.ts',
       fullPath: path.join(baseDir, 'src/utils/helper.ts'),
       baseDir,
@@ -22,7 +23,7 @@ async function main() {
   );
   await prompt(r);
 
-  // Example 2: Error with range (underline) - underlining the variable "x + y"
+  // Example 2: Error with range (underline) and short message - underlining the variable "x + y"
   r.set(
     CodeDebug({
       startLine: 12,
@@ -31,6 +32,7 @@ async function main() {
       endColumn: 16,
       errorLine: '    return x + y + z;', 
       message: 'Type error: cannot add string and number',
+      shortMessage: 'string + number',
       filePath: 'src/math/calculator.ts',
       fullPath: path.join(baseDir, 'src/math/calculator.ts'),
       baseDir,
@@ -39,7 +41,7 @@ async function main() {
   );
   await prompt(r);
 
-  // Example 3: Warning with context (before and after lines)
+  // Example 3: Warning with error code and short message
   r.set(
     CodeDebug({
       startLine: 8,
@@ -48,6 +50,8 @@ async function main() {
       lineBefore: '  function processData() {',
       lineAfter: '      doSomething();',
       message: 'Consider using early return pattern for better readability',
+      errorCode: 'eslint(no-else-return)',
+      shortMessage: 'use early return',
       filePath: 'src/processors/data.ts',
       fullPath: path.join(baseDir, 'src/processors/data.ts'),
       baseDir,
@@ -56,7 +60,7 @@ async function main() {
   );
   await prompt(r);
 
-  // Example 4: Long line that needs truncation - underlining "andEvenMoreParameters"
+  // Example 4: Long line that needs truncation with error code - underlining "andEvenMoreParameters"
   r.set(
     CodeDebug({
       startLine: 42,
@@ -65,6 +69,8 @@ async function main() {
       endColumn: 100,
       errorLine: 'const veryLongVariableName = someVeryLongFunctionCall(withManyParameters, andMoreParameters, andEvenMoreParameters, thatMakeThisLineExtremelyLong, soLongThatItNeedsTruncation)',
       message: 'Line exceeds recommended maximum length of 100 characters',
+      errorCode: 'max-len',
+      shortMessage: 'line too long',
       filePath: 'src/very/long/path/to/file.ts',
       fullPath: path.join(baseDir, 'src/very/long/path/to/file.ts'),
       baseDir,
@@ -105,7 +111,7 @@ async function main() {
   );
   await prompt(r);
 
-  // Example 7: Single line file (no before or after) - underlining "console.log"
+  // Example 7: Single line file with error code and short message - underlining "console.log"
   r.set(
     CodeDebug({
       startLine: 1,
@@ -114,6 +120,8 @@ async function main() {
       endColumn: 11,
       errorLine: 'console.log("hello world");',
       message: 'Unexpected console statement in production code',
+      errorCode: 'no-console',
+      shortMessage: 'remove console',
       filePath: 'script.js',
       fullPath: path.join(baseDir, 'script.js'),
       baseDir,
@@ -149,7 +157,9 @@ async function main() {
       errorLine: '    const data = fetchData();',
       lineBefore: '  async function load() {',
       lineAfter: '    return process(data);',
-      message: 'This is a very long error message that will need to wrap to multiple lines because it contains a lot of detailed information about what went wrong and how to fix it. The message should wrap nicely and maintain proper indentation.',
+      message: 'This is a very long error message that will need to wrap to multiple lines because it contains a lot of detailed information about what went wrong and how to fix it. The message should wrap nicely and maintain proper indentation so that it looks good in the terminal.',
+      errorCode: 'typescript(2345)',
+      shortMessage: 'async function call',
       filePath: 'src/loaders/data.ts',
       fullPath: path.join(baseDir, 'src/loaders/data.ts'),
       baseDir,
@@ -158,7 +168,7 @@ async function main() {
   );
   await prompt(r);
 
-  // Example 10: Error with maxColumn constraint - underlining "veryLongFunctionName"
+  // Example 10: Error with maxColumn constraint and wrapped message - underlining "veryLongFunctionName"
   r.set(
     CodeDebug({
       startLine: 50,
@@ -166,7 +176,8 @@ async function main() {
       endLine: 50,
       endColumn: 35,
       errorLine: 'const result = veryLongFunctionName(withManyParameters, andMoreParameters, thatExtendWayBeyondTheMaxColumn, soWeNeedToTruncate, toMakeRoomForTheMessage)',
-      message: 'This error uses maxColumn to ensure there is room for the message',
+      message: 'This error uses maxColumn to ensure there is room for the message. The message itself is also quite long and should wrap nicely across multiple lines to demonstrate the wrapping functionality of the top message area.',
+      errorCode: 'eslint-plugin-unicorn(no-useless-length-check)',
       filePath: 'src/example.ts',
       fullPath: path.join(baseDir, 'src/example.ts'),
       baseDir,

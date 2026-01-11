@@ -20,6 +20,7 @@ export interface TextStyle {
   color?: Color;
   backgroundColor?: Color;
   bold?: boolean;
+  dim?: boolean;
   italic?: boolean;
   underline?: boolean;
 }

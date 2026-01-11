@@ -195,6 +195,7 @@ export function truncateMiddle(text: string, maxWidth: number): string {
 
 /**
  * Wrap text to fit within a width, breaking on spaces
+ * Never breaks words mid-word - if a word is too long, it will extend the line
  */
 export function wrapText(text: string, width: number): string[] {
   if (!Number.isFinite(width) || width <= 0) {
@@ -214,13 +215,16 @@ export function wrapText(text: string, width: number): string[] {
       break;
     }
 
+    // Calculate where this line should end
     let end = Math.min(length, index + width);
 
     if (end === length) {
+      // Reached end of text - take the rest
       lines.push(text.slice(index));
       break;
     }
 
+    // Look for a break point (space or hyphen) going backwards from end
     let breakPoint = -1;
     for (let i = end; i > index; i--) {
       const char = text[i - 1];
@@ -235,7 +239,26 @@ export function wrapText(text: string, width: number): string[] {
     }
 
     if (breakPoint === -1) {
-      breakPoint = end;
+      // No space found within the width - we're in the middle of a word
+      // Look for the NEXT space after 'end' to break there
+      // This ensures we never break mid-word
+      let nextSpace = -1;
+      for (let i = end; i < length; i++) {
+        if (text[i] === ' ') {
+          nextSpace = i;
+          break;
+        }
+      }
+      
+      if (nextSpace === -1) {
+        // No more spaces - take the rest (this is the last word/line)
+        lines.push(text.slice(index));
+        break;
+      } else {
+        // Found a space after - break there (word extends beyond width)
+        // This means the word is longer than width, so we have to break after it
+        breakPoint = nextSpace;
+      }
     }
 
     const line = text.slice(index, breakPoint).trimEnd();
