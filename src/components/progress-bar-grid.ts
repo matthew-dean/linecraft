@@ -1,6 +1,7 @@
 // Progress bar component using grid system
 
 import type { Component, RenderContext } from '../component.js';
+import { callComponent } from '../component.js';
 import type { Color } from '../types.js';
 import { Styled } from './styled.js';
 import { grid as Grid } from '../layout/grid.js';
@@ -63,7 +64,7 @@ export function progressBar(options: ProgressBarOptions): Component {
     
     // Use grid to layout: [1] [flex] [1] [7]
     const gridComp = Grid({ template: [1, '1*', 1, 7], columnGap: 0 }, ...children);
-    return gridComp(ctx);
+    return callComponent(gridComp, ctx);
   };
 }
 

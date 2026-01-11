@@ -74,7 +74,7 @@ export async function prompt(
   });
   
   const promptRef = region.add(promptComponent);
-  await region.flush();
+  region.flush();
   
   // Calculate cursor position: prompt is 2 lines (blank + text), cursor goes at end of text line
   const promptLineNumber = region.height;
@@ -95,7 +95,7 @@ export async function prompt(
     try {
       rawMode = process.stdin.isRaw || false;
       process.stdin.setRawMode(true);
-    } catch (err) {
+    } catch {
       // If setRawMode fails (e.g., stdin is closed or not available), just resolve
       resolve();
       return;
@@ -138,7 +138,7 @@ export async function prompt(
     const cleanup = () => {
       try {
         process.stdin.setRawMode(rawMode);
-      } catch (err) {
+      } catch {
         // Ignore errors when restoring raw mode
       }
       process.stdin.pause();

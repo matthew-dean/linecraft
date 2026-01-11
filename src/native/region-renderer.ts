@@ -163,8 +163,8 @@ export class RegionRenderer {
     this.scheduleRender();
     }
     
-  async flush(): Promise<void> {
-    await this.renderNow();
+  flush(): void {
+    this.renderNow();
   }
 
   expandTo(newHeight: number): void {
@@ -189,7 +189,7 @@ export class RegionRenderer {
     this.previousViewportFrame = [];
         }
 
-  async destroy(clearFirst: boolean = false): Promise<void> {
+  destroy(clearFirst: boolean = false): void {
     if (this.destroyed) {
       return;
         }
@@ -207,7 +207,7 @@ export class RegionRenderer {
         return;
       }
     if (!clearFirst) {
-      await this.renderNow();
+      this.renderNow();
     }
     this.leaveAlternateScreen(clearFirst);
     this.pendingFrame = [];
@@ -247,7 +247,7 @@ export class RegionRenderer {
     RegionRenderer.exitHandlerSetup = true;
     const cleanup = (): void => {
       for (const region of RegionRenderer.activeRegions) {
-        region.destroy(true).catch(() => {});
+        region.destroy(true);
     }
       RegionRenderer.activeRegions.clear();
     };
@@ -273,17 +273,17 @@ export class RegionRenderer {
       return;
     }
     if (this.throttle.shouldRender()) {
-      void this.renderNow();
+      this.renderNow();
       return;
     }
     const delay = Math.max(0, this.throttle.timeUntilNextFrame());
     this.renderTimer = setTimeout(() => {
       this.renderTimer = null;
-      void this.renderNow();
+      this.renderNow();
     }, delay);
   }
 
-  private async renderNow(): Promise<void> {
+  private renderNow(): void {
     if (this.destroyed || this.permanentlyDisabled) {
       return;
     }
@@ -445,7 +445,7 @@ export class RegionRenderer {
       frame.push('');
     }
     // Log if frame seems corrupted (has content but in wrong order)
-    if (frame.length > 0 && frame.some((line, i) => line.length > 0)) {
+    if (frame.length > 0 && frame.some((line) => line.length > 0)) {
       const nonEmptyLines = frame.map((line, i) => ({ index: i, content: line.substring(0, 50) })).filter(l => l.content.length > 0);
       if (nonEmptyLines.length > 1) {
         // Check if first non-empty line looks like it should be later (e.g., contains "Press SPACEBAR" or is a border)

@@ -47,7 +47,8 @@ export function diffFrames(prev: string[], curr: string[]): DiffOp[] {
         // Partial updates with ANSI codes are complex and error-prone
         // The optimization would be: if change is small and continuous, update just that region
         // But preserving ANSI codes at boundaries is tricky, so we redraw for correctness
-        needsReflow = true; // Any line change causes reflow below
+        // Note: Line updates don't cause reflow when using absolute positioning
+        // Only insert/delete operations cause reflow
         ops.push({ type: 'update_line', line: i, content: currLine });
       }
     }

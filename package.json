@@ -33,12 +33,15 @@
     "build:ts": "tsc -p tsconfig.build.json",
     "build": "pnpm build:ts",
     "dev": "pnpm build:ts --watch",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
+    "lint": "oxlint src/",
+    "lint:fix": "oxlint src/ --fix",
     "test": "vitest",
     "test:ts": "vitest",
     "example": "node scripts/run-example.js",
     "record": "vhs",
-    "record:all": "node scripts/record-all.js"
+    "record:all": "node scripts/record-all.js",
+    "prepublishOnly": "pnpm lint && pnpm typecheck && pnpm test"
   },
   "keywords": [
     "terminal",
@@ -49,6 +52,7 @@
   ],
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "oxlint": "~1.38.0",
     "tsx": "^4.7.0",
     "typescript": "^5.3.0",
     "vitest": "^1.0.0"

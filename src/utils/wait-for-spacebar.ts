@@ -16,7 +16,7 @@ export async function waitForSpacebar(
   logToFile(`[waitForSpacebar] CALLED, isTTY=${process.stdin.isTTY}, isRaw=${process.stdin.isRaw}`);
 
   region.add(['', message]);
-  await region.flush();
+  region.flush();
   const promptLineNumber = region.height;
   const promptColumn = message.length + 1;
   region.showCursorAt(promptLineNumber, promptColumn);
@@ -66,7 +66,7 @@ export async function waitForSpacebar(
     const cleanup = () => {
       try {
         process.stdin.setRawMode(false);
-      } catch (err) {
+      } catch {
         // Ignore errors when restoring raw mode
       }
       process.stdin.pause();

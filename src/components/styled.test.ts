@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Styled } from './styled.js';
 import { TerminalRegion } from '../region.js';
+import { callComponent } from '../component.js';
 
 describe('Style Component', () => {
   let region: TerminalRegion;
@@ -12,7 +13,7 @@ describe('Style Component', () => {
   describe('basic styling', () => {
     it('should apply color', () => {
       const component = Styled({ color: 'red' }, 'Hello');
-      const result = component({
+      const result = callComponent(component, {
         availableWidth: 80,
         region: region,
         columnIndex: 0,
@@ -25,7 +26,7 @@ describe('Style Component', () => {
 
     it('should apply backgroundColor', () => {
       const component = Styled({ backgroundColor: 'blue' }, 'Hello');
-      const result = component({
+      const result = callComponent(component, {
         availableWidth: 80,
         region: region,
         columnIndex: 0,
@@ -38,7 +39,7 @@ describe('Style Component', () => {
 
     it('should apply bold', () => {
       const component = Styled({ bold: true }, 'Hello');
-      const result = component({
+      const result = callComponent(component, {
         availableWidth: 80,
         region: region,
         columnIndex: 0,
@@ -52,7 +53,7 @@ describe('Style Component', () => {
   describe('overflow handling', () => {
     it('should truncate with ellipsis-end', () => {
       const component = Styled({ overflow: 'ellipsis-end' }, 'This is a very long text');
-      const result = component({
+      const result = callComponent(component, {
         availableWidth: 10,
         region: region,
         columnIndex: 0,
@@ -66,7 +67,7 @@ describe('Style Component', () => {
 
     it('should truncate with ellipsis-start', () => {
       const component = Styled({ overflow: 'ellipsis-start' }, 'This is a very long text');
-      const result = component({
+      const result = callComponent(component, {
         availableWidth: 10,
         region: region,
         columnIndex: 0,
@@ -80,7 +81,7 @@ describe('Style Component', () => {
 
     it('should wrap text', () => {
       const component = Styled({ overflow: 'wrap' }, 'This is a very long text that should wrap');
-      const result = component({
+      const result = callComponent(component, {
         availableWidth: 10,
         region: region,
         columnIndex: 0,
@@ -95,7 +96,7 @@ describe('Style Component', () => {
   describe('when condition', () => {
     it('should return null when condition is false', () => {
       const component = Styled({ when: () => false }, 'Hello');
-      const result = component({
+      const result = callComponent(component, {
         availableWidth: 80,
         region: region,
         columnIndex: 0,
@@ -107,7 +108,7 @@ describe('Style Component', () => {
 
     it('should return content when condition is true', () => {
       const component = Styled({ when: (ctx) => ctx.availableWidth > 50 }, 'Hello');
-      const result = component({
+      const result = callComponent(component, {
         availableWidth: 80,
         region: region,
         columnIndex: 0,
@@ -120,7 +121,7 @@ describe('Style Component', () => {
     it('should check availableWidth in condition', () => {
       const component = Styled({ when: (ctx) => ctx.availableWidth > 50 }, 'Hello');
       
-      const result1 = component({
+      const result1 = callComponent(component, {
         availableWidth: 40,
         region: region,
         columnIndex: 0,
@@ -128,7 +129,7 @@ describe('Style Component', () => {
       });
       expect(result1).toBeNull();
       
-      const result2 = component({
+      const result2 = callComponent(component, {
         availableWidth: 60,
         region: region,
         columnIndex: 0,
@@ -141,7 +142,7 @@ describe('Style Component', () => {
   describe('multi-line content', () => {
     it('should apply styling to each line', () => {
       const component = Styled({ color: 'red' }, ['Line 1', 'Line 2']);
-      const result = component({
+      const result = callComponent(component, {
         availableWidth: 80,
         region: region,
         columnIndex: 0,

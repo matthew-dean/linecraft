@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/crates/oxc_linter/src/schemas/oxlint.schema.json",
+  "categories": {
+    "correctness": "warn",
+    "suspicious": "warn",
+    "pedantic": "off",
+    "perf": "warn"
+  },
+  "rules": {
+    "eslint/no-control-regex": "off",
+    "eslint/no-unused-vars": "warn",
+    "eslint-plugin-unicorn/no-new-array": "warn",
+    "eslint-plugin-unicorn/no-useless-length-check": "warn"
+  },
+  "ignorePatterns": [
+    "**/node_modules/**",
+    "**/lib/**"
+  ]
+}

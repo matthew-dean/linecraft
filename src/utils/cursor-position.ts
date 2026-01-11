@@ -33,8 +33,6 @@ export function queryCursorPosition(timeout: number = 1000): Promise<CursorPosit
     }
 
     const wasRaw = process.stdin.isRaw || false;
-    // Check if stdin was paused before we started
-    const wasPaused = !process.stdin.readableFlowing;
     let resolved = false;
 
     const cleanup = () => {

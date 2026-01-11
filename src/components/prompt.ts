@@ -1,8 +1,8 @@
 // Prompt component - improved API for prompts like "Press SPACEBAR"
 
-import type { TerminalRegion } from '../region.js';
 import type { Color } from '../types.js';
 import type { Component } from '../component.js';
+import { callComponent } from '../component.js';
 import { Styled } from './styled.js';
 
 export interface PromptOptions {
@@ -25,7 +25,7 @@ export function Prompt(options: PromptOptions): Component {
   return (ctx) => {
     const promptText = `Press ${key} to ${message}...`;
     const styledComponent = Styled({ color: promptColor }, promptText);
-    const styledResult = styledComponent(ctx);
+    const styledResult = callComponent(styledComponent, ctx);
     
     // Return blank line + prompt
     if (typeof styledResult === 'string') {

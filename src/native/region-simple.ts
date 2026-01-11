@@ -8,7 +8,6 @@
 // 5. Truncate content to width before writing
 // 6. Use diff to only update changed lines
 
-import { diffFrames, type DiffOp } from './diff.js';
 import * as ansi from './ansi.js';
 import { RenderBuffer } from './buffer.js';
 import { Throttle } from './throttle.js';
@@ -74,7 +73,7 @@ export class TerminalRegion {
   }
 
   private setupResizeHandler(): void {
-    this.resizeCleanup = onResize((newWidth, newHeight) => {
+    this.resizeCleanup = onResize((newWidth, _newHeight) => {
       // Re-disable auto-wrap (some terminals reset on resize)
       if (!this.disableRendering) {
         this.stdout.write(ansi.DISABLE_AUTO_WRAP);

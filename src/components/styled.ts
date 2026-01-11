@@ -1,6 +1,7 @@
 // Style component for text styling and overflow handling
 
 import type { RenderContext, Component } from '../component.js';
+import { callComponent } from '../component.js';
 import type { Color } from '../types.js';
 import { applyStyle } from '../utils/colors.js';
 import { truncateEnd, truncateStart, truncateMiddle, wrapText } from '../utils/text.js';
@@ -35,7 +36,7 @@ export function Styled(
       text = content;
     } else {
       // It's a component - render it
-      const result = content(ctx);
+      const result = callComponent(content, ctx);
       if (result === null) return null;
       text = result;
     }

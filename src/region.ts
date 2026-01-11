@@ -2,7 +2,7 @@ import { RegionRenderer, type RegionRendererOptions } from './native/region-rend
 import { applyStyle } from './utils/colors.js';
 import { getTerminalWidth } from './utils/terminal.js';
 import type { RegionOptions, LineContent } from './types.js';
-import type { Component, RenderContext } from './component.js';
+import type { Component } from './component.js';
 
 /**
  * Type guard to check if an item is a Component
@@ -34,9 +34,6 @@ function getComponentHeight(component: Component, region: TerminalRegion, width:
  * The caller is responsible for writing the content to the appropriate position
  */
 function renderComponent(component: Component, region: TerminalRegion, width: number): string[] {
-  // Track cleanup callback for this component
-  let cleanupCallback: (() => void) | undefined;
-  
   const ctx = {
     availableWidth: width,
     region: region,
@@ -49,30 +46,23 @@ function renderComponent(component: Component, region: TerminalRegion, width: nu
     },
     // Provide onCleanup callback for components to register cleanup
     onCleanup: (callback: () => void) => {
-      cleanupCallback = callback;
       region.registerComponentCleanup(callback);
     },
   };
   
   const result = typeof component === 'function' ? component(ctx) : component.render(ctx);
   
-  // If component registered a cleanup callback, it's already stored in region
-  // (cleanupCallback is just for reference, the region already has it)
-  
   if (result === null) return [];
   
   // Components return their content - caller writes it to the correct position
+  // Components always return string | string[] | null (not LineContent)
   if (Array.isArray(result)) {
-    return result.map(line => 
-      typeof line === 'string' 
-        ? line 
-        : applyStyle(line.text, line.style)
-    );
+    return result;
+  } else if (typeof result === 'string') {
+    return [result];
   } else {
-    const styled = typeof result === 'string'
-      ? result
-      : applyStyle(result.text, result.style);
-    return [styled];
+    // result is null
+    return [];
   }
 }
 
@@ -699,10 +689,10 @@ export class TerminalRegion {
         renderer.pendingFrame[lineIndex] = lines[i];
         
       // Track in explicitlyAddedLines
-      while (this.regionLines.length < startLine + i) {
-        this.regionLines.push({ content: '', lineNumber: this.regionLines.length + 1 });
+      while (this.explicitlyAddedLines.length < startLine + i) {
+        this.explicitlyAddedLines.push({ content: '', lineNumber: this.explicitlyAddedLines.length + 1 });
       }
-      this.regionLines[startLine + i - 1] = {
+      this.explicitlyAddedLines[startLine + i - 1] = {
         content: lines[i],
         lineNumber: startLine + i
       };
@@ -789,8 +779,8 @@ export class TerminalRegion {
    * Returns a promise that resolves when rendering is complete
    * @internal - Internal method, not part of public API
    */
-  async flush(): Promise<void> {
-    await this.renderer.flush();
+  flush(): void {
+    this.renderer.flush();
   }
 
   /**
@@ -1055,15 +1045,15 @@ export class TerminalRegion {
     }
   }
 
-  setThrottle(fps: number): void {
+  setThrottle(_fps: number): void {
     // Note: setThrottleFps doesn't exist on native region, removing for now
     // this.region.setThrottleFps(fps);
   }
 
-  async destroy(clearFirst: boolean = false): Promise<void> {
+  destroy(clearFirst: boolean = false): void {
     // Cleanup: Call all component cleanup callbacks before destroying
     this.cleanupAllComponents();
-    await this.renderer.destroy(clearFirst);
+    this.renderer.destroy(clearFirst);
   }
 }
 

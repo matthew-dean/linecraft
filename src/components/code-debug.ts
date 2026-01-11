@@ -4,10 +4,12 @@ import type { RenderContext, Component } from '../component.js';
 import { callComponent } from '../component.js';
 import type { Color } from '../types.js';
 import { applyStyle } from '../utils/colors.js';
-import { truncateEnd, truncateStart, wrapText, stripAnsi, truncateToWidth } from '../utils/text.js';
+import { wrapText, stripAnsi, truncateToWidth } from '../utils/text.js';
 import { fileLink } from '../utils/file-link.js';
 import { Section } from './section.js';
-import { getLineNumberColor, getColoredLineNumberColor } from '../utils/terminal-theme.js';
+import { Styled } from './styled.js';
+import { grid as Grid } from '../layout/grid.js';
+import { getColoredLineNumberColor } from '../utils/terminal-theme.js';
 
 export type CodeDebugType = 'error' | 'warning' | 'info';
 
@@ -26,8 +28,12 @@ export interface CodeDebugOptions {
   errorLine: string;
   /** Source code line after the error line (optional) */
   lineAfter?: string | null;
-  /** Error or warning message */
+  /** Error or warning message (long message shown at top) */
   message: string;
+  /** Error code/preamble to show before message (e.g., "eslint-plugin-unicorn(no-useless-length-check)") (optional) */
+  errorCode?: string;
+  /** Short message to show connected to underline (optional) */
+  shortMessage?: string;
   /** Short file path to display */
   filePath: string;
   /** Full resolved file path for clickable link */
@@ -181,6 +187,8 @@ export function CodeDebug(options: CodeDebugOptions): Component {
       errorLine,
       lineAfter,
       message,
+      errorCode,
+      shortMessage,
       filePath,
       fullPath,
       baseDir,
@@ -211,7 +219,7 @@ export function CodeDebug(options: CodeDebugOptions): Component {
       lineNumbersToCheck.push(startLine + 1);
     }
     const lineNumWidth = Math.max(...lineNumbersToCheck.map(n => String(n).length));
-    const codeAreaWidth = availableWidth - lineNumWidth - 2; // -2 for "  " (2 spaces)
+    const codeAreaWidth = availableWidth - lineNumWidth - 3; // -3 for " │ " (space, pipe, space)
     
     // Calculate visible range for error line
     const targetEndCol = endColumn ?? startColumn;
@@ -265,29 +273,55 @@ export function CodeDebug(options: CodeDebugOptions): Component {
       }
     };
     
-    const arrowCol = mapColumnToDisplay(startColumn);
-    let underlineStartCol = arrowCol;
-    let underlineEndCol = arrowCol;
-    
-    if (endColumn) {
-      underlineStartCol = mapColumnToDisplay(startColumn);
-      underlineEndCol = mapColumnToDisplay(endColumn);
-      // Ensure valid range
-      if (underlineEndCol < underlineStartCol) {
-        underlineEndCol = underlineStartCol;
-      }
-    }
-    
-    // Build the code block lines (will be wrapped in Section)
+    // Build the code block lines
     const codeLines: string[] = [];
     
-    // Title line: "Error in {filename}" or type-specific title
+    // Icon and message at the top (Oxlint style)
+    const icon = type === 'error' ? '✖' : type === 'warning' ? '⚠' : 'ℹ';
+    const iconStyled = applyStyle(icon, { color: colorScheme.message });
+    
+    // Build the message text with optional error code
+    let messageText = message;
+    if (errorCode) {
+      // Error code with underline - auto-add colon and space
+      const errorCodeStyled = applyStyle(`${errorCode}: `, { 
+        color: colorScheme.message,
+        underline: true 
+      });
+      messageText = errorCodeStyled + applyStyle(message, { color: colorScheme.message });
+    } else {
+      messageText = applyStyle(message, { color: colorScheme.message });
+    }
+    
+    // Use grid to layout: [icon (1 char)] [message (flex)]
+    // This ensures the message doesn't overflow under the icon
+    // Pass strings directly - grid will convert them to components that return the string
+    const messageGrid = Grid({ template: [1, '1*'], columnGap: 1 }, 
+      iconStyled,
+      messageText
+    );
+    
+    const messageResult = callComponent(messageGrid, ctx);
+    if (messageResult && typeof messageResult === 'string') {
+      codeLines.push(messageResult);
+    } else if (Array.isArray(messageResult)) {
+      codeLines.push(...messageResult);
+    } else {
+      // Fallback if grid returns null - just concatenate with space
+      codeLines.push(iconStyled + ' ' + messageText);
+    }
+    
+    // Filename in brackets with line:column, connected with curved border (Oxlint style)
+    // The curve should align with the line number column (accounting for line number width)
     const pathText = baseDir && filePath.startsWith(baseDir)
       ? filePath.substring(baseDir.length + 1)
       : filePath;
-    const errorTypeTitle = type === 'error' ? 'Error' : type === 'warning' ? 'Warning' : 'Info';
-    const titleLine = applyStyle(`${errorTypeTitle} in ${pathText}`, { color: colorScheme.secondary, bold: true });
-    codeLines.push(titleLine);
+    const locationText = `[${pathText}:${startLine}:${startColumn}]`;
+    // Align curve with line numbers: lineNumWidth spaces + 1 space (for the space after line number)
+    const curveIndent = ' '.repeat(lineNumWidth + 1);
+    const locationLine = curveIndent + applyStyle('╭─', { color: 'brightBlack' }) + 
+      applyStyle(locationText, { color: 'blue', bold: true });
+    codeLines.push(locationLine);
     
     // Line before (if exists)
     if (lineBefore !== null && lineBefore !== undefined) {
@@ -295,119 +329,78 @@ export function CodeDebug(options: CodeDebugOptions): Component {
       const beforeLineNumPadded = beforeLineNum.padStart(lineNumWidth);
       const truncatedBefore = truncateToWidth(lineBefore, codeAreaWidth);
       codeLines.push(
-        applyStyle(`${beforeLineNumPadded}  `, { color: lineNumberColor }) +
-        truncatedBefore
+        applyStyle(`${beforeLineNumPadded} `, { color: lineNumberColor }) +
+        applyStyle('│ ', { color: 'brightBlack' }) + truncatedBefore
       );
     }
     
-    // Error line
+    // Error line (with space before code)
     const errorLineNum = String(startLine);
     const errorLineNumPadded = errorLineNum.padStart(lineNumWidth);
-    let errorLineDisplay = applyStyle(`${errorLineNumPadded}  `, { color: lineNumberColor }) +
-      truncatedErrorLine;
+    let errorLineDisplay = applyStyle(`${errorLineNumPadded} `, { color: lineNumberColor }) +
+      applyStyle('│ ', { color: 'brightBlack' }) + truncatedErrorLine;
     codeLines.push(errorLineDisplay);
     
-    // Arrow/underline line
-    let indicatorLine = ' '.repeat(lineNumWidth) + '  ';
-    indicatorLine += ' '.repeat(Math.max(0, arrowCol - 1));
+    // Underline line (Oxlint style)
+    // Format: "[lineNumWidth spaces][1 space][│][1 space][dots][underline]"
+    // Calculate positions relative to the code (after "│ ")
+    const underlineStartInCode = mapColumnToDisplay(startColumn);
+    const underlineEndInCode = endColumn ? mapColumnToDisplay(endColumn) : underlineStartInCode;
+    const underlineLength = underlineEndInCode - underlineStartInCode + 1;
     
-    // Calculate where the connecting line should come down from (middle of underline or arrow position)
-    const connectCol = endColumn && underlineEndCol > underlineStartCol
-      ? Math.floor((underlineStartCol + underlineEndCol) / 2) // Middle of underline
-      : arrowCol; // Position of arrow
+    // Dots to align with the start of the underline (position in code, 1-based, minus 1 for 0-based)
+    const dotsBefore = Math.max(0, underlineStartInCode - 1);
     
-    if (endColumn && underlineEndCol > underlineStartCol) {
-      // Underline with curved edges facing up and T-bar in the middle: ╰──┬──╯
-      const underlineLength = underlineEndCol - underlineStartCol;
-      const connectPosInUnderline = connectCol - underlineStartCol; // Position within the underline
-      
-      if (underlineLength >= 3) {
-        // Build underline with T-bar: left curve, dashes, T-bar, dashes, right curve
-        const leftPart = '─'.repeat(Math.max(0, connectPosInUnderline - 1));
-        const rightPart = '─'.repeat(Math.max(0, underlineLength - connectPosInUnderline - 1));
-        indicatorLine += applyStyle('┖' + leftPart + '┬' + rightPart + '┚', { color: colorScheme.primary });
-      } else if (underlineLength === 2) {
-        // Too short for T-bar, just use T in middle
-        indicatorLine += applyStyle('┖┬┚', { color: colorScheme.primary });
-      } else {
-        // Single character, just use T
-        indicatorLine += applyStyle('╿', { color: colorScheme.primary });
-      }
+    // Underline line: line number width + space + │ + space + dots + underline
+    let underlineLine = ' '.repeat(lineNumWidth) + ' ' + applyStyle('│', { color: 'brightBlack' }) + ' ';
+    
+    if (shortMessage && underlineLength > 1) {
+      // Multi-character underline with T-bar in the middle for short message
+      const connectPosInUnderline = Math.floor(underlineLength / 2);
+      const leftPart = '─'.repeat(connectPosInUnderline);
+      const rightPart = '─'.repeat(underlineLength - connectPosInUnderline - 1);
+      underlineLine += '·'.repeat(dotsBefore) + 
+        applyStyle(leftPart + '┬' + rightPart, { color: colorScheme.primary });
+    } else if (shortMessage) {
+      // Single character with T-bar for short message
+      underlineLine += '·'.repeat(dotsBefore) + 
+        applyStyle('┬', { color: colorScheme.primary });
     } else {
-      // Single point - use ┬ (T pointing up) which has horizontal bar pointing to code, vertical line going down
-      indicatorLine += applyStyle('╿', { color: colorScheme.primary });
+      // No short message, just underline the code
+      const underlineChars = '─'.repeat(underlineLength);
+      underlineLine += '·'.repeat(dotsBefore) + 
+        applyStyle(underlineChars, { color: colorScheme.primary });
     }
     
-    codeLines.push(indicatorLine);
+    codeLines.push(underlineLine);
     
-    // Horizontal line to message (directly from T-bar or ┴, no extra vertical line)
-    const horizontalLine = ' '.repeat(lineNumWidth) + '  ';
-    const horizontalSpaces = ' '.repeat(Math.max(0, connectCol - 1));
-    const horizontalBar = applyStyle('└', { color: colorScheme.primary });
-    const horizontalDash = applyStyle('─ ', { color: colorScheme.primary });
-    const messageStart = horizontalLine + horizontalSpaces + horizontalBar + horizontalDash;
-    
-    // Message lines
-    const messageWidth = availableWidth - stripAnsi(messageStart).length;
-    const messageLines = wrapText(message, messageWidth);
-    
-    // First message line with connecting line
-    if (messageLines.length > 0) {
-      codeLines.push(
-        messageStart +
-        applyStyle(messageLines[0], { color: colorScheme.message })
-      );
+    // Short message connected to underline (if provided)
+    if (shortMessage) {
+      const connectCol = underlineLength > 1
+        ? underlineStartInCode + Math.floor(underlineLength / 2)
+        : underlineStartInCode;
       
-      // Remaining message lines (indented to start of first line)
-      const messageIndent = ' '.repeat(stripAnsi(messageStart).length);
-      for (let i = 1; i < messageLines.length; i++) {
-        codeLines.push(messageIndent + applyStyle(messageLines[i], { color: colorScheme.message }));
-      }
+      // Short message line: line number width + space + │ + space + dots + connector + message
+      const shortMessageLine = ' '.repeat(lineNumWidth) + ' ' + applyStyle('│', { color: 'brightBlack' }) + ' ' +
+        '·'.repeat(Math.max(0, connectCol - 1)) +
+        applyStyle('╰── ', { color: colorScheme.primary }) +
+        applyStyle(shortMessage, { color: colorScheme.message });
+      codeLines.push(shortMessageLine);
     }
     
-    // Line after (if exists) - comes after the message
+    // Line after (if exists)
     if (lineAfter !== null && lineAfter !== undefined) {
-      // Add empty line after message (within section)
-      codeLines.push('');
-      
       const afterLineNum = String(startLine + 1);
       const afterLineNumPadded = afterLineNum.padStart(lineNumWidth);
       const truncatedAfter = truncateToWidth(lineAfter, codeAreaWidth);
       codeLines.push(
-        applyStyle(`${afterLineNumPadded}  `, { color: lineNumberColor }) +
-        truncatedAfter
+        applyStyle(`${afterLineNumPadded} `, { color: lineNumberColor }) +
+        applyStyle('│ ', { color: 'brightBlack' }) + truncatedAfter
       );
-      
-      // Add another empty line after line after (within section)
-      codeLines.push('');
     }
     
-    // Wrap in Section with left border only, no padding
-    const filePathDisplay = (() => {
-      const pathText = baseDir && filePath.startsWith(baseDir)
-        ? filePath.substring(baseDir.length + 1)
-        : filePath;
-      const pathWithLink = fileLink(fullPath, pathText);
-      const lineNumText = `:${startLine}${endLine && endLine !== startLine ? `:${endLine}` : ''}`;
-      return pathWithLink + lineNumText;
-    })();
-    
-    // Use Section to wrap the code block with left border
-    const sectionComponent = Section(
-      {
-        title: filePathDisplay,
-        titleColor: colorScheme.secondary,
-        left: true,
-        right: false,
-        top: false,
-        bottom: false,
-        padding: 0,
-        borderColor: colorScheme.primary,
-      },
-      (ctx: RenderContext) => codeLines
-    );
-    
-    return callComponent(sectionComponent, ctx);
+    // Return lines directly (no Section wrapper for Oxlint style)
+    return codeLines;
   };
 }
 

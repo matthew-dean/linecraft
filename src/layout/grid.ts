@@ -3,9 +3,10 @@
 
 import type { Color, FillChar } from '../types.js';
 import { applyStyle } from '../utils/colors.js';
-import { truncateEnd, truncateStart, truncateMiddle, wrapText, getTrimmedTextWidth, stripAnsi } from '../utils/text.js';
+import { getTrimmedTextWidth, stripAnsi, countVisibleChars, splitAtVisiblePos } from '../utils/text.js';
 import type { RenderContext, Component } from '../component.js';
 import { callComponent, createChildContext } from '../component.js';
+import { Styled } from '../components/styled.js';
 
 /**
  * Extract character and color from spaceBetween option for a specific gap index
@@ -300,9 +301,9 @@ function getRenderedWidth(result: string | string[] | null): number {
     return 0;
   }
   if (Array.isArray(result)) {
-    return result.reduce((max, line) => Math.max(max, getTrimmedTextWidth(line)), 0);
+    return result.reduce((max, line) => Math.max(max, countVisibleChars(line)), 0);
   }
-  return getTrimmedTextWidth(result);
+  return countVisibleChars(result);
 }
 
 function measureAutoContentWidths(
@@ -331,18 +332,17 @@ export function grid(
   ...children: (Component | string | { render: Component })[]
 ): Component {
   // Convert children to Components
-  const convertedChildren: Component[] = children.map(child => {
+  const convertedChildren: Component[] = children.map((child): Component => {
     if (typeof child === 'string') {
-      // Import Styled dynamically to avoid circular dependency
-      const { Styled } = require('../components/styled');
-      return Styled({}, child);
+      // Convert string to a simple component that returns the string
+      return (ctx: RenderContext) => child;
     }
     // If it's an object with a render method, extract the render function
     if (typeof child === 'object' && child !== null && 'render' in child && typeof child.render === 'function') {
       return child.render;
     }
     // Otherwise it's already a Component
-    return child;
+    return child as Component;
   });
   return (ctx: RenderContext) => {
     const { 
@@ -365,10 +365,13 @@ export function grid(
     }
     
     // Determine number of explicit columns
+    // When using template, auto-repeat for extra children (don't wrap)
+    // When using columns without autoColumns, wrap to new rows
     const explicitColumns = columns ?? template ?? [];
-    const numColumns = explicitColumns.length > 0 ? explicitColumns.length : 1;
+    const shouldAutoRepeat = template !== undefined || autoColumns !== undefined;
+    const numColumns = shouldAutoRepeat ? validChildren.length : (explicitColumns.length > 0 ? explicitColumns.length : 1);
     
-    // Group children into rows (wrap when exceeding numColumns)
+    // Group children into rows (wrap when exceeding numColumns, unless auto-repeat)
     const rowsData: Component[][] = [];
     for (let i = 0; i < validChildren.length; i += numColumns) {
       rowsData.push(validChildren.slice(i, i + numColumns));
@@ -437,14 +440,23 @@ export function grid(
               columnContent = ' '.repeat(columnWidth);
             } else if (Array.isArray(result)) {
               columnContent = result[lineIdx] ?? '';
-            } else {
+            } else if (typeof result === 'string') {
               columnContent = lineIdx === 0 ? result : '';
+            } else {
+              columnContent = '';
             }
             
-            const plainContent = stripAnsi(columnContent);
-            const paddedContent = plainContent.length < columnWidth
-              ? columnContent + ' '.repeat(columnWidth - plainContent.length)
-              : columnContent;
+            const visibleWidth = countVisibleChars(columnContent);
+            let finalContent = columnContent;
+            if (visibleWidth > columnWidth) {
+              // Need to truncate at visible width
+              const split = splitAtVisiblePos(columnContent, columnWidth);
+              finalContent = split.before;
+            }
+            const finalVisibleWidth = countVisibleChars(finalContent);
+            const paddedContent = finalVisibleWidth < columnWidth
+              ? finalContent + ' '.repeat(columnWidth - finalVisibleWidth)
+              : finalContent;
             lineParts.push(paddedContent);
             
             // Add column gap
@@ -515,7 +527,6 @@ export function grid(
     // Render each child
     const results: (string | string[] | null)[] = [];
     let anyRenderableChild = false;
-    let currentX = startX;
     
     for (let i = 0; i < validChildren.length; i++) {
       const child = validChildren[i];
@@ -548,7 +559,6 @@ export function grid(
         }
       }
       
-      currentX += width + columnGap;
     }
     
     if (!anyRenderableChild) {
@@ -591,12 +601,13 @@ export function grid(
             const result = results[partIdx];
             partIdx++;
             const content = result === null ? '' : (typeof result === 'string' ? result : '');
-            const plainContent = stripAnsi(content);
-            totalAutoWidth += plainContent.length;
+            const visibleWidth = countVisibleChars(content);
+            totalAutoWidth += visibleWidth;
             autoContents.push(content);
             
             if (process.env.DEBUG_GRID) {
-              console.log(`DEBUG: Collected auto column ${i}: "${plainContent}", totalAutoWidth=${totalAutoWidth}, autoContents.length=${autoContents.length}`);
+              const debugPlain = stripAnsi(content);
+              console.log(`DEBUG: Collected auto column ${i}: "${debugPlain}", totalAutoWidth=${totalAutoWidth}, autoContents.length=${autoContents.length}`);
             }
             
             // Skip gap result if present (spaceBetween adds gap results between columns)
@@ -641,9 +652,9 @@ export function grid(
         
         const line = lineParts.join('');
         // Pad to full width to ensure right column is at the end
-        const plainLine = stripAnsi(line);
-        const paddedLine = plainLine.length < ctx.availableWidth 
-          ? line + ' '.repeat(ctx.availableWidth - plainLine.length)
+        const visibleLineWidth = countVisibleChars(line);
+        const paddedLine = visibleLineWidth < ctx.availableWidth 
+          ? line + ' '.repeat(ctx.availableWidth - visibleLineWidth)
           : line;
         return paddedLine;
       }
@@ -674,25 +685,42 @@ export function grid(
             lineParts.push('');
           }
         } else {
-          const columnContent = typeof result === 'string' ? result : '';
+          let columnContent: string;
+          if (typeof result === 'string') {
+            columnContent = result;
+          } else if (Array.isArray(result)) {
+            // Multi-line result - take first line for single-row rendering
+            columnContent = result[0] ?? '';
+          } else {
+            columnContent = '';
+          }
+          
           if (isAuto) {
             lineParts.push(columnContent);
           } else {
-            const plainContent = stripAnsi(columnContent);
+            const visibleWidth = countVisibleChars(columnContent);
             let paddedContent: string;
             // If content is empty and this is a flex column with spaceBetween, fill it
-            if (plainContent.length === 0 && spaceBetween && columnWidth > 0 && isFlex) {
+            if (visibleWidth === 0 && spaceBetween && columnWidth > 0 && isFlex) {
               const { char: spaceChar, color: spaceColor } = getSpaceBetweenChar(spaceBetween, i);
               const fillText = spaceChar.repeat(columnWidth);
               paddedContent = spaceColor ? applyStyle(fillText, { color: spaceColor }) : fillText;
-            } else if (plainContent.length === 0 && spaceBetween && columnWidth > 0) {
+            } else if (visibleWidth === 0 && spaceBetween && columnWidth > 0) {
               const { char: spaceChar, color: spaceColor } = getSpaceBetweenChar(spaceBetween, i);
               const fillText = spaceChar.repeat(columnWidth);
               paddedContent = spaceColor ? applyStyle(fillText, { color: spaceColor }) : fillText;
             } else {
-              paddedContent = plainContent.length < columnWidth
-                ? columnContent + ' '.repeat(columnWidth - plainContent.length)
-                : columnContent;
+              // Truncate if needed, then pad
+              let finalContent = columnContent;
+              if (visibleWidth > columnWidth) {
+                // Need to truncate at visible width
+                const split = splitAtVisiblePos(columnContent, columnWidth);
+                finalContent = split.before;
+              }
+              const finalVisibleWidth = countVisibleChars(finalContent);
+              paddedContent = finalVisibleWidth < columnWidth
+                ? finalContent + ' '.repeat(columnWidth - finalVisibleWidth)
+                : finalContent;
             }
             lineParts.push(paddedContent);
         }
@@ -714,9 +742,9 @@ export function grid(
       
       const line = lineParts.join('');
       // CRITICAL: Pad line to full availableWidth to ensure grid fills the region
-      const plainLine = line.replace(/\x1b\[[0-9;]*m/g, '');
-      const paddedLine = plainLine.length < ctx.availableWidth 
-        ? line + ' '.repeat(ctx.availableWidth - plainLine.length)
+      const visibleLineWidth = countVisibleChars(line);
+      const paddedLine = visibleLineWidth < ctx.availableWidth 
+        ? line + ' '.repeat(ctx.availableWidth - visibleLineWidth)
         : line;
       return paddedLine;
     }
@@ -767,21 +795,29 @@ export function grid(
         if (isAuto) {
           lineParts.push(columnContent);
         } else {
-          const plainContent = columnContent.replace(/\x1b\[[0-9;]*m/g, '');
+          const visibleWidth = countVisibleChars(columnContent);
           let paddedContent: string;
           // If content is empty and this is a flex column with spaceBetween, fill it
-          if (plainContent.length === 0 && spaceBetween && columnWidth > 0 && isFlex) {
+          if (visibleWidth === 0 && spaceBetween && columnWidth > 0 && isFlex) {
             const { char: spaceChar, color: spaceColor } = getSpaceBetweenChar(spaceBetween, i);
             const fillText = spaceChar.repeat(columnWidth);
             paddedContent = spaceColor ? applyStyle(fillText, { color: spaceColor }) : fillText;
-          } else if (plainContent.length === 0 && spaceBetween && columnWidth > 0) {
+          } else if (visibleWidth === 0 && spaceBetween && columnWidth > 0) {
             const { char: spaceChar, color: spaceColor } = getSpaceBetweenChar(spaceBetween, i);
             const fillText = spaceChar.repeat(columnWidth);
             paddedContent = spaceColor ? applyStyle(fillText, { color: spaceColor }) : fillText;
           } else {
-            paddedContent = plainContent.length < columnWidth
-              ? columnContent + ' '.repeat(columnWidth - plainContent.length)
-              : columnContent;
+            // Truncate if needed, then pad
+            let finalContent = columnContent;
+            if (visibleWidth > columnWidth) {
+              // Need to truncate at visible width
+              const split = splitAtVisiblePos(columnContent, columnWidth);
+              finalContent = split.before;
+            }
+            const finalVisibleWidth = countVisibleChars(finalContent);
+            paddedContent = finalVisibleWidth < columnWidth
+              ? finalContent + ' '.repeat(columnWidth - finalVisibleWidth)
+              : finalContent;
           }
           lineParts.push(paddedContent);
         }

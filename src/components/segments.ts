@@ -71,11 +71,9 @@ export function Segments(options: SegmentsOptions): Component {
 
     const availableWidth = ctx.availableWidth;
     let result = '';
-    let usedWidth = 0;
 
     for (let i = 0; i < segments.length; i++) {
       const segment = segments[i];
-      const nextSegment = i < segments.length - 1 ? segments[i + 1] : null;
       
       // Left divider (automatic - dash for middle segments)
       if (i > 0) {
@@ -83,7 +81,6 @@ export function Segments(options: SegmentsOptions): Component {
         const dividerColor = 'brightBlack';
         const styledDivider = applyStyle('─', { color: dividerColor });
         result += styledDivider;
-        usedWidth += 1;
       }
 
       // Left border decoration
@@ -93,7 +90,6 @@ export function Segments(options: SegmentsOptions): Component {
         // Auto-theme: borders use text color
         const borderColor = segment.color ?? 'brightCyan';
         result += applyStyle(borderChars.left, { color: borderColor });
-        usedWidth += 1;
       }
 
       // Segment content with automatic padding (no background, just text color)
@@ -105,14 +101,12 @@ export function Segments(options: SegmentsOptions): Component {
         // No backgroundColor - uses default terminal background
       });
       result += styledContent;
-      usedWidth += paddedContent.length;
 
       // Right border decoration
       if (borderChars.right) {
         // Auto-theme: borders use text color
         const borderColor = segment.color ?? 'brightCyan';
         result += applyStyle(borderChars.right, { color: borderColor });
-        usedWidth += 1;
       }
 
       // Right divider (automatic - dash for middle segments)
@@ -121,7 +115,6 @@ export function Segments(options: SegmentsOptions): Component {
         const dividerColor = 'brightBlack';
         const styledDivider = applyStyle('─', { color: dividerColor });
         result += styledDivider;
-        usedWidth += 1;
       }
     }
 

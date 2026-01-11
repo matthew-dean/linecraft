@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { progressBar } from './progress-bar-grid.js';
 import { TerminalRegion } from '../region.js';
+import { callComponent } from '../component.js';
 
 describe('ProgressBar (Grid)', () => {
   let region: TerminalRegion;
@@ -15,9 +16,9 @@ describe('ProgressBar (Grid)', () => {
       total: 100,
     });
     
-    expect(typeof component).toBe('function');
+    expect(typeof component === 'function' || (typeof component === 'object' && component !== null && 'render' in component)).toBe(true);
     
-    const result = component({
+    const result = callComponent(component, {
       availableWidth: 80,
       region: region,
       columnIndex: 0,
@@ -34,7 +35,7 @@ describe('ProgressBar (Grid)', () => {
       total: 100,
     });
     
-    const result = component({
+    const result = callComponent(component, {
       availableWidth: 80,
       region: region,
       columnIndex: 0,
@@ -53,7 +54,7 @@ describe('ProgressBar (Grid)', () => {
       total: 100,
     });
     
-    const result = component({
+    const result = callComponent(component, {
       availableWidth: 80,
       region: region,
       columnIndex: 0,
@@ -73,7 +74,7 @@ describe('ProgressBar (Grid)', () => {
       percentColor: 'yellow',
     });
     
-    const result = component({
+    const result = callComponent(component, {
       availableWidth: 80,
       region: region,
       columnIndex: 0,
@@ -90,7 +91,7 @@ describe('ProgressBar (Grid)', () => {
       total: 100,
     });
     
-    const result = component({
+    const result = callComponent(component, {
       availableWidth: 80,
       region: region,
       columnIndex: 0,
@@ -107,7 +108,7 @@ describe('ProgressBar (Grid)', () => {
       total: 100,
     });
     
-    const result = component({
+    const result = callComponent(component, {
       availableWidth: 80,
       region: region,
       columnIndex: 0,

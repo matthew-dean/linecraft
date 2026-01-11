@@ -511,9 +511,9 @@ describe('Grid Layout', () => {
         Styled({}, 'B')
       );
       
-      expect(typeof component).toBe('function');
+      expect(typeof component === 'function' || (typeof component === 'object' && component !== null && 'render' in component)).toBe(true);
       
-      const result = component({
+      const result = callComponent(component, {
         availableWidth: 80,
         region: region,
         columnIndex: 0,
@@ -530,7 +530,7 @@ describe('Grid Layout', () => {
         Styled({ when: () => false }, 'B')
       );
       
-      const result = component({
+      const result = callComponent(component, {
         availableWidth: 80,
         region: region,
         columnIndex: 0,

@@ -263,3 +263,136 @@ export function getTrimmedTextWidth(text: string): number {
   return trimmed.length;
 }
 
+
+/**
+ * Count visible characters in text, skipping ANSI escape codes
+ * More efficient than stripAnsi().length as it doesn't create a new string
+ * 
+ * @param text - Text that may contain ANSI escape codes
+ * @returns Number of visible characters
+ */
+export function countVisibleChars(text: string): number {
+  let count = 0;
+  let idx = 0;
+  
+  while (idx < text.length) {
+    if (text[idx] === '\x1b') {
+      // Found start of ANSI escape sequence - skip to the end
+      let end = idx + 1;
+      while (end < text.length && text[end] !== 'm') {
+        end++;
+      }
+      // Include the 'm' if found
+      if (end < text.length) {
+        end++;
+      }
+      idx = end;
+    } else {
+      // Regular character - count it
+      idx++;
+      count++;
+    }
+  }
+  
+  return count;
+}
+
+/**
+ * Extract active ANSI codes from text (all codes that are active at the end)
+ * Returns the ANSI escape sequences that should be applied to continue the styling
+ */
+function extractActiveAnsiCodes(text: string): string {
+  const codes: string[] = [];
+  let idx = 0;
+  
+  while (idx < text.length) {
+    if (text[idx] === '\x1b' && idx + 1 < text.length && text[idx + 1] === '[') {
+      // Found ANSI escape sequence
+      let end = idx + 2;
+      while (end < text.length && text[end] !== 'm') {
+        end++;
+      }
+      if (end < text.length) {
+        const code = text.substring(idx, end + 1);
+        // Check if it's a reset (0m) or a style code
+        if (code === '\x1b[0m') {
+          // Reset - clear all previous codes
+          codes.length = 0;
+        } else {
+          // Style code - add it
+          codes.push(code);
+        }
+        idx = end + 1;
+      } else {
+        idx++;
+      }
+    } else {
+      idx++;
+    }
+  }
+  
+  // Return all active codes combined
+  return codes.join('');
+}
+
+/**
+ * Split text at a specific visible character position, preserving ANSI codes
+ * 
+ * When splitting, we preserve any active ANSI color codes:
+ * - The "before" part gets the codes closed with \x1b[0m if needed
+ * - The "after" part gets the active codes re-applied at the start
+ * 
+ * @param text - Text that may contain ANSI escape codes
+ * @param visiblePos - Position in visible characters (0-based)
+ * @returns Object with { before: string, after: string } split at the visible position
+ * 
+ * @example
+ * splitAtVisiblePos('\x1b[31mHello World', 5)
+ * // { before: '\x1b[31mHello\x1b[0m', after: '\x1b[31m World' }
+ */
+export function splitAtVisiblePos(text: string, visiblePos: number): { before: string; after: string } {
+  if (visiblePos <= 0) {
+    return { before: '', after: text };
+  }
+  
+  // First, find the split point
+  let visual = 0;  // Count of visible characters seen so far
+  let idx = 0;     // Current position in the string
+  
+  while (idx < text.length && visual < visiblePos) {
+    if (text[idx] === '\x1b') {
+      // Found start of ANSI escape sequence - skip to the end
+      let end = idx + 1;
+      while (end < text.length && text[end] !== 'm') {
+        end++;
+      }
+      // Include the 'm' if found
+      if (end < text.length) {
+        end++;
+      }
+      idx = end;
+    } else {
+      // Regular character - count it and advance
+      idx++;
+      visual++;
+    }
+  }
+  
+  const before = text.substring(0, idx);
+  const after = text.substring(idx);
+  
+  // Extract active ANSI codes from the "before" part
+  const activeCodes = extractActiveAnsiCodes(before);
+  
+  // If there are active codes, we need to:
+  // 1. Close them in the "before" part (unless it already ends with a reset)
+  // 2. Re-apply them at the start of the "after" part
+  if (activeCodes && !before.endsWith('\x1b[0m')) {
+    return {
+      before: before + '\x1b[0m',
+      after: activeCodes + after
+    };
+  }
+  
+  return { before, after };
+}
