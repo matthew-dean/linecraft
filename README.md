@@ -381,10 +381,10 @@ Contributions welcome! Please open an issue or PR.
 
 ## License
 
-This project is licensed under the **Fair Labor License (FLL) v1.1**.
+This project is licensed under the **Fair Labor License (FLL) v1.2**.
 
-- If you are an individual with a net worth under **$1M USD**, or  
-- Your organization is **Fair Labor Compliant** (your CEO or highest-paid executive makes no more than **15×** your median employee’s total annual compensation),
+- If you are an individual with a net worth under **$5M USD**, or  
+- Your organization is **Fair Labor Compliant** (your CEO or highest-paid executive makes no more than **15×** your median employee's total annual compensation),
 
 then you may use this software **for free**, subject to the terms of the license.
 

@@ -1,8 +1,8 @@
-Fair Labor License (FLL) v1.1
+Fair Labor License (FLL) v1.2
 
 © 2025 Linecraft Contributors
 
-SPDX-License-Identifier: LicenseRef-FLL-1.1
+SPDX-License-Identifier: LicenseRef-FLL-1.2
 
 1. Purpose  
 The Fair Labor License exists to ensure that free and open software does not contribute to extreme labor inequality. When organizations compensate their workers fairly, this software is free to use. When they do not, they must purchase a license — ensuring that value created through labor is not taken without accountability.
@@ -17,7 +17,7 @@ Anyone may download, install, and use the software solely for evaluation and tes
 This software is free to use for any individual or organization that meets at least one of the following conditions at the time of operational use:
 
 a. Individuals  
-The individual’s net worth is under 1 million USD.
+The individual's net worth is under 5 million USD.
 
 b. Organizations  
 The organization is Fair Labor Compliant, defined as:
