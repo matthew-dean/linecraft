@@ -4,7 +4,7 @@ import type { RenderContext, Component } from '../component.js';
 import { callComponent } from '../component.js';
 import type { Color } from '../types.js';
 import { applyStyle } from '../utils/colors.js';
-import { truncateEnd, truncateStart, truncateMiddle, wrapText } from '../utils/text.js';
+import { truncateEnd, truncateStart, truncateMiddle, wrapText, countVisibleChars } from '../utils/text.js';
 
 export interface StyleOptions {
   color?: Color;
@@ -14,6 +14,7 @@ export interface StyleOptions {
   underline?: boolean;
   overflow?: 'none' | 'ellipsis-end' | 'ellipsis-start' | 'ellipsis-middle' | 'wrap';
   align?: 'left' | 'right' | 'center';  // Text alignment within available width
+  max?: number;  // Maximum width constraint (content will be truncated/wrapped to this width)
   when?: (ctx: RenderContext) => boolean;  // Only show if condition is true
 }
 
@@ -43,7 +44,10 @@ export function Styled(
     
     // Handle overflow
     const overflow = options.overflow ?? 'wrap';
-    const availableWidth = Math.max(0, ctx.availableWidth);
+    // Apply max width constraint if specified (content-based width up to max)
+    const availableWidth = Math.max(0, options.max !== undefined 
+      ? Math.min(ctx.availableWidth, options.max)
+      : ctx.availableWidth);
     const alignMode = options.align ?? 'left';
     const styleOptions = {
       color: options.color,
@@ -79,11 +83,14 @@ export function Styled(
       // Single line
       let processed = text;
       
-      if (overflow === 'ellipsis-end' && processed.length > availableWidth) {
+      // Check visible width, not raw string length
+      const visibleWidth = countVisibleChars(processed);
+      
+      if (overflow === 'ellipsis-end' && visibleWidth > availableWidth) {
         processed = truncateEnd(processed, availableWidth);
-      } else if (overflow === 'ellipsis-start' && processed.length > availableWidth) {
+      } else if (overflow === 'ellipsis-start' && visibleWidth > availableWidth) {
         processed = truncateStart(processed, availableWidth);
-      } else if (overflow === 'ellipsis-middle' && processed.length > availableWidth) {
+      } else if (overflow === 'ellipsis-middle' && visibleWidth > availableWidth) {
         processed = truncateMiddle(processed, availableWidth);
       } else if (overflow === 'wrap' || overflow === 'none') {
         const wrapped = wrapText(processed, availableWidth);

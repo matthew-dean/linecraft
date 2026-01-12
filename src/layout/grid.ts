@@ -41,7 +41,7 @@ export type GridTemplateEntry =
   | 'auto'  // Auto width (fit content)
   | '*'  // Flex unit shorthand (same as '1*')
   | `${number}*`  // Flex unit: '1*', '2*'
-  | { min: number; width: string };  // Minmax: { min: 40, width: '2*' }
+  | { min?: number; max?: number; width?: string };  // Minmax: { min: 40, max: 100, width: '2*' } or { max: 50 } for max-only
 
 export interface GridOptions {
   /** Explicit column definitions (like CSS grid-template-columns) */
@@ -90,6 +90,8 @@ interface TrackSize {
   type: 'fixed' | 'flex' | 'minmax' | 'auto';
   value: number;  // Fixed width, or flex ratio, or min width
   flexRatio?: number;  // For flex and minmax
+  max?: number;  // Max width for minmax
+  hasMin?: boolean;  // True if min was explicitly provided (to distinguish min: 0 from no min)
 }
 
 function parseTemplateEntry(entry: GridTemplateEntry): TrackSize {
@@ -114,16 +116,27 @@ function parseTemplateEntry(entry: GridTemplateEntry): TrackSize {
     throw new Error(`Invalid flex unit: ${entry}. Use format like '*', '1*', '2*'`);
   }
   
-  // Minmax: { min: 40, width: '2*' }
-  const match = entry.width.match(/^(\d+)\*$/);
-  if (match) {
-    return {
-      type: 'minmax',
-      value: entry.min,
-      flexRatio: parseInt(match[1], 10),
-    };
+  // Minmax: { min: 40, max: 100, width: '2*' } or { max: 50, width: '1*' } or { max: 50 } (defaults to '1*')
+  const result: TrackSize = {
+    type: 'minmax',
+    value: entry.min ?? 0,
+    max: entry.max,
+    hasMin: entry.min !== undefined,  // Track if min was explicitly provided
+  };
+  
+  if (entry.width) {
+    const match = entry.width.match(/^(\d+)\*$/);
+    if (match) {
+      result.flexRatio = parseInt(match[1], 10);
+    } else {
+      throw new Error(`Invalid minmax width: ${entry.width}. Use format like '2*'`);
+    }
+  } else {
+    // Default to '1*' if no width specified (for max-only or min+max)
+    result.flexRatio = 1;
   }
-  throw new Error(`Invalid minmax width: ${entry.width}. Use format like '2*'`);
+  
+  return result;
 }
 
 /**
@@ -193,9 +206,24 @@ function calculateColumnWidths(
       widths[i] = 0;  // Will be calculated
       flexTotal += track.flexRatio ?? 1;
     } else if (track.type === 'minmax') {
-      widths[i] = track.value;  // Start with min
-      fixedTotal += track.value;
-      flexTotal += track.flexRatio ?? 1;
+      // If no min specified (hasMin === false) and max is set, use auto content width as starting point
+      // Otherwise, use the min value (even if it's 0)
+      // Note: hasMin is only set for minmax tracks, so we check it explicitly
+      if (track.hasMin === false && track.max !== undefined) {
+        // Max-only: use measured content width (clamped to max) as column width
+        // Content will be truncated to max during rendering (via availableWidth passed to child)
+        // Column width is content-based (no padding for short content), but content truncates to max
+        const autoWidth = autoContentWidths[i] ?? 0;
+        widths[i] = Math.min(autoWidth, track.max); // Use content width, clamped to max
+        // Add content width to fixedTotal so it's accounted for in remainingSpace
+        fixedTotal += widths[i];
+        // DO NOT add to flexTotal - max-only columns are content-based, not flex-based
+      } else {
+        // Regular minmax with min: participates in flex distribution
+        widths[i] = track.value;  // Start with min (even if min is 0)
+        fixedTotal += track.value;
+        flexTotal += track.flexRatio ?? 1;
+      }
     } else if (track.type === 'auto') {
       const autoWidth = autoContentWidths[i] ?? 0;
       widths[i] = autoWidth;
@@ -216,8 +244,22 @@ function calculateColumnWidths(
       if (track.type === 'flex') {
         widths[i] = (track.flexRatio ?? 1) * flexUnit;
       } else if (track.type === 'minmax') {
-        // Add flex space to min width
-        widths[i] = track.value + (track.flexRatio ?? 1) * flexUnit;
+        // For max-only (no min specified), don't add flex space - keep at measured content width
+        // For regular minmax (with min), add flex space to min value
+        if (track.hasMin) {
+          // Regular minmax: add flex space to min value
+          widths[i] = widths[i] + (track.flexRatio ?? 1) * flexUnit;
+          // Clamp to max if specified
+          if (track.max !== undefined) {
+            widths[i] = Math.min(widths[i], track.max);
+          }
+        } else {
+          // Max-only: don't expand beyond measured content width (already clamped to max in Step 1)
+          // Just ensure we don't exceed max
+          if (track.max !== undefined) {
+            widths[i] = Math.min(widths[i], track.max);
+          }
+        }
       }
     }
   }
@@ -313,11 +355,23 @@ function measureAutoContentWidths(
 ): number[] {
   const widths = new Array(tracks.length).fill(0);
   for (let i = 0; i < tracks.length; i++) {
-    if (tracks[i].type !== 'auto') {
-      continue;
+    const track = tracks[i];
+    // Measure auto columns and minmax columns (for minmax, measure with max constraint if present)
+    if (track.type === 'auto') {
+      const result = children[i] ? callComponent(children[i]!, ctxFactory(i)) : null;
+      widths[i] = getRenderedWidth(result);
+    } else if (track.type === 'minmax' && track.max !== undefined) {
+      // For minmax with max, measure with max width constraint so truncation happens during measurement
+      const baseCtx = ctxFactory(i);
+      const maxWidth = track.max;
+      const constrainedCtx = createChildContext(baseCtx, {
+        availableWidth: maxWidth,
+        columnIndex: i,
+        rowIndex: 0,
+      });
+      const result = children[i] ? callComponent(children[i]!, constrainedCtx) : null;
+      widths[i] = getRenderedWidth(result);
     }
-    const result = children[i] ? callComponent(children[i]!, ctxFactory(i)) : null;
-    widths[i] = getRenderedWidth(result);
   }
   return widths;
 }
@@ -412,9 +466,16 @@ export function grid(
         for (let colIdx = 0; colIdx < rowChildren.length; colIdx++) {
           const child = rowChildren[colIdx];
           const width = columnWidths[colIdx] ?? 0;
+          const track = tracks[colIdx];
+          
+          // For max-only minmax columns, pass max width to child (so it truncates), not column width
+          // Column width is content-based (no padding), but content should be truncated to max
+          const childWidth = (track?.type === 'minmax' && track?.hasMin === false && track?.max !== undefined)
+            ? track.max
+            : width;
           
           const childCtx = createChildContext(ctx, {
-            availableWidth: width,
+            availableWidth: childWidth,
             columnIndex: colIdx,
             rowIndex: rowIdx,
           });
@@ -531,10 +592,17 @@ export function grid(
     for (let i = 0; i < validChildren.length; i++) {
       const child = validChildren[i];
       const width = actualWidths[i] ?? 0;
+      const track = tracks[i];
+      
+      // For max-only minmax columns, pass max width to child (so it truncates), not column width
+      // Column width is content-based (no padding), but content should be truncated to max
+      const childWidth = (track?.type === 'minmax' && track?.hasMin === false && track?.max !== undefined)
+        ? track.max
+        : width;
       
       // Create context for child
       const childCtx = createChildContext(ctx, {
-        availableWidth: width,
+        availableWidth: childWidth,
         columnIndex: i,
         rowIndex: 0,
       });
@@ -583,21 +651,10 @@ export function grid(
         let totalAutoWidth = 0;
         let partIdx = 0;
         
-        // Debug: log what we're working with
-        if (process.env.DEBUG_GRID) {
-          console.log('DEBUG: spaceBetween with auto columns');
-          console.log('DEBUG: validChildren.length:', validChildren.length);
-          console.log('DEBUG: results.length:', results.length);
-          console.log('DEBUG: tracks:', tracks.map(t => t.type));
-        }
-        
         for (let i = 0; i < validChildren.length; i++) {
           const track = tracks[i];
           
           if (track.type === 'auto') {
-            if (process.env.DEBUG_GRID) {
-              console.log(`DEBUG: Processing auto column ${i}, partIdx=${partIdx}, results[partIdx]=`, results[partIdx]);
-            }
             const result = results[partIdx];
             partIdx++;
             const content = result === null ? '' : (typeof result === 'string' ? result : '');
@@ -605,17 +662,9 @@ export function grid(
             totalAutoWidth += visibleWidth;
             autoContents.push(content);
             
-            if (process.env.DEBUG_GRID) {
-              const debugPlain = stripAnsi(content);
-              console.log(`DEBUG: Collected auto column ${i}: "${debugPlain}", totalAutoWidth=${totalAutoWidth}, autoContents.length=${autoContents.length}`);
-            }
-            
             // Skip gap result if present (spaceBetween adds gap results between columns)
             // Only skip if this is not the last column and there's a gap result
             if (i < validChildren.length - 1 && columnGap > 0 && partIdx < results.length) {
-              if (process.env.DEBUG_GRID) {
-                console.log(`DEBUG: Skipping gap result at partIdx=${partIdx}`);
-              }
               partIdx++; // Skip the gap result
             }
           } else {
@@ -625,11 +674,6 @@ export function grid(
               partIdx++; // Skip gap if present
             }
           }
-        }
-        
-        if (process.env.DEBUG_GRID) {
-          console.log('DEBUG: Final autoContents.length:', autoContents.length);
-          console.log('DEBUG: Final totalAutoWidth:', totalAutoWidth);
         }
         
         // Calculate spaceBetween fill width
@@ -668,9 +712,10 @@ export function grid(
         partIdx++;
         const columnWidth = actualWidths[i] ?? 0;
         const track = tracks[i];
-        const isAuto = track?.type === 'auto';
+        // Treat max-only minmax columns as auto (no padding, content-based)
+        const isAuto = track?.type === 'auto' || (track?.type === 'minmax' && track?.hasMin === false && track?.max !== undefined);
         
-        const isFlex = track?.type === 'flex' || track?.type === 'minmax';
+        const isFlex = track?.type === 'flex' || (track?.type === 'minmax' && track?.hasMin === true);
         
         if (result === null) {
           // Null result - pad to column width
@@ -760,8 +805,9 @@ export function grid(
         partIdx++;
         const columnWidth = actualWidths[i] ?? 0;
         const track = tracks[i];
-        const isAuto = track?.type === 'auto';
-        const isFlex = track?.type === 'flex' || track?.type === 'minmax';
+        // Treat max-only minmax columns as auto (no padding, content-based)
+        const isAuto = track?.type === 'auto' || (track?.type === 'minmax' && track?.hasMin === false && track?.max !== undefined);
+        const isFlex = track?.type === 'flex' || (track?.type === 'minmax' && track?.hasMin === true);
         
         if (result === null) {
           // Null result - pad to column width

@@ -4,9 +4,8 @@ import type { RenderContext, Component } from '../component.js';
 import { callComponent } from '../component.js';
 import type { Color } from '../types.js';
 import { applyStyle } from '../utils/colors.js';
-import { stripAnsi, truncateToWidth, countVisibleChars } from '../utils/text.js';
+import { stripAnsi, truncateToWidth, countVisibleChars, splitAtVisiblePos } from '../utils/text.js';
 import { fileLink } from '../utils/file-link.js';
-import { Section } from './section.js';
 import { Styled } from './styled.js';
 import { grid as Grid } from '../layout/grid.js';
 import { getLineNumberColor, isDarkTerminal } from '../utils/terminal-theme.js';
@@ -99,21 +98,27 @@ function calculateVisibleRange(
   }
   
   // Try to center the target in the available space
-  const padding = Math.floor((availableWidth - targetWidth) / 2);
+  // First, determine if we'll need ellipsis on both sides
+  const willNeedEllipsisStart = targetStartCol > 1 || (targetStartCol === 1 && codeLength > availableWidth);
+  const willNeedEllipsisEnd = (targetEndCol ?? targetStartCol) < codeLength || codeLength > availableWidth;
+  const ellipsisWidth = (willNeedEllipsisStart ? 3 : 0) + (willNeedEllipsisEnd ? 3 : 0);
+  const effectiveAvailableWidth = availableWidth - ellipsisWidth;
+  
+  const padding = Math.floor((effectiveAvailableWidth - targetWidth) / 2);
   let startCol = Math.max(1, targetStartCol - padding);
-  let endCol = Math.min(effectiveMaxCol, startCol + availableWidth - 1);
+  let endCol = Math.min(effectiveMaxCol, startCol + effectiveAvailableWidth - 1);
   
   // Adjust if we hit boundaries
-  if (endCol - startCol + 1 > availableWidth) {
-    endCol = startCol + availableWidth - 1;
+  if (endCol - startCol + 1 > effectiveAvailableWidth) {
+    endCol = startCol + effectiveAvailableWidth - 1;
   }
   if (endCol > effectiveMaxCol) {
     endCol = effectiveMaxCol;
-    startCol = Math.max(1, endCol - availableWidth + 1);
+    startCol = Math.max(1, endCol - effectiveAvailableWidth + 1);
   }
   if (startCol < 1) {
     startCol = 1;
-    endCol = Math.min(effectiveMaxCol, availableWidth);
+    endCol = Math.min(effectiveMaxCol, effectiveAvailableWidth);
   }
   
   // Check if we need ellipsis
@@ -158,14 +163,9 @@ function truncateCodeLine(
   }
   
   if (hasEllipsisStart && hasEllipsisEnd) {
-    // Truncate both ends - show middle portion
-    const midPoint = Math.floor(codeWidth / 2);
-    const startPart = truncateToWidth(truncatedPlain, midPoint);
-    const endPart = truncateToWidth(
-      truncatedPlain.substring(stripAnsi(truncatedPlain).length - (codeWidth - midPoint)),
-      codeWidth - midPoint
-    );
-    return `...${startPart}...${endPart}...`;
+    // Truncate both ends - show the visible range portion (no middle ellipsis)
+    // The visible range already contains the target columns, just truncate if needed
+    return `...${truncatedPlain}...`;
   } else if (hasEllipsisStart) {
     return `...${truncatedPlain}`;
   } else {
@@ -181,7 +181,6 @@ export function CodeDebug(options: CodeDebugOptions): Component {
     const {
       startLine,
       startColumn,
-      endLine,
       endColumn,
       lineBefore,
       errorLine,
@@ -196,7 +195,9 @@ export function CodeDebug(options: CodeDebugOptions): Component {
       maxColumn,
     } = options;
     
-    const availableWidth = ctx.availableWidth;
+    // If availableWidth is Infinity (during Grid measurement), use a reasonable default
+    // Otherwise use the actual available width
+    const availableWidth = Number.isFinite(ctx.availableWidth) ? ctx.availableWidth : 80;
     
     // Color scheme based on type
     const colors: Record<CodeDebugType, { primary: Color; secondary: Color; message: Color }> = {
@@ -324,39 +325,109 @@ export function CodeDebug(options: CodeDebugOptions): Component {
     codeLines.push('');
     
     // Filename in brackets with line:column, connected with curved border (Oxlint style)
-    // The curve should align with the line number column (accounting for line number width)
     const pathText = baseDir && filePath.startsWith(baseDir)
       ? filePath.substring(baseDir.length + 1)
       : filePath;
-    // Only make the filename blue/bold, not the brackets, colons, or line/column numbers
-    const locationText = '[' + 
-      applyStyle(pathText, { color: 'blue', bold: true }) + 
-      ':' + 
-      String(startLine) + 
-      ':' + 
-      String(startColumn) + 
-      ']';
-    // Align curve with line numbers: lineNumWidth spaces + 1 space (for the space after line number)
+    
+    // Build location line parts
     const curveIndent = ' '.repeat(lineNumWidth + 1);
-    const locationLine = curveIndent + applyStyle('╭─', { color: 'brightBlack' }) + locationText;
-    codeLines.push(locationLine);
+    const curve = applyStyle('╭─', { color: 'brightBlack' });
+    const bracketOpen = '[';
+    const colon1 = ':';
+    // Apply subtle color to line/column numbers (not colons)
+    const lineNumColor = isDarkTerminal() ? 'magenta' : 'magenta';
+    const lineNum = applyStyle(String(startLine), { color: lineNumColor });
+    const colon2 = ':';
+    const colNum = applyStyle(String(startColumn), { color: lineNumColor });
+    const bracketClose = ']';
+    
+    // Calculate max width for path: available width minus fixed parts
+    // Fixed parts: curveIndent + ╭─ + [ + : + lineNum + : + colNum + ]
+    // Note: lineNum and colNum are now styled, so we need to use plain strings for width calculation
+    const lineNumPlain = String(startLine);
+    const colNumPlain = String(startColumn);
+    const fixedParts = curveIndent + curve + bracketOpen + colon1 + lineNumPlain + colon2 + colNumPlain + bracketClose;
+    const fixedPartsWidth = countVisibleChars(fixedParts);
+    // Ensure pathMaxWidth is finite and reasonable (cap at 40 to prevent extremely long paths)
+    const pathMaxWidth = Math.max(10, Math.min(40, availableWidth - fixedPartsWidth));
+    
+    // Create clickable file link with styling and max width constraint
+    const pathWithLink = fileLink(fullPath, pathText);
+    const pathStyled = Styled(
+      { color: 'blue', bold: true, overflow: 'ellipsis-start', max: pathMaxWidth },
+      pathWithLink
+    );
+    
+    // Use Grid with auto columns (content-based width, no padding)
+    // Template: [curveIndent (auto)][╭─ (auto)][[ (auto)][path (auto)][: (auto)][line (auto)][: (auto)][column (auto)][] (auto)]
+    const locationGrid = Grid(
+      { 
+        template: ['auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto'],
+        columnGap: 0
+      },
+      curveIndent,
+      curve,
+      bracketOpen,
+      pathStyled,
+      colon1,
+      lineNum,
+      colon2,
+      colNum,
+      bracketClose
+    );
+    
+    const locationResult = callComponent(locationGrid, ctx);
+    
+    if (locationResult && typeof locationResult === 'string') {
+      codeLines.push(locationResult);
+    } else if (Array.isArray(locationResult)) {
+      codeLines.push(...locationResult);
+    } else {
+      // Fallback
+      const locationLine = curveIndent + curve + bracketOpen + pathText + colon1 + lineNum + colon2 + colNum + bracketClose;
+      codeLines.push(locationLine);
+    }
     
     // Line before (if exists)
     if (lineBefore !== null && lineBefore !== undefined) {
       const beforeLineNum = String(startLine - 1);
       const beforeLineNumPadded = beforeLineNum.padStart(lineNumWidth);
       const truncatedBefore = truncateToWidth(lineBefore, codeAreaWidth);
+      // Make non-error lines slightly dimmer: darker on dark terminals, whiter on light terminals
+      const dimmedBefore = isDarkTerminal() 
+        ? applyStyle(truncatedBefore, { dim: true })
+        : applyStyle(truncatedBefore, { color: 'brightBlack' });
       codeLines.push(
         applyStyle(`${beforeLineNumPadded} `, { color: lineNumberColor, dim: isDarkTerminal() }) +
-        applyStyle('│ ', { color: 'brightBlack' }) + truncatedBefore
+        applyStyle('│ ', { color: 'brightBlack' }) + dimmedBefore
       );
     }
     
     // Error line (with space before code)
+    // Highlight the error range if endColumn is specified
+    let highlightedErrorLine = truncatedErrorLine;
+    if (endColumn && endColumn > startColumn) {
+      const highlightStart = mapColumnToDisplay(startColumn); // 1-based
+      const highlightEnd = mapColumnToDisplay(endColumn); // 1-based
+      
+      // Split at highlight start and end positions (splitAtVisiblePos uses 0-based)
+      const { before: beforeHighlight } = splitAtVisiblePos(truncatedErrorLine, highlightStart - 1);
+      const remainingAfterStart = truncatedErrorLine.substring(beforeHighlight.length);
+      const highlightLength = highlightEnd - highlightStart + 1;
+      const { before: highlightRange } = splitAtVisiblePos(remainingAfterStart, highlightLength);
+      const afterHighlight = remainingAfterStart.substring(highlightRange.length);
+      
+      // Apply highlight color: brighter on dark terminal, whiter on light terminal
+      const highlightColor = isDarkTerminal() ? 'brightWhite' : 'white';
+      const highlightedRange = applyStyle(highlightRange, { color: highlightColor });
+      
+      highlightedErrorLine = beforeHighlight + highlightedRange + afterHighlight;
+    }
+    
     const errorLineNum = String(startLine);
     const errorLineNumPadded = errorLineNum.padStart(lineNumWidth);
     let errorLineDisplay = applyStyle(`${errorLineNumPadded} `, { color: lineNumberColor, dim: isDarkTerminal() }) +
-      applyStyle('│ ', { color: 'brightBlack' }) + truncatedErrorLine;
+      applyStyle('│ ', { color: 'brightBlack' }) + highlightedErrorLine;
     codeLines.push(errorLineDisplay);
     
     // Underline line (Oxlint style)
@@ -383,7 +454,8 @@ export function CodeDebug(options: CodeDebugOptions): Component {
     
     if (endColumn && underlineEndCol > underlineStartCol) {
       // Underline with curved edges facing up
-      const underlineLen = underlineEndCol - underlineStartCol;
+      // Use underlineLength which was already calculated correctly (end - start + 1)
+      const underlineLen = underlineLength;
       
       if (shortMessage) {
         // With short message: T-bar in the middle
@@ -391,8 +463,13 @@ export function CodeDebug(options: CodeDebugOptions): Component {
         
         if (underlineLen >= 3) {
           // Build underline with T-bar: left curve, dashes, T-bar, dashes, right curve
+          // Total length = 1 (┖) + left dashes + 1 (┬) + right dashes + 1 (┚) = underlineLen
+          // So: left dashes + right dashes = underlineLen - 3
+          // T-bar is at position connectPosInUnderline (0-indexed from start), so:
+          // - left dashes = connectPosInUnderline - 1 (before T-bar, after ┖)
+          // - right dashes = underlineLen - 3 - (connectPosInUnderline - 1) = underlineLen - connectPosInUnderline - 2
           const leftPart = '─'.repeat(Math.max(0, connectPosInUnderline - 1));
-          const rightPart = '─'.repeat(Math.max(0, underlineLen - connectPosInUnderline - 1));
+          const rightPart = '─'.repeat(Math.max(0, underlineLen - connectPosInUnderline - 2));
           indicatorLine += applyStyle('┖' + leftPart + '┬' + rightPart + '┚', { color: colorScheme.primary });
         } else if (underlineLen === 2) {
           // Too short for T-bar, just use T in middle
@@ -403,7 +480,8 @@ export function CodeDebug(options: CodeDebugOptions): Component {
         }
       } else {
         // No short message: flat underline with curved ends (no T-bar)
-        const dashes = '─'.repeat(underlineLen);
+        // For underlineLen=2: ┖┚ (no dashes), for underlineLen=3: ┖─┚ (1 dash), etc.
+        const dashes = '─'.repeat(Math.max(0, underlineLen - 2));
         indicatorLine += applyStyle('┖' + dashes + '┚', { color: colorScheme.primary });
       }
     } else {
@@ -429,9 +507,13 @@ export function CodeDebug(options: CodeDebugOptions): Component {
       const afterLineNum = String(startLine + 1);
       const afterLineNumPadded = afterLineNum.padStart(lineNumWidth);
       const truncatedAfter = truncateToWidth(lineAfter, codeAreaWidth);
+      // Make non-error lines slightly dimmer: darker on dark terminals, whiter on light terminals
+      const dimmedAfter = isDarkTerminal() 
+        ? applyStyle(truncatedAfter, { dim: true })
+        : applyStyle(truncatedAfter, { color: 'brightBlack' });
       codeLines.push(
         applyStyle(`${afterLineNumPadded} `, { color: lineNumberColor, dim: isDarkTerminal() }) +
-        applyStyle('│ ', { color: 'brightBlack' }) + truncatedAfter
+        applyStyle('│ ', { color: 'brightBlack' }) + dimmedAfter
       );
     }
     

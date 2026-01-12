@@ -540,7 +540,32 @@ export class RegionRenderer {
     this.stdout.write(ansi.EXIT_ALTERNATE_SCREEN);
     this.inAlternateScreen = false;
     if (!clearFirst) {
+      // CRITICAL: Account for scrollbar before flushing to main terminal
+      // Reduce width by 1 character and reflow content, then flush
+      const originalWidth = this.effectiveWidth;
+      const originalViewportWidth = this.viewportWidth;
+      
+      // Temporarily reduce width by 1 to account for scrollbar
+      this.viewportWidth = Math.max(1, this.viewportWidth - 1);
+      this.width = this.viewportWidth;
+      this.effectiveWidth = this.viewportWidth;
+      
+      // Trigger re-render with the reduced width if onKeepAlive callback exists
+      // This will reflow all components (grid, etc.) with the new width
+      // Note: renderNow() inside reRenderLastContent() will return early since destroyed=true,
+      // but the reflow will still update pendingFrame with the correctly sized content
+      if (this.onKeepAlive) {
+        this.onKeepAlive();
+      }
+      
+      // Get the effective frame with the reduced width (reflowed content)
       const finalLines = this.getEffectiveFrame();
+      
+      // Restore original width (though we're exiting, this is for completeness)
+      this.viewportWidth = originalViewportWidth;
+      this.width = originalViewportWidth;
+      this.effectiveWidth = originalWidth;
+      
       // Remove trailing empty lines - don't add extra blank lines to original screen
       let lastNonEmpty = finalLines.length;
       while (lastNonEmpty > 0 && finalLines[lastNonEmpty - 1].trim() === '') {

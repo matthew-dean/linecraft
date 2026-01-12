@@ -1,6 +1,6 @@
 {
   "name": "linecraft",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "High-performance terminal UI library for Node.js",
   "type": "module",
   "main": "./lib/index.js",

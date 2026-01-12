@@ -13,8 +13,75 @@
  * stripAnsi('\x1b[31mHello\x1b[0m') // 'Hello'
  */
 export function stripAnsi(text: string): string {
-  const ansiRegex = /\x1b\[[0-9;]*m/g;
-  return text.replace(ansiRegex, '');
+  // Remove all ANSI escape sequences (SGR and OSC) by iterating and skipping them
+  let result = '';
+  let idx = 0;
+  while (idx < text.length) {
+    if (text[idx] === '\x1b') {
+      // Skip the escape sequence
+      const nextIdx = skipEscapeSequence(text, idx);
+      idx = nextIdx;
+    } else {
+      // Regular character, keep it
+      result += text[idx];
+      idx++;
+    }
+  }
+  return result;
+}
+
+/**
+ * Skip escape sequences (ANSI SGR, OSC 8, and other OSC sequences)
+ * 
+ * @param text - Text that may contain escape sequences
+ * @param idx - Current index in the text
+ * @returns Next index after the escape sequence, or idx+1 if not an escape sequence
+ */
+function skipEscapeSequence(text: string, idx: number): number {
+  if (idx >= text.length || text[idx] !== '\x1b') {
+    return idx; // Not an escape sequence, return same index so caller can count the character
+  }
+  
+  if (idx + 1 < text.length && text[idx + 1] === '[') {
+    // ANSI SGR sequence: \x1b[<numbers>m
+    let end = idx + 2;
+    while (end < text.length && text[end] !== 'm') {
+      end++;
+    }
+    if (end < text.length) {
+      end++;
+    }
+    return end;
+  } else if (idx + 1 < text.length && text[idx + 1] === ']') {
+    // OSC sequence: \x1b]8;;<url>\x1b\\ or \x1b]8;;\x1b\\
+    if (idx + 4 < text.length && text.substring(idx, idx + 4) === '\x1b]8;') {
+      // OSC 8 hyperlink sequence
+      let end = idx + 4;
+      while (end < text.length - 1) {
+        if (text[end] === '\x1b' && text[end + 1] === '\\') {
+          end += 2;
+          break;
+        }
+        end++;
+      }
+      return end;
+    } else {
+      // Other OSC sequence
+      let end = idx + 2;
+      while (end < text.length && text[end] !== '\x07' && text[end] !== '\x1b') {
+        end++;
+      }
+      if (end < text.length && text[end] === '\x07') {
+        end++;
+      } else if (end < text.length && text[end] === '\x1b' && end + 1 < text.length && text[end + 1] === '\\') {
+        end += 2;
+      }
+      return end;
+    }
+  } else {
+    // Unknown escape sequence, skip the escape character
+    return idx + 1;
+  }
 }
 
 /**
@@ -42,24 +109,16 @@ export function truncateToWidth(text: string, maxWidth: number): string {
     return text;
   }
   
-  // Truncate while preserving ANSI codes
-  // We iterate through the string, counting visual characters while skipping ANSI sequences
+  // Truncate while preserving ANSI codes and OSC 8 sequences
+  // We iterate through the string, counting visual characters while skipping escape sequences
   let visual = 0;  // Count of visible characters seen so far
   let idx = 0;     // Current position in the string
   
   while (idx < text.length && visual < maxWidth) {
-    if (text[idx] === '\x1b') {
-      // Found start of ANSI escape sequence - skip to the end
-      // ANSI codes follow pattern: \x1b[...m where ... can contain numbers, semicolons
-      let end = idx + 1;
-      while (end < text.length && text[end] !== 'm') {
-        end++;
-      }
-      // Include the 'm' if found
-      if (end < text.length) {
-        end++;
-      }
-      idx = end;
+    const nextIdx = skipEscapeSequence(text, idx);
+    if (nextIdx > idx) {
+      // We skipped an escape sequence
+      idx = nextIdx;
     } else {
       // Regular character - count it and advance
       idx++;
@@ -105,8 +164,9 @@ export function truncateEnd(text: string, maxWidth: number): string {
  * truncateStart('\x1b[31mHello World\x1b[0m', 8) // '...\x1b[31mWorld\x1b[0m'
  */
 export function truncateStart(text: string, maxWidth: number): string {
-  const plain = stripAnsi(text);
-  if (plain.length <= maxWidth) {
+  // Use countVisibleChars instead of stripAnsi().length to correctly handle OSC 8 codes
+  const visibleWidth = countVisibleChars(text);
+  if (visibleWidth <= maxWidth) {
     return text;
   }
   if (maxWidth <= 3) {
@@ -115,22 +175,18 @@ export function truncateStart(text: string, maxWidth: number): string {
   // We need to truncate from the start, preserving ANSI codes
   // This is trickier - we need to work backwards
   const availableWidth = maxWidth - 3;
-  const startIdx = plain.length - availableWidth;
+  const startVisibleIdx = visibleWidth - availableWidth;
   
-  // Find the actual start position in the original string (accounting for ANSI codes)
+  // Find the actual start position in the original string (accounting for escape sequences)
   let visual = 0;
   let idx = 0;
-  while (idx < text.length && visual < startIdx) {
-    if (text[idx] === '\x1b') {
-      let end = idx + 1;
-      while (end < text.length && text[end] !== 'm') {
-        end++;
-      }
-      if (end < text.length) {
-        end++;
-      }
-      idx = end;
+  while (idx < text.length && visual < startVisibleIdx) {
+    const nextIdx = skipEscapeSequence(text, idx);
+    if (nextIdx > idx) {
+      // We skipped an escape sequence
+      idx = nextIdx;
     } else {
+      // Regular character
       idx++;
       visual++;
     }
@@ -169,20 +225,16 @@ export function truncateMiddle(text: string, maxWidth: number): string {
   // Get end portion - work backwards from the end
   const endStartIdx = plain.length - endChars;
   
-  // Find the actual start position in the original string (accounting for ANSI codes)
+  // Find the actual start position in the original string (accounting for escape sequences)
   let visual = 0;
   let idx = 0;
   while (idx < text.length && visual < endStartIdx) {
-    if (text[idx] === '\x1b') {
-      let end = idx + 1;
-      while (end < text.length && text[end] !== 'm') {
-        end++;
-      }
-      if (end < text.length) {
-        end++;
-      }
-      idx = end;
+    const nextIdx = skipEscapeSequence(text, idx);
+    if (nextIdx > idx) {
+      // We skipped an escape sequence
+      idx = nextIdx;
     } else {
+      // Regular character
       idx++;
       visual++;
     }
@@ -219,8 +271,10 @@ export function wrapText(text: string, width: number): string[] {
 
     // Find the end position based on VISIBLE width (accounting for ANSI codes)
     // We need to find where we've seen 'width' visible characters
+    // OR where we hit a newline (which should break the line)
     let visibleCount = 0;
     let end = index;
+    let foundNewline = false;
     
     while (end < length && visibleCount < width) {
       if (text[end] === '\x1b') {
@@ -233,11 +287,29 @@ export function wrapText(text: string, width: number): string[] {
           ansiEnd++; // Include the 'm'
         }
         end = ansiEnd;
+      } else if (text[end] === '\n') {
+        // Found newline - break here (don't include the newline in the line)
+        foundNewline = true;
+        break;
       } else {
         // Regular character - count it
         end++;
         visibleCount++;
       }
+    }
+
+    // If we found a newline, break the line there
+    if (foundNewline) {
+      let line = text.slice(index, end); // Don't include the newline
+      // Prepend active codes from previous line if we have any
+      if (activeCodes) {
+        line = activeCodes + line;
+      }
+      // Extract active codes from this line for the next line
+      activeCodes = extractActiveAnsiCodes(line);
+      lines.push(line);
+      index = end + 1; // Skip past the newline
+      continue;
     }
 
     if (end >= length) {
@@ -373,17 +445,10 @@ export function countVisibleChars(text: string): number {
   let idx = 0;
   
   while (idx < text.length) {
-    if (text[idx] === '\x1b') {
-      // Found start of ANSI escape sequence - skip to the end
-      let end = idx + 1;
-      while (end < text.length && text[end] !== 'm') {
-        end++;
-      }
-      // Include the 'm' if found
-      if (end < text.length) {
-        end++;
-      }
-      idx = end;
+    const nextIdx = skipEscapeSequence(text, idx);
+    if (nextIdx > idx) {
+      // We skipped an escape sequence
+      idx = nextIdx;
     } else {
       // Regular character - count it
       idx++;
@@ -457,17 +522,10 @@ export function splitAtVisiblePos(text: string, visiblePos: number): { before: s
   let idx = 0;     // Current position in the string
   
   while (idx < text.length && visual < visiblePos) {
-    if (text[idx] === '\x1b') {
-      // Found start of ANSI escape sequence - skip to the end
-      let end = idx + 1;
-      while (end < text.length && text[end] !== 'm') {
-        end++;
-      }
-      // Include the 'm' if found
-      if (end < text.length) {
-        end++;
-      }
-      idx = end;
+    const nextIdx = skipEscapeSequence(text, idx);
+    if (nextIdx > idx) {
+      // We skipped an escape sequence
+      idx = nextIdx;
     } else {
       // Regular character - count it and advance
       idx++;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { diffFrames, type DiffOp } from './diff.js';
+import { diffFrames } from './diff.js';
 
 describe('diffFrames', () => {
   describe('identical frames', () => {

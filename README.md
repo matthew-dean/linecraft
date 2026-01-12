@@ -193,7 +193,7 @@ r.set(Section(
 
 ### CodeDebug
 
-Display code errors and warnings with line numbers, context, and clickable file paths.
+Display code errors and warnings with line numbers, context, and clickable file paths. Perfect for linters, compilers, and development tools that need to show diagnostic information.
 
 ![CodeDebug Example](https://raw.githubusercontent.com/matthew-dean/linecraft/main/docs/examples/code-debug.gif)
 
@@ -209,6 +209,8 @@ r.set(CodeDebug({
   lineBefore: '  async function load() {',
   lineAfter: '    return process(result);',
   message: 'Type error: fetchData is not defined',
+  errorCode: 'typescript(2304)', // Optional: error code with underline
+  shortMessage: 'not defined', // Optional: short message connected to underline
   filePath: 'src/loaders/data.ts',
   fullPath: '/absolute/path/to/src/loaders/data.ts',
   baseDir: process.cwd(),
@@ -217,12 +219,14 @@ r.set(CodeDebug({
 ```
 
 **Features:**
-- Automatic line number coloring (adapts to dark/light terminals)
-- Responsive truncation with ellipsis
-- Curved underlines for error ranges
-- Message wrapping
-- Clickable file paths (OSC 8 links)
-- Context lines (before/after)
+- **OSC 8 Hyperlinks**: File paths are clickable in modern terminals (VS Code, iTerm2, etc.). Ctrl+Click (or Cmd+Click) opens the file at the correct line and column.
+- **Smart Line Overflow**: Long code lines automatically truncate with ellipsis while keeping the error range visible. Supports ellipsis at start, end, or both sides.
+- **Error Range Highlighting**: The error range (startColumn to endColumn) is highlighted with a brighter color for easy identification.
+- **Context Lines**: Show lines before and after the error for better context (slightly dimmed for visual hierarchy).
+- **Message Wrapping**: Long error messages wrap across multiple lines while preserving ANSI styling and color codes.
+- **Terminal Theme Adaptation**: Line numbers and colors adapt to dark/light terminal themes automatically.
+- **Curved Underlines**: Visual indicators with curved edges (┖─┚) point to the exact error location, with optional T-bar for short messages.
+- **Responsive Layout**: Automatically adjusts to terminal width, truncating paths and code as needed.
 
 ### Spinner
 

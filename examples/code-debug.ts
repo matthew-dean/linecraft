@@ -1,6 +1,6 @@
 // Demo showing CodeDebug component with various scenarios
 
-import { Region, CodeDebug, prompt } from '../src/index';
+import { Region, CodeDebug, prompt } from '../src/index.js';
 import * as path from 'path';
 
 async function main() {
@@ -202,6 +202,29 @@ async function main() {
       fullPath: path.join(baseDir, 'src/large-file.ts'),
       baseDir,
       type: 'error',
+    })
+  );
+  await prompt(r);
+
+  // Example 12: Multi-line warning message with newlines (testing word-wrapping with line-breaks)
+  // This simulates a diagnostic message format like "CODE [phase]\nMessage\n\nReason: ...\nFix: ..."
+  r.set(
+    CodeDebug({
+      startLine: 77,
+      startColumn: 77,
+      endColumn: 78,
+      errorLine: '  .ma:extend(.a,.b,.c,.d,.e,.f,.g,.h,.i,.j,.k,.l,.m,.n,.o,.p,.q,.r,.s,.t,.u,.v) {};',
+      lineBefore: '@media (tv) {',
+      lineAfter: '    color: black;',
+      errorCode: 'JESS3203 [extend]',
+      message: `Extend target ".v" not accessible
+
+Reason: ".v" exists but is not accessible from the current extend root (blocked by at-rule or compose boundary).
+Fix: Move the extend or the target to a shared extend root, or use a different approach.`,
+      filePath: '../less.js/packages/test-data/tests-unit/extend-chaining/extend-chaining.less',
+      fullPath: path.join(baseDir, '../less.js/packages/test-data/tests-unit/extend-chaining/extend-chaining.less'),
+      baseDir,
+      type: 'warning',
     })
   );
   await prompt(r);

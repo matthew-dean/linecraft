@@ -1,5 +1,4 @@
 import type { TerminalRegion } from '../region.js';
-import { logToFile } from './debug-log.js';
 
 /**
  * Wait for spacebar press before continuing
@@ -12,9 +11,6 @@ export async function waitForSpacebar(
   region: TerminalRegion,
   message: string = 'Press SPACEBAR to continue...'
 ): Promise<void> {
-  // Prepare prompt inside region before listening for input
-  logToFile(`[waitForSpacebar] CALLED, isTTY=${process.stdin.isTTY}, isRaw=${process.stdin.isRaw}`);
-
   region.add(['', message]);
   region.flush();
   const promptLineNumber = region.height;
@@ -22,12 +18,9 @@ export async function waitForSpacebar(
   region.showCursorAt(promptLineNumber, promptColumn);
 
   return new Promise((resolve) => {
-    // DEBUG: Log when waitForSpacebar is called
-    
     // Set stdin to raw mode to capture individual keypresses
     if (!process.stdin.isTTY) {
       // If not a TTY, just resolve immediately
-      logToFile(`[waitForSpacebar] Not a TTY, resolving immediately`);
       resolve();
       return;
     }
@@ -35,10 +28,8 @@ export async function waitForSpacebar(
     // Try to set raw mode, but handle errors gracefully
     try {
       process.stdin.setRawMode(true);
-      logToFile(`[waitForSpacebar] Set raw mode successfully`);
     } catch (err) {
       // If setRawMode fails (e.g., stdin is closed or not available), just resolve
-      logToFile(`[waitForSpacebar] setRawMode FAILED: ${err instanceof Error ? err.message : String(err)}, resolving immediately`);
       resolve();
       return;
     }
