@@ -41,6 +41,49 @@ r.set(
 r.destroy(true);
 ```
 
+## Terminal Management Features
+
+Linecraft provides advanced terminal management capabilities that go beyond basic terminal logging:
+
+### Color-Aware Line Wrapping
+
+Unlike basic terminal output, Linecraft's text wrapping is **fully ANSI-aware**. When text wraps across multiple lines, ANSI color codes are preserved and correctly re-applied to each wrapped line. This means:
+
+- **Color preservation**: Colored text maintains its styling across line breaks
+- **Accurate width calculation**: Wrapping is based on visible character width, not raw string length
+- **Smart word breaking**: Text never breaks mid-word, ensuring readability
+- **Multi-line styling**: Complex styled text (like error codes with underlines) wraps correctly
+
+This is especially important for components like `CodeDebug`, where error messages with colored error codes need to wrap across multiple lines while maintaining their visual styling.
+
+### ANSI Code Handling
+
+Linecraft correctly handles ANSI escape sequences throughout the rendering pipeline:
+
+- **Width measurement**: All width calculations account for ANSI codes (colors, styles, cursor movements)
+- **Text splitting**: When truncating or splitting text, ANSI codes are preserved and re-applied
+- **Grid layouts**: Grid components correctly measure and align ANSI-styled content
+- **Text alignment**: Alignment operations work correctly with styled text
+
+### Terminal State Management
+
+Linecraft manages terminal state to prevent common terminal UI issues:
+
+- **Auto-wrap disabled**: Prevents unwanted line breaks from terminal auto-wrapping
+- **Cursor positioning**: Precise cursor control using absolute positioning
+- **Viewport awareness**: Only renders visible content within the terminal viewport
+- **Clean restoration**: Properly restores terminal state on cleanup
+
+### Responsive Layouts
+
+Components automatically adapt to terminal size changes:
+
+- **Grid layouts**: Flex columns adjust to available width
+- **Text wrapping**: Wraps at appropriate boundaries based on terminal width
+- **Component sizing**: Components receive updated `availableWidth` context on resize
+
+These features make Linecraft suitable for building complex, interactive terminal UIs that work reliably across different terminal sizes and configurations.
+
 ## Performance
 
 Linecraft is built for high-performance terminal rendering from Node.js. The renderer includes several optimizations to minimize terminal updates and CPU usage:

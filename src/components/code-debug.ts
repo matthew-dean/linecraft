@@ -281,29 +281,32 @@ export function CodeDebug(options: CodeDebugOptions): Component {
     const icon = type === 'error' ? '✖' : type === 'warning' ? '⚠' : 'ℹ';
     const iconStyled = applyStyle(icon, { color: colorScheme.message });
     
-    // Build grid children: icon, optional error code, and message
-    // Use Styled component to handle wrapping - it uses wrapText which prevents mid-word breaks
-    const gridChildren: (string | Component)[] = [iconStyled];
-    
+    // Build the combined message text: errorCode (if present) + message
+    // The errorCode should be underlined and bold, followed by ": ", then the message
+    // All parts should have the message color
+    let messageText: string;
     if (errorCode) {
       const errorCodeStyled = applyStyle(errorCode, { 
         color: colorScheme.message,
         underline: true,
         bold: true
       });
-      gridChildren.push(errorCodeStyled + ': ');
+      // Apply message color to ": " and message parts so they maintain color after errorCode's reset
+      const colonAndMessage = applyStyle(': ' + message, { color: colorScheme.message });
+      messageText = errorCodeStyled + colonAndMessage;
+    } else {
+      messageText = message;
     }
     
+    // Use Styled component to handle wrapping - it uses wrapText which prevents mid-word breaks
+    // Note: messageText may already have ANSI codes, so Styled will preserve them
     const messageComponent = Styled(
       { color: colorScheme.message, overflow: 'wrap' },
-      message
+      messageText
     );
-    gridChildren.push(messageComponent);
     
-    // Use grid: [icon, errorCode (if exists), message]
-    // Template: [1, auto (if errorCode), '1*'] or [1, '1*']
-    const template = errorCode ? [1, 'auto', '1*'] : [1, '1*'];
-    const messageGrid = Grid({ template, columnGap: 1 }, ...gridChildren);
+    // Use 2-column grid: [icon, message (with optional errorCode)]
+    const messageGrid = Grid({ template: [1, '1*'], columnGap: 1 }, iconStyled, messageComponent);
     
     const messageResult = callComponent(messageGrid, ctx);
     const messageLines: string[] = [];
@@ -367,33 +370,51 @@ export function CodeDebug(options: CodeDebugOptions): Component {
     const spacesBefore = Math.max(0, underlineStartInCode - 1);
     
     // Underline line: line number width + space + │ + space + spaces + underline
-    let underlineLine = ' '.repeat(lineNumWidth) + ' ' + applyStyle('│', { color: 'brightBlack' }) + ' ';
+    let indicatorLine = ' '.repeat(lineNumWidth) + ' ' + applyStyle('│', { color: 'brightBlack' }) + ' ' +
+      ' '.repeat(spacesBefore);
     
-    if (shortMessage && underlineLength > 1) {
-      // Multi-character underline with T-bar in the middle for short message
-      const connectPosInUnderline = Math.floor(underlineLength / 2);
-      const leftPart = '─'.repeat(connectPosInUnderline);
-      const rightPart = '─'.repeat(underlineLength - connectPosInUnderline - 1);
-      underlineLine += ' '.repeat(spacesBefore) + 
-        applyStyle(leftPart + '┬' + rightPart, { color: colorScheme.primary });
-    } else if (shortMessage) {
-      // Single character with T-bar for short message
-      underlineLine += ' '.repeat(spacesBefore) + 
-        applyStyle('┬', { color: colorScheme.primary });
+    // Calculate connectCol for short message (if present)
+    const connectCol = shortMessage && underlineLength > 1
+      ? underlineStartInCode + Math.floor(underlineLength / 2)
+      : underlineStartInCode;
+    
+    const underlineStartCol = underlineStartInCode;
+    const underlineEndCol = underlineEndInCode;
+    
+    if (endColumn && underlineEndCol > underlineStartCol) {
+      // Underline with curved edges facing up
+      const underlineLen = underlineEndCol - underlineStartCol;
+      
+      if (shortMessage) {
+        // With short message: T-bar in the middle
+        const connectPosInUnderline = connectCol - underlineStartCol; // Position within the underline
+        
+        if (underlineLen >= 3) {
+          // Build underline with T-bar: left curve, dashes, T-bar, dashes, right curve
+          const leftPart = '─'.repeat(Math.max(0, connectPosInUnderline - 1));
+          const rightPart = '─'.repeat(Math.max(0, underlineLen - connectPosInUnderline - 1));
+          indicatorLine += applyStyle('┖' + leftPart + '┬' + rightPart + '┚', { color: colorScheme.primary });
+        } else if (underlineLen === 2) {
+          // Too short for T-bar, just use T in middle
+          indicatorLine += applyStyle('┖┬┚', { color: colorScheme.primary });
+        } else {
+          // Single character, just use T
+          indicatorLine += applyStyle('╿', { color: colorScheme.primary });
+        }
+      } else {
+        // No short message: flat underline with curved ends (no T-bar)
+        const dashes = '─'.repeat(underlineLen);
+        indicatorLine += applyStyle('┖' + dashes + '┚', { color: colorScheme.primary });
+      }
     } else {
-      // No short message, just underline the code
-      const underlineChars = '─'.repeat(underlineLength);
-      underlineLine += ' '.repeat(spacesBefore) + 
-        applyStyle(underlineChars, { color: colorScheme.primary });
+      // Single point - use ┬ (T pointing up) which has horizontal bar pointing to code, vertical line going down
+      indicatorLine += applyStyle('╿', { color: colorScheme.primary });
     }
     
-    codeLines.push(underlineLine);
+    codeLines.push(indicatorLine);
     
     // Short message connected to underline (if provided)
     if (shortMessage) {
-      const connectCol = underlineLength > 1
-        ? underlineStartInCode + Math.floor(underlineLength / 2)
-        : underlineStartInCode;
       
       // Short message line: line number width + space + │ + space + spaces + connector + message
       const shortMessageLine = ' '.repeat(lineNumWidth) + ' ' + applyStyle('│', { color: 'brightBlack' }) + ' ' +

@@ -59,6 +59,13 @@ export function Styled(
       }
       const formatted = lines.map(line => {
         const aligned = alignText(line, availableWidth, alignMode);
+        // Check if the line already has ANSI codes - if so, preserve them
+        const hasAnsiCodes = /\x1b\[[0-9;]*m/.test(aligned);
+        if (hasAnsiCodes) {
+          // Text already has styling - don't overwrite it, just return as-is
+          return aligned;
+        }
+        // No existing ANSI codes - apply the style options
         return applyStyle(aligned, styleOptions);
       });
       return formatted.length === 1 ? formatted[0] : formatted;
@@ -85,13 +92,29 @@ export function Styled(
       
       // Apply alignment
       const aligned = alignText(processed, availableWidth, alignMode);
+      // Check if the line already has ANSI codes - if so, preserve them
+      const hasAnsiCodes = /\x1b\[[0-9;]*m/.test(aligned);
+      if (hasAnsiCodes) {
+        // Text already has styling - don't overwrite it, just return as-is
+        return aligned;
+      }
+      // No existing ANSI codes - apply the style options
       return applyStyle(aligned, styleOptions);
     } else {
       // Array of strings - apply styling and alignment to each line
       const lines: string[] = [];
       for (const line of text) {
-        const wrapped = wrapText(line, availableWidth);
-        lines.push(...wrapped);
+        // Check if line already has ANSI codes
+        const hasAnsiCodes = /\x1b\[[0-9;]*m/.test(line);
+        if (hasAnsiCodes) {
+          // Already styled - wrap it preserving ANSI codes
+          const wrapped = wrapText(line, availableWidth);
+          lines.push(...wrapped);
+        } else {
+          // No ANSI codes - wrap and will be styled later
+          const wrapped = wrapText(line, availableWidth);
+          lines.push(...wrapped);
+        }
       }
       return formatLines(lines);
     }

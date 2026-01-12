@@ -37,6 +37,7 @@ export class RegionRenderer {
   private renderTimer: NodeJS.Timeout | null = null;
   private resizeCleanup?: () => void;
   private destroyed = false;
+  private explicitlyDestroyed = false; // Track if destroy() was explicitly called
   private debugLogPath?: string;
   private debugLogCleared = false;
   private cursorVisible = false;
@@ -194,6 +195,7 @@ export class RegionRenderer {
       return;
         }
     this.destroyed = true;
+    this.explicitlyDestroyed = true; // Mark as explicitly destroyed
     RegionRenderer.activeRegions.delete(this);
     if (this.renderTimer) {
       clearTimeout(this.renderTimer);
@@ -247,8 +249,15 @@ export class RegionRenderer {
     RegionRenderer.exitHandlerSetup = true;
     const cleanup = (): void => {
       for (const region of RegionRenderer.activeRegions) {
-        region.destroy(true);
-    }
+        // If destroy wasn't explicitly called, auto-flush content to main terminal
+        // If destroy was explicitly called, clear it (user wants it cleared)
+        // Note: if clear() was called, there's nothing to flush anyway, so this is harmless
+        if (region.explicitlyDestroyed) {
+          region.destroy(true); // Clear if explicitly destroyed
+        } else {
+          region.destroy(false); // Auto-flush if not explicitly destroyed
+        }
+      }
       RegionRenderer.activeRegions.clear();
     };
     process.once('exit', cleanup);
@@ -541,9 +550,9 @@ export class RegionRenderer {
       if (trimmedLines.length > 0) {
         const output = trimmedLines.join('\n');
         this.stdout.write(`${output}\n`);
-          }
-        }
       }
+    }
+  }
       
   private setupResizeHandler(): void {
     if (!this.stdout.isTTY || typeof this.stdout.on !== 'function') {

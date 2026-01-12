@@ -196,6 +196,7 @@ export function truncateMiddle(text: string, maxWidth: number): string {
 /**
  * Wrap text to fit within a width, breaking on spaces
  * Never breaks words mid-word - if a word is too long, it will extend the line
+ * ANSI-aware: calculates width based on visible characters, not raw string length
  */
 export function wrapText(text: string, width: number): string[] {
   if (!Number.isFinite(width) || width <= 0) {
@@ -205,6 +206,7 @@ export function wrapText(text: string, width: number): string[] {
   const lines: string[] = [];
   const length = text.length;
   let index = 0;
+  let activeCodes = ''; // Track active ANSI codes across line breaks
 
   while (index < length) {
     // Skip leading spaces
@@ -215,26 +217,71 @@ export function wrapText(text: string, width: number): string[] {
       break;
     }
 
-    // Calculate where this line should end
-    let end = Math.min(length, index + width);
+    // Find the end position based on VISIBLE width (accounting for ANSI codes)
+    // We need to find where we've seen 'width' visible characters
+    let visibleCount = 0;
+    let end = index;
+    
+    while (end < length && visibleCount < width) {
+      if (text[end] === '\x1b') {
+        // Found ANSI escape sequence - skip to the end
+        let ansiEnd = end + 1;
+        while (ansiEnd < length && text[ansiEnd] !== 'm') {
+          ansiEnd++;
+        }
+        if (ansiEnd < length) {
+          ansiEnd++; // Include the 'm'
+        }
+        end = ansiEnd;
+      } else {
+        // Regular character - count it
+        end++;
+        visibleCount++;
+      }
+    }
 
-    if (end === length) {
+    if (end >= length) {
       // Reached end of text - take the rest
-      lines.push(text.slice(index));
+      let finalLine = text.slice(index);
+      // Prepend active codes from previous line if we have any
+      if (activeCodes) {
+        finalLine = activeCodes + finalLine;
+      }
+      lines.push(finalLine);
       break;
     }
 
     // Look for a break point (space or hyphen) going backwards from end
+    // But we need to search in the visible character space, not raw string position
     let breakPoint = -1;
-    for (let i = end; i > index; i--) {
-      const char = text[i - 1];
-      if (char === ' ') {
-        breakPoint = i - 1;
-        break;
-      }
-      if (char === '-') {
-        breakPoint = i;
-        break;
+    let searchVisible = visibleCount;
+    let searchIdx = end;
+    
+    // Search backwards for a space or hyphen
+    while (searchIdx > index && searchVisible > 0) {
+      // Move backwards, accounting for ANSI codes
+      if (text[searchIdx - 1] === '\x1b') {
+        // Found ANSI code - skip backwards past it
+        let ansiStart = searchIdx - 1;
+        while (ansiStart > index && text[ansiStart - 1] !== 'm') {
+          ansiStart--;
+        }
+        if (ansiStart > index && text[ansiStart - 1] === 'm') {
+          ansiStart--; // Include the 'm'
+        }
+        searchIdx = ansiStart;
+      } else {
+        const char = text[searchIdx - 1];
+        if (char === ' ') {
+          breakPoint = searchIdx - 1;
+          break;
+        }
+        if (char === '-') {
+          breakPoint = searchIdx;
+          break;
+        }
+        searchIdx--;
+        searchVisible--;
       }
     }
 
@@ -243,16 +290,35 @@ export function wrapText(text: string, width: number): string[] {
       // Look for the NEXT space after 'end' to break there
       // This ensures we never break mid-word
       let nextSpace = -1;
-      for (let i = end; i < length; i++) {
-        if (text[i] === ' ') {
-          nextSpace = i;
-          break;
+      let searchIdx = end;
+      while (searchIdx < length) {
+        if (text[searchIdx] === '\x1b') {
+          // Skip ANSI code
+          let ansiEnd = searchIdx + 1;
+          while (ansiEnd < length && text[ansiEnd] !== 'm') {
+            ansiEnd++;
+          }
+          if (ansiEnd < length) {
+            ansiEnd++;
+          }
+          searchIdx = ansiEnd;
+        } else {
+          if (text[searchIdx] === ' ') {
+            nextSpace = searchIdx;
+            break;
+          }
+          searchIdx++;
         }
       }
       
       if (nextSpace === -1) {
         // No more spaces - take the rest (this is the last word/line)
-        lines.push(text.slice(index));
+        let finalLine = text.slice(index);
+        // Prepend active codes from previous line if we have any
+        if (activeCodes) {
+          finalLine = activeCodes + finalLine;
+        }
+        lines.push(finalLine);
         break;
       } else {
         // Found a space after - break there (word extends beyond width)
@@ -261,7 +327,15 @@ export function wrapText(text: string, width: number): string[] {
       }
     }
 
-    const line = text.slice(index, breakPoint).trimEnd();
+    let line = text.slice(index, breakPoint).trimEnd();
+    
+    // Prepend active codes from previous line if we have any
+    if (activeCodes) {
+      line = activeCodes + line;
+    }
+    
+    // Extract active codes from this line for the next line
+    activeCodes = extractActiveAnsiCodes(line);
     lines.push(line);
 
     index = breakPoint;
