@@ -3,6 +3,7 @@
 import type { Component, RenderContext } from '../component.js';
 import type { Color } from '../types.js';
 import { applyStyle } from '../utils/colors.js';
+import type { AutoColor } from '../utils/terminal-theme.js';
 
 export type SpinnerStyle = 'classic-dots' | 'bouncing-bar';
 

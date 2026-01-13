@@ -1,6 +1,6 @@
 // Reactive resize example using grid
 
-import { Region, Grid, Styled, prompt } from '../src/index';
+import { Region, Grid, Styled, prompt } from '../src/index.js';
 
 async function main() {
   const r = Region();

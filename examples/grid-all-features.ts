@@ -1,6 +1,7 @@
 // Comprehensive example demonstrating all grid features
 
-import { Region, Grid, Styled, progressBar, fill, Section, prompt } from '../src/index';
+import { Region, Grid, Styled, progressBar, fill, Section, prompt } from '../src/index.js';
+import type { RenderContext } from '../src/component.js';
 
 async function main() {
   const r = Region();
@@ -140,7 +141,7 @@ async function main() {
         Styled({ color: 'accent' }, 'Always visible'),
         Styled({ 
           color: 'success', 
-          when: (ctx) => ctx.availableWidth > 50 
+          when: (ctx: RenderContext) => ctx.availableWidth > 50 
         }, 'Only if width > 50')
       ),
       // Visual indicator
