@@ -169,6 +169,7 @@ async function main() {
   await prompt(r);
 
   // Example 10: Error with maxColumn constraint and wrapped message - underlining "veryLongFunctionName"
+  // Short message explicitly placed on left to demonstrate left placement
   r.set(
     CodeDebug({
       startLine: 50,
@@ -178,6 +179,8 @@ async function main() {
       errorLine: 'const result = veryLongFunctionName(withManyParameters, andMoreParameters, thatExtendWayBeyondTheMaxColumn, soWeNeedToTruncate, toMakeRoomForTheMessage)',
       message: 'This error uses maxColumn to ensure there is room for the message. The message itself is also quite long and should wrap nicely across multiple lines to demonstrate the wrapping functionality of the top message area.',
       errorCode: 'eslint-plugin-unicorn(no-useless-length-check)',
+      shortMessage: 'line too long',
+      shortMessagePlacement: 'left',
       filePath: 'src/example.ts',
       fullPath: path.join(baseDir, 'src/example.ts'),
       baseDir,
@@ -191,9 +194,9 @@ async function main() {
   r.set(
     CodeDebug({
       startLine: 1000,
-      startColumn: 10,
+      startColumn: 11,
       endLine: 1000,
-      endColumn: 20,
+      endColumn: 16,
       errorLine: '    const result = calculateValue();',
       lineBefore: '  function process() {',
       lineAfter: '    return result;',
@@ -208,6 +211,7 @@ async function main() {
 
   // Example 12: Multi-line warning message with newlines (testing word-wrapping with line-breaks)
   // This simulates a diagnostic message format like "CODE [phase]\nMessage\n\nReason: ...\nFix: ..."
+  // Target is near end of long line, so short message will auto-place on left
   r.set(
     CodeDebug({
       startLine: 77,
@@ -221,6 +225,7 @@ async function main() {
 
 Reason: ".v" exists but is not accessible from the current extend root (blocked by at-rule or compose boundary).
 Fix: Move the extend or the target to a shared extend root, or use a different approach.`,
+      shortMessage: 'extend target not accessible',
       filePath: '../less.js/packages/test-data/tests-unit/extend-chaining/extend-chaining.less',
       fullPath: path.join(baseDir, '../less.js/packages/test-data/tests-unit/extend-chaining/extend-chaining.less'),
       baseDir,

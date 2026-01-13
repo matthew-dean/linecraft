@@ -6,6 +6,7 @@ import type { Color } from '../types.js';
 import { Styled } from './styled.js';
 import { grid as Grid } from '../layout/grid.js';
 import { applyStyle } from '../utils/colors.js';
+import { autoColor } from '../utils/terminal-theme.js';
 
 export interface ProgressBarOptions {
   current: number;
@@ -33,7 +34,9 @@ export function progressBar(options: ProgressBarOptions): Component {
     const leftBracket = options.brackets?.[0] ?? '\u263E'; // ☾
     const rightBracket = options.brackets?.[1] ?? '\u263D'; // ☽
     
-    const bracketColor = options.bracketColor ?? 'brightBlack';
+    const bracketColor = options.bracketColor ?? 'muted';
+    const barIncompleteColor = 'muted';
+    const percentColor = options.percentColor ?? 'muted';
     
     // Use grid to layout: left bracket (1), bar (flex), right bracket (1), percent (6)
     // The bar column will receive its allocated width and calculate fill based on that
@@ -48,7 +51,7 @@ export function progressBar(options: ProgressBarOptions): Component {
       
       const barText = ' ' + 
         (options.barColor ? applyStyle(filledBar, { color: options.barColor }) : filledBar) +
-        applyStyle(emptyBar, { color: 'brightBlack' }) + 
+        applyStyle(emptyBar, { color: barIncompleteColor }) + 
         ' ';
       
       return barText;
@@ -59,7 +62,7 @@ export function progressBar(options: ProgressBarOptions): Component {
       Styled({ color: bracketColor }, leftBracket),
       barComponent,
       Styled({ color: bracketColor }, rightBracket),
-      Styled({ color: options.percentColor ?? 'brightBlack', align: 'right' }, percent.toFixed(1) + '%'),
+      Styled({ color: percentColor, align: 'right' }, percent.toFixed(1) + '%'),
     ];
     
     // Use grid to layout: [1] [flex] [1] [7]

@@ -10,7 +10,7 @@ export interface SpinnerOptions {
   style?: SpinnerStyle; // Built-in animation style
   frames?: string[]; // Custom frames (overrides style if provided)
   interval?: number;
-  color?: Color;
+  color?: Color | AutoColor;
   autoStart?: boolean; // Start animating automatically (default: true)
 }
 
@@ -33,7 +33,7 @@ export function Spinner(options: SpinnerOptions = {}): {
     style,
     frames,
     interval = 80,
-    color = 'yellow',
+    color = 'accent',
     autoStart = true,
   } = options;
 

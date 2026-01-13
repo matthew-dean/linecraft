@@ -1,11 +1,11 @@
-Output section.gif
+Output functional-components.gif
 Set FontSize 16
 Set Width 900
 Set Height 600
 Set Theme "AtomOneLight"
 Set Padding 30
 
-Type "pnpm example section"
+Type "pnpm example functional-components"
 Enter
 Sleep 1s
 Type " "

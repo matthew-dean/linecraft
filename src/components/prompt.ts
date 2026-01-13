@@ -4,6 +4,7 @@ import type { Color } from '../types.js';
 import type { Component } from '../component.js';
 import { callComponent } from '../component.js';
 import { Styled } from './styled.js';
+import { autoColor } from '../utils/terminal-theme.js';
 
 export interface PromptOptions {
   message: string;
@@ -19,7 +20,7 @@ export function Prompt(options: PromptOptions): Component {
   const {
     message,
     key = 'SPACEBAR',
-    color: promptColor = 'brightBlack',
+    color: promptColor = 'muted',
   } = options;
 
   return (ctx) => {

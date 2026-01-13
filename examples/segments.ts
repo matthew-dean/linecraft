@@ -11,9 +11,9 @@ async function main() {
       Grid({ template: ['*'] },
         Segments({
           segments: [
-            { content: 'Path', color: 'cyan', borderStyle: 'cap' },
-            { content: 'Git', color: 'green', borderStyle: 'cap' },
-            { content: 'Status', color: 'yellow', borderStyle: 'cap' },
+            { content: 'Path', color: 'accent', borderStyle: 'cap' },
+            { content: 'Git', color: 'success', borderStyle: 'cap' },
+            { content: 'Status', color: 'warning', borderStyle: 'cap' },
           ],
         })
       )
@@ -27,9 +27,9 @@ async function main() {
       Grid({ template: ['*'] },
         Segments({
           segments: [
-            { content: 'Segment 1', color: 'magenta', borderStyle: 'brace' },
-            { content: 'Segment 2', color: 'cyan', borderStyle: 'brace' },
-            { content: 'Segment 3', color: 'yellow', borderStyle: 'brace' },
+            { content: 'Segment 1', color: 'location', borderStyle: 'brace' },
+            { content: 'Segment 2', color: 'info', borderStyle: 'brace' },
+            { content: 'Segment 3', color: 'warning', borderStyle: 'brace' },
           ],
         })
       )
@@ -43,9 +43,9 @@ async function main() {
       Grid({ template: ['*'] },
         Segments({
           segments: [
-            { content: 'First', color: 'blue', borderStyle: 'capHalf' },
-            { content: 'Second', color: 'magenta', borderStyle: 'capHalf' },
-            { content: 'Third', color: 'cyan', borderStyle: 'capHalf' },
+            { content: 'First', color: 'accent', borderStyle: 'capHalf' },
+            { content: 'Second', color: 'location', borderStyle: 'capHalf' },
+            { content: 'Third', color: 'info', borderStyle: 'capHalf' },
           ],
         })
       )
@@ -59,9 +59,9 @@ async function main() {
       Grid({ template: ['*'] },
         Segments({
           segments: [
-            { content: 'Point 1', color: 'white', borderStyle: 'dot' },
-            { content: 'Point 2', color: 'white', borderStyle: 'dot' },
-            { content: 'Point 3', color: 'white', borderStyle: 'dot' },
+            { content: 'Point 1', color: 'base', borderStyle: 'dot' },
+            { content: 'Point 2', color: 'base', borderStyle: 'dot' },
+            { content: 'Point 3', color: 'base', borderStyle: 'dot' },
           ],
         })
       )
@@ -75,9 +75,9 @@ async function main() {
       Grid({ template: ['*'] },
         Segments({
           segments: [
-            { content: 'Alpha', color: 'yellow', borderStyle: 'asterisk' },
-            { content: 'Beta', color: 'cyan', borderStyle: 'asterisk' },
-            { content: 'Gamma', color: 'green', borderStyle: 'asterisk' },
+            { content: 'Alpha', color: 'warning', borderStyle: 'asterisk' },
+            { content: 'Beta', color: 'info', borderStyle: 'asterisk' },
+            { content: 'Gamma', color: 'success', borderStyle: 'asterisk' },
           ],
         })
       )
@@ -89,4 +89,3 @@ async function main() {
 }
 
 main().catch(console.error);
-

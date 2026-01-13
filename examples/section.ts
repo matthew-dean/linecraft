@@ -9,7 +9,7 @@ async function main() {
   r.set(
     Section({ title: 'Default: All Borders' },
       Grid({ template: ['*'] },
-        Styled({ color: 'cyan' }, 'This section has all borders visible (default behavior)')
+        Styled({ color: 'info' }, 'This section has all borders visible (default behavior)')
       )
     )
   );
@@ -19,7 +19,7 @@ async function main() {
   r.set(
     Section({ title: 'Left Border Only', right: false, top: false, bottom: false },
       Grid({ template: ['*'] },
-        Styled({ color: 'green' }, 'Only the left border is visible')
+        Styled({ color: 'accent' }, 'Only the left border is visible')
       )
     )
   );
@@ -29,7 +29,7 @@ async function main() {
   r.set(
     Section({ title: 'Right Border Only', left: false, top: false, bottom: false },
       Grid({ template: ['*'] },
-        Styled({ color: 'yellow' }, 'Only the right border is visible')
+        Styled({ color: 'warning' }, 'Only the right border is visible')
       )
     )
   );
@@ -39,7 +39,7 @@ async function main() {
   r.set(
     Section({ title: 'Top & Bottom Only', left: false, right: false },
       Grid({ template: ['*'] },
-        Styled({ color: 'magenta' }, 'Only top and bottom borders are visible')
+        Styled({ color: 'location' }, 'Only top and bottom borders are visible')
       )
     )
   );
@@ -49,7 +49,7 @@ async function main() {
   r.set(
     Section({ title: 'Left & Right Only', top: false, bottom: false },
       Grid({ template: ['*'] },
-        Styled({ color: 'cyan' }, 'Only left and right borders are visible')
+        Styled({ color: 'info' }, 'Only left and right borders are visible')
       )
     )
   );
@@ -59,7 +59,7 @@ async function main() {
   r.set(
     Section({ title: 'Top & Left Only', right: false, bottom: false },
       Grid({ template: ['*'] },
-        Styled({ color: 'green' }, 'Top and left borders form an L-shape')
+        Styled({ color: 'accent' }, 'Top and left borders form an L-shape')
       )
     )
   );
@@ -69,7 +69,7 @@ async function main() {
   r.set(
     Section({ title: 'Bottom & Right Only', left: false, top: false },
       Grid({ template: ['*'] },
-        Styled({ color: 'yellow' }, 'Bottom and right borders form an L-shape')
+        Styled({ color: 'warning' }, 'Bottom and right borders form an L-shape')
       )
     )
   );
@@ -79,7 +79,7 @@ async function main() {
   r.set(
     Section({ title: 'Top Border Only', left: false, right: false, bottom: false },
       Grid({ template: ['*'] },
-        Styled({ color: 'magenta' }, 'Only the top border is visible')
+        Styled({ color: 'location' }, 'Only the top border is visible')
       )
     )
   );
@@ -89,7 +89,7 @@ async function main() {
   r.set(
     Section({ title: 'Bottom Border Only', left: false, right: false, top: false },
       Grid({ template: ['*'] },
-        Styled({ color: 'cyan' }, 'Only the bottom border is visible')
+        Styled({ color: 'info' }, 'Only the bottom border is visible')
       )
     )
   );
@@ -99,4 +99,3 @@ async function main() {
 }
 
 main().catch(console.error);
-

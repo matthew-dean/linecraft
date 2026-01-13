@@ -12,9 +12,9 @@ async function main() {
         Spinner({
           style: 'classic-dots',
           interval: 100,
-          color: 'green',
+          color: 'accent',
         }),
-        Styled({ color: 'white' }, 'Installing packages...')
+        Styled({ color: 'base' }, 'Installing packages...')
       )
     )
   );
@@ -27,9 +27,9 @@ async function main() {
         Spinner({
           style: 'bouncing-bar',
           interval: 80,
-          color: 'magenta',
+          color: 'location',
         }),
-        Styled({ color: 'magenta' }, 'Working...')
+        Styled({ color: 'location' }, 'Working...')
       )
     )
   );

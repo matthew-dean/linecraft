@@ -1,68 +1,103 @@
+import type { Color, TextStyle } from '../types.js';
+
 // Terminal theme detection utilities
 
 /**
  * Detect if the terminal has a dark or light background
- * 
- * Uses the COLORFGBG environment variable which has format "foreground;background"
- * where background values 0-7 indicate dark background, 8-15 indicate light background.
- * 
- * If COLORFGBG is not available, defaults to assuming dark background (most common).
- * 
- * @returns true if terminal has dark background, false if light
  */
 export function isDarkTerminal(): boolean {
+  if (process.env.TERMINAL_THEME === 'light') return false;
+  if (process.env.TERMINAL_THEME === 'dark') return true;
+
   const colorfgbg = process.env.COLORFGBG;
   if (!colorfgbg) {
-    // Default to dark (most terminals are dark)
     return true;
   }
-  
-  // COLORFGBG format: "foreground;background" or just "background"
+
   const parts = colorfgbg.split(';');
   const background = parts.length > 1 ? parts[1] : parts[0];
   const bgNum = parseInt(background, 10);
-  
+
   if (isNaN(bgNum)) {
-    // Can't parse, default to dark
     return true;
   }
-  
-  // Background values 0-7 = dark, 8-15 = light
+
   return bgNum < 8;
 }
 
 /**
- * Get an appropriate muted color for line numbers based on terminal theme
- * 
- * On dark terminals: returns 'brightBlack' (will be dimmed for less contrast)
- * On light terminals: returns 'black' (darker gray, less contrasty)
- * 
- * These colors provide minimal contrast while remaining subtle and not distracting
- * from the main code content. On dark terminals, the color should be applied with
- * dim=true to reduce contrast further.
- * 
- * @returns Color name suitable for line numbers
+ * Resolve a value based on the current terminal theme
  */
-export function getLineNumberColor(): 'black' | 'brightBlack' {
-  // On dark terminals, use brightBlack (will be dimmed for less contrast)
-  // On light terminals, use black (darker gray, less contrasty)
-  return isDarkTerminal() ? 'brightBlack' : 'black';
+export function resolveThemeColor<T>(
+  colors: { dark: T; light: T },
+  forceTheme?: 'dark' | 'light'
+): T {
+  if (forceTheme === 'dark') return colors.dark;
+  if (forceTheme === 'light') return colors.light;
+  return isDarkTerminal() ? colors.dark : colors.light;
+}
+
+export type AutoColor = 'base' | 'muted' | 'highlight' | 'accent' | 'warning' | 'error' | 'info' | 'location' | 'success';
+
+const semanticPalette: Record<AutoColor, { dark: TextStyle; light: TextStyle }> = {
+  base: { 
+    dark: { color: 'gray' }, 
+    light: { color: 'gray' } 
+  },
+  muted: { 
+    dark: { color: 'white', dim: true }, 
+    light: { color: 'gray', dim: true } 
+  },
+  highlight: { 
+    dark: { color: 'white' }, 
+    light: { color: 'black', bold: true } 
+  },
+  accent: { 
+    dark: { color: 'blue', bold: true }, 
+    light: { color: 'blue', bold: true } 
+  },
+  location: {
+    dark: { color: 'magenta' },
+    light: { color: 'magenta' }
+  },
+  success: {
+    dark: { color: 'brightGreen' },
+    light: { color: 'green' }
+  },
+  warning: { 
+    dark: { color: 'brightYellow' }, 
+    light: { color: 'brightMagenta' } 
+  },
+  error: { 
+    dark: { color: 'brightRed' }, 
+    light: { color: 'red' } 
+  },
+  info: { 
+    dark: { color: 'blue' }, 
+    light: { color: 'blue' } 
+  },
+};
+
+const autoColorSet = new Set(['base', 'muted', 'highlight', 'accent', 'warning', 'error', 'info', 'location', 'success']);
+
+/**
+ * Checks if a string is a semantic auto-color token
+ */
+export function isAutoColor(color: string): color is AutoColor {
+  return autoColorSet.has(color);
 }
 
 /**
- * Get a colored line number color based on terminal theme
- * 
- * On dark terminals: returns 'blue' (muted, less contrasty blue)
- * On light terminals: returns 'brightBlue' (muted, less contrasty blue)
- * 
- * This provides a subtle, less contrasty color for line numbers that still
- * has a blue shade, working well in both dark and light terminal themes.
- * 
- * @returns Color name suitable for colored line numbers
+ * Automatically picks the right ANSI color for a semantic token based on light/dark theme
  */
-export function getColoredLineNumberColor(): 'blue' | 'brightBlue' {
-  // On dark terminals, use blue (muted, less contrasty than cyan)
-  // On light terminals, use brightBlue (lighter, less contrasty than blue)
-  return isDarkTerminal() ? 'blue' : 'brightBlue';
+export function autoColor(token: AutoColor, override?: 'dark' | 'light'): Color {
+  return autoStyle(token, override).color as Color;
 }
 
+/**
+ * Automatically picks the right full style for a semantic token
+ */
+export function autoStyle(token: AutoColor, override?: 'dark' | 'light'): TextStyle {
+  const choice = semanticPalette[token];
+  return resolveThemeColor(choice, override);
+}

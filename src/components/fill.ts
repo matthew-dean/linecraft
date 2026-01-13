@@ -3,15 +3,16 @@
 import type { RenderContext, Component } from '../component.js';
 import type { Color, FillChar } from '../types.js';
 import { applyStyle } from '../utils/colors.js';
+import { autoColor, type AutoColor } from '../utils/terminal-theme.js';
 
 export interface FillOptions {
-  backgroundColor?: Color;
+  backgroundColor?: Color | AutoColor;
 }
 
 /**
  * Normalize FillChar to { char, color } format
  */
-function normalizeFillChar(fillChar: FillChar): { char: string; color?: Color } {
+function normalizeFillChar(fillChar: FillChar): { char: string; color?: Color | AutoColor } {
   if (typeof fillChar === 'string') {
     return { char: fillChar };
   }

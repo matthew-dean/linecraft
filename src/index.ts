@@ -13,6 +13,8 @@ export { Segments, type SegmentsOptions, type Segment } from './components/segme
 export { CodeDebug, type CodeDebugOptions, type CodeDebugType } from './components/code-debug.js';
 // progressBar is exported below as a function
 export { prompt } from './utils/prompt.js';
+export { autoColor, autoStyle, isAutoColor } from './utils/terminal-theme.js';
+export type { AutoColor } from './utils/terminal-theme.js';
 export type {
   RegionOptions,
   LineContent,

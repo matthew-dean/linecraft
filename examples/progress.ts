@@ -9,13 +9,13 @@ async function main() {
   r.set(
     Section({ title: 'Basic Progress Bar' },
       Grid({ template: [20, '1*'], columnGap: 2 },
-        Styled({ color: 'cyan' }, 'Installing packages'),
+        Styled({ color: 'accent' }, 'Installing packages'),
         progressBar({
           current: 0,
           total: 100,
-          barColor: 'green',
-          bracketColor: 'brightBlack',
-          percentColor: 'yellow'
+          barColor: 'success',
+          bracketColor: 'muted',
+          percentColor: 'warning'
         })
       )
     )
@@ -25,13 +25,13 @@ async function main() {
     r.set(
       Section({ title: 'Basic Progress Bar' },
         Grid({ template: [20, '1*'], columnGap: 2 },
-          Styled({ color: 'cyan' }, 'Installing packages'),
+          Styled({ color: 'accent' }, 'Installing packages'),
           progressBar({
             current: i,
             total: 100,
-            barColor: 'green',
-            bracketColor: 'brightBlack',
-            percentColor: 'yellow'
+            barColor: 'success',
+            bracketColor: 'muted',
+            percentColor: 'warning'
           })
         )
       )
@@ -52,35 +52,35 @@ async function main() {
         Grid({ template: ['1*'], columnGap: 0 },
           // Downloading
           Grid({ template: [12, '1*'], columnGap: 2 },
-            Styled({ color: 'cyan' }, 'Downloading'),
+            Styled({ color: 'info' }, 'Downloading'),
             progressBar({
               current: downloadProgress,
               total: 100,
-              barColor: 'green',
-              bracketColor: 'brightBlack',
-              percentColor: 'yellow'
+              barColor: 'accent',
+              bracketColor: 'muted',
+              percentColor: 'warning'
             })
           ),
           // Extracting
           Grid({ template: [12, '1*'], columnGap: 2 },
-            Styled({ color: 'cyan' }, 'Extracting'),
+            Styled({ color: 'info' }, 'Extracting'),
             progressBar({
               current: extractProgress,
               total: 100,
-              barColor: 'green',
-              bracketColor: 'brightBlack',
-              percentColor: 'yellow'
+              barColor: 'accent',
+              bracketColor: 'muted',
+              percentColor: 'warning'
             })
           ),
           // Installing
           Grid({ template: [12, '1*'], columnGap: 2 },
-            Styled({ color: 'cyan' }, 'Installing'),
+            Styled({ color: 'info' }, 'Installing'),
             progressBar({
               current: installProgress,
               total: 100,
-              barColor: 'green',
-              bracketColor: 'brightBlack',
-              percentColor: 'yellow'
+              barColor: 'accent',
+              bracketColor: 'muted',
+              percentColor: 'warning'
             })
           )
         )
@@ -118,5 +118,3 @@ async function main() {
 }
 
 main().catch(console.error);
-
-

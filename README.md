@@ -142,6 +142,36 @@ ref.delete(); // Remove it
 r.destroy(true); // Clean up and restore terminal (true = clear first)
 ```
 
+## Semantic Themes
+
+Linecraft includes a built-in semantic theme system that automatically adapts colors based on whether the terminal is in light or dark mode. Instead of hardcoding ANSI colors, you can use semantic tokens:
+
+- `base`: The default text color (gray in both themes)
+- `muted`: Dimmed text for line numbers or separators (dimmed white on dark, dimmed gray on light)
+- `highlight`: Emphasized text (white on dark, bold black on light)
+- `accent`: Primary accent color (bold blue in both themes)
+- `location`: For file paths and locations (magenta in both themes)
+- `success`: Success messages (bright green on dark, green on light)
+- `warning`: Warning messages (bright yellow on dark, bright magenta on light)
+- `error`: Error messages (bright red on dark, red on light)
+- `info`: Informational messages (blue in both themes)
+
+You can use these tokens anywhere a `Color` is expected:
+
+```typescript
+import { Styled } from 'linecraft';
+
+// Automatically uses appropriate color based on terminal theme
+const text = Styled({ color: 'base' }, 'Auto-themed text');
+const error = Styled({ color: 'error' }, 'Error message');
+const path = Styled({ color: 'location' }, '/path/to/file.ts');
+
+// You can also resolve them manually if needed
+import { autoColor, autoStyle } from 'linecraft';
+const color = autoColor('warning'); // Returns just the color
+const style = autoStyle('accent'); // Returns full TextStyle (color, bold, etc.)
+```
+
 ## Components
 
 ### Styled

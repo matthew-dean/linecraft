@@ -9,18 +9,18 @@ async function main() {
     r.set(
       Grid({ template: ['1*'] },
         Grid({ template: [20, '1*'], columnGap: 2 },
-          Styled({ color: 'cyan' }, 'Terminal width:'),
-          Styled({ color: 'yellow' }, `${r.width} columns`)
+          Styled({ color: 'accent' }, 'Terminal width:'),
+          Styled({ color: 'warning' }, `${r.width} columns`)
         ),
         Grid({ template: [20, '1*'], columnGap: 2 },
-          Styled({ color: 'cyan' }, 'Terminal height:'),
-          Styled({ color: 'yellow' }, `${r.height} rows`)
+          Styled({ color: 'accent' }, 'Terminal height:'),
+          Styled({ color: 'warning' }, `${r.height} rows`)
         ),
         Grid({ template: ['1*'] },
-          Styled({ color: 'brightBlack' }, '─'.repeat(Math.min(80, r.width)))
+          Styled({ color: 'muted' }, '─'.repeat(Math.min(80, r.width)))
         ),
         Grid({ template: ['1*'] },
-          Styled({ color: 'green' }, 'Resize the terminal to see it update!')
+          Styled({ color: 'success' }, 'Resize the terminal to see it update!')
         )
       )
     );

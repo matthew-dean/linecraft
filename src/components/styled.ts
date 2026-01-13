@@ -5,10 +5,11 @@ import { callComponent } from '../component.js';
 import type { Color } from '../types.js';
 import { applyStyle } from '../utils/colors.js';
 import { truncateEnd, truncateStart, truncateMiddle, wrapText, countVisibleChars } from '../utils/text.js';
+import { autoColor, isAutoColor, type AutoColor } from '../utils/terminal-theme.js';
 
 export interface StyleOptions {
-  color?: Color;
-  backgroundColor?: Color;
+  color?: Color | AutoColor;
+  backgroundColor?: Color | AutoColor;
   bold?: boolean;
   italic?: boolean;
   underline?: boolean;
@@ -49,9 +50,10 @@ export function Styled(
       ? Math.min(ctx.availableWidth, options.max)
       : ctx.availableWidth);
     const alignMode = options.align ?? 'left';
+    
     const styleOptions = {
-      color: options.color,
-      backgroundColor: options.backgroundColor,
+      color: options.color as any, // Cast because we know applyStyle handles both Color and AutoColor
+      backgroundColor: options.backgroundColor as any,
       bold: options.bold,
       italic: options.italic,
       underline: options.underline,

@@ -1,3 +1,5 @@
+import type { AutoColor } from './utils/terminal-theme.js';
+
 export type Color = 
   | 'black'
   | 'red'
@@ -6,6 +8,8 @@ export type Color =
   | 'blue'
   | 'magenta'
   | 'cyan'
+  | 'gray'
+  | 'grey'
   | 'white'
   | 'brightBlack'
   | 'brightRed'
@@ -14,11 +18,12 @@ export type Color =
   | 'brightBlue'
   | 'brightMagenta'
   | 'brightCyan'
-  | 'brightWhite';
+  | 'brightWhite'
+  | (string & {}); // Support for 256 colors (0-255) and RGB (#RRGGBB)
 
 export interface TextStyle {
-  color?: Color;
-  backgroundColor?: Color;
+  color?: Color | AutoColor;
+  backgroundColor?: Color | AutoColor;
   bold?: boolean;
   dim?: boolean;
   italic?: boolean;
@@ -57,12 +62,12 @@ export interface SpinnerOptions {
  * Character with optional color - used for fill components and spaceBetween
  * Can be a simple string or an object with char and color
  */
-export type FillChar = string | { char: string; color?: Color };
+export type FillChar = string | { char: string; color?: Color | AutoColor };
 
 /**
  * Base options for all components - includes common styling props
  */
 export interface BaseComponentOptions {
-  color?: Color; // Text color
+  color?: Color | AutoColor; // Text color
 }
 

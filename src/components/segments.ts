@@ -4,6 +4,7 @@ import type { RenderContext, Component } from '../component.js';
 import type { Color } from '../types.js';
 import { applyStyle } from '../utils/colors.js';
 import { truncateToWidth } from '../utils/text.js';
+import { autoColor } from '../utils/terminal-theme.js';
 
 // Simple border styles - only the ones that look good
 export type BorderStyle = 'cap' | 'capHalf' | 'brace' | 'dot' | 'asterisk';
@@ -78,7 +79,7 @@ export function Segments(options: SegmentsOptions): Component {
       // Left divider (automatic - dash for middle segments)
       if (i > 0) {
         // Always use dash (─) for dividers - it works well with all border styles
-        const dividerColor = 'brightBlack';
+        const dividerColor = 'muted';
         const styledDivider = applyStyle('─', { color: dividerColor });
         result += styledDivider;
       }
@@ -88,7 +89,7 @@ export function Segments(options: SegmentsOptions): Component {
       const borderChars = getBorderChars(borderStyle);
       if (borderChars.left) {
         // Auto-theme: borders use text color
-        const borderColor = segment.color ?? 'brightCyan';
+        const borderColor = segment.color ?? 'accent';
         result += applyStyle(borderChars.left, { color: borderColor });
       }
 
@@ -105,14 +106,14 @@ export function Segments(options: SegmentsOptions): Component {
       // Right border decoration
       if (borderChars.right) {
         // Auto-theme: borders use text color
-        const borderColor = segment.color ?? 'brightCyan';
+        const borderColor = segment.color ?? 'accent';
         result += applyStyle(borderChars.right, { color: borderColor });
       }
 
       // Right divider (automatic - dash for middle segments)
       if (i < segments.length - 1) {
         // Always use dash (─) for dividers - it works well with all border styles
-        const dividerColor = 'brightBlack';
+        const dividerColor = 'muted';
         const styledDivider = applyStyle('─', { color: dividerColor });
         result += styledDivider;
       }
