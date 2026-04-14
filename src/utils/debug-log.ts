@@ -33,7 +33,7 @@ class DebugLog {
 
       const timestamp = new Date().toISOString();
       fs.appendFileSync(this.logPath, `[${timestamp}] ${message}\n`);
-    } catch (err) {
+    } catch {
       // Silently fail - don't break functionality if logging fails
     }
   }

@@ -2,14 +2,12 @@
 
 import type { RenderContext, Component } from '../component.js';
 import { callComponent } from '../component.js';
-import type { Color } from '../types.js';
 import { applyStyle } from '../utils/colors.js';
 import { stripAnsi, truncateToWidth, truncateFocusRange, mapColumnToDisplay, countVisibleChars, splitAtVisiblePos } from '../utils/text.js';
-import { logToFile } from '../utils/debug-log.js';
 import { fileLink } from '../utils/file-link.js';
 import { Styled } from './styled.js';
 import { grid as Grid } from '../layout/grid.js';
-import { isDarkTerminal, autoColor, type AutoColor } from '../utils/terminal-theme.js';
+import { autoColor, type AutoColor } from '../utils/terminal-theme.js';
 
 export type CodeDebugType = 'error' | 'warning' | 'info';
 
@@ -264,8 +262,6 @@ export function CodeDebug(options: CodeDebugOptions): Component {
     // Highlight the error range if endColumn is specified
     if (endColumn && endColumn > startColumn) {
       // Map columns to display positions in the truncated (and styled) text
-      // We need to map based on the plain truncated text, then account for ANSI codes
-      const truncatedPlain = stripAnsi(truncatedErrorLine);
       const highlightStart = mapColumnToDisplayLocal(startColumn); // 1-based display position
       const highlightEnd = mapColumnToDisplayLocal(endColumn); // 1-based display position
       
@@ -366,10 +362,6 @@ export function CodeDebug(options: CodeDebugOptions): Component {
       // Determine placement: 'auto' means calculate which side has more available space
       let placement: 'left' | 'right' = shortMessagePlacement === 'auto' 
         ? (() => {
-            const shortMessageWidth = countVisibleChars(shortMessage);
-            const connectorWidth = 4; // " ──╯" or "╰── " is 4 characters
-            const totalWidth = shortMessageWidth + connectorWidth;
-            
             // Available space on left: from start of code area to connectCol
             const availableLeft = connectCol - 1;
             // Available space on right: from connectCol to end of code area

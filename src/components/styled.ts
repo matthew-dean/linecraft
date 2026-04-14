@@ -5,7 +5,7 @@ import { callComponent } from '../component.js';
 import type { Color } from '../types.js';
 import { applyStyle } from '../utils/colors.js';
 import { truncateEnd, truncateStart, truncateMiddle, wrapText, countVisibleChars } from '../utils/text.js';
-import { autoColor, isAutoColor, type AutoColor } from '../utils/terminal-theme.js';
+import { type AutoColor } from '../utils/terminal-theme.js';
 
 export interface StyleOptions {
   color?: Color | AutoColor;

@@ -3,10 +3,9 @@
 
 import type { Color, FillChar } from '../types.js';
 import { applyStyle } from '../utils/colors.js';
-import { getTrimmedTextWidth, stripAnsi, countVisibleChars, splitAtVisiblePos } from '../utils/text.js';
+import { stripAnsi, countVisibleChars, splitAtVisiblePos } from '../utils/text.js';
 import type { RenderContext, Component } from '../component.js';
 import { callComponent, createChildContext } from '../component.js';
-import { Styled } from '../components/styled.js';
 
 /**
  * Extract character and color from spaceBetween option for a specific gap index
@@ -389,7 +388,7 @@ export function grid(
   const convertedChildren: Component[] = children.map((child): Component => {
     if (typeof child === 'string') {
       // Convert string to a simple component that returns the string
-      return (ctx: RenderContext) => child;
+      return (_ctx: RenderContext) => child;
     }
     // If it's an object with a render method, extract the render function
     if (typeof child === 'object' && child !== null && 'render' in child && typeof child.render === 'function') {
@@ -566,7 +565,6 @@ export function grid(
     );
     
     // Handle justify: 'space-between'
-    let startX = 0;
     let actualWidths = columnWidths;
     
     if (justify === 'space-between' && validChildren.length > 1) {

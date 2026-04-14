@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { CodeDebug } from './code-debug.js';
 import { TerminalRegion } from '../region.js';
 import { callComponent } from '../component.js';
-import { stripAnsi, countVisibleChars } from '../utils/text.js';
+import { stripAnsi } from '../utils/text.js';
 
 describe('code-debug component', () => {
   let region: TerminalRegion;
@@ -69,10 +69,10 @@ describe('code-debug component', () => {
       // Look for lines with indicator characters (┖, ┬, ┚, ╿)
       const lines = outputTextPlain.split('\n');
       let indicatorLinePlain: string | null = null;
-      let fullIndicatorLine: string | null = null;
+      let _fullIndicatorLine: string | null = null;
       for (const line of lines) {
         if (line.includes('│') && (line.includes('┖') || line.includes('┬') || line.includes('┚') || line.includes('╿'))) {
-          fullIndicatorLine = line;
+          _fullIndicatorLine = line;
           const match = line.match(/│ (.*)$/);
           if (match) {
             indicatorLinePlain = match[1];
@@ -125,7 +125,7 @@ describe('code-debug component', () => {
       const output = render(component, 100);
       
       // Find the short message line (should have connector ──╯ pointing left)
-      const shortMessageLineRegex = /^\s*│\s*(.+)$/m;
+      const _shortMessageLineRegex = /^\s*│\s*(.+)$/m;
       const lines = output.join('\n').split('\n');
       let shortMessageLine: string | null = null;
       for (const line of lines) {
@@ -139,7 +139,7 @@ describe('code-debug component', () => {
       const shortMessageLinePlain = stripAnsi(shortMessageLine!);
       
       // Find the indicator line to get the T-bar position
-      const indicatorLineRegex = /^\s*│\s*(.+)$/m;
+      const _indicatorLineRegex = /^\s*│\s*(.+)$/m;
       let indicatorLine: string | null = null;
       for (const line of lines) {
         if (line.includes('┬') || line.includes('┖')) {

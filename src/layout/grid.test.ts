@@ -135,7 +135,7 @@ describe('Grid Layout', () => {
       // For ellipsis-middle: text has "..." in middle
       const ellipsisEndMatch = plain.match(/This is a very/);
       const ellipsisStartMatch = plain.match(/\.\.\./);
-      const ellipsisMiddleMatch = plain.match(/\.\.\./);
+      const _ellipsisMiddleMatch = plain.match(/\.\.\./);
       
       expect(ellipsisEndMatch).toBeTruthy();
       
@@ -146,12 +146,12 @@ describe('Grid Layout', () => {
       
       // Find where second column starts (after first column + gap if any)
       // For ellipsis-start, look for the "..." pattern
-      let secondColStart = plain.length;
+      let _secondColStart = plain.length;
       if (ellipsisStartMatch && ellipsisStartMatch.index !== undefined) {
         // Find the first "..." that's after the first column
         const dotsIndex = ellipsisStartMatch.index;
         if (dotsIndex > firstColStart + 20) {
-          secondColStart = dotsIndex;
+          _secondColStart = dotsIndex;
         }
       }
       

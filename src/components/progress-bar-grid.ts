@@ -6,7 +6,6 @@ import type { Color } from '../types.js';
 import { Styled } from './styled.js';
 import { grid as Grid } from '../layout/grid.js';
 import { applyStyle } from '../utils/colors.js';
-import { autoColor } from '../utils/terminal-theme.js';
 
 export interface ProgressBarOptions {
   current: number;

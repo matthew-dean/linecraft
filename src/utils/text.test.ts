@@ -297,7 +297,7 @@ describe('text utilities', () => {
         const highlightEnd = mapColumnToDisplayLocal(endColumn);
         
         // Step 3: Split and extract highlight range (as code-debug does)
-        const { before: beforeHighlight, after: remainingAfterStart } = splitAtVisiblePos(truncatedErrorLine, highlightStart - 1);
+        const { before: _beforeHighlight, after: remainingAfterStart } = splitAtVisiblePos(truncatedErrorLine, highlightStart - 1);
         const highlightLength = highlightEnd - highlightStart + 1;
         const { before: highlightRange } = splitAtVisiblePos(remainingAfterStart, highlightLength);
         

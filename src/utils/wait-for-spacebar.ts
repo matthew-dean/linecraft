@@ -28,7 +28,7 @@ export async function waitForSpacebar(
     // Try to set raw mode, but handle errors gracefully
     try {
       process.stdin.setRawMode(true);
-    } catch (err) {
+    } catch {
       // If setRawMode fails (e.g., stdin is closed or not available), just resolve
       resolve();
       return;

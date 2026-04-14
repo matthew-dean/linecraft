@@ -3,7 +3,7 @@
 import type { RenderContext, Component } from '../component.js';
 import type { Color, FillChar } from '../types.js';
 import { applyStyle } from '../utils/colors.js';
-import { autoColor, type AutoColor } from '../utils/terminal-theme.js';
+import { type AutoColor } from '../utils/terminal-theme.js';
 
 export interface FillOptions {
   backgroundColor?: Color | AutoColor;

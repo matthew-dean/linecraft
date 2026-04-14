@@ -1,7 +1,5 @@
 // Text utilities for handling overflow, ellipsis, etc.
 
-import { logToFile } from './debug-log.js';
-
 /**
  * Strip ANSI escape codes from a string to get plain text
  * 
@@ -316,7 +314,6 @@ export function mapColumnToDisplay(
 ): number {
   const truncatedPlain = stripAnsi(truncatedText);
   const hasEllipsisStart = truncatedPlain.startsWith('...');
-  const hasEllipsisEnd = truncatedPlain.endsWith('...');
   const ellipsisStartOffset = hasEllipsisStart ? 3 : 0;
   
   // If we have range boundaries, use them for more accurate mapping
@@ -798,55 +795,6 @@ export function countVisibleChars(text: string): number {
  * Extract active ANSI codes and OSC 8 hyperlinks from text (all codes that are active at the end)
  * Returns the ANSI escape sequences that should be applied to continue the styling
  */
-/**
- * Extract only SGR (color/style) codes, excluding OSC 8 hyperlinks
- * Used for ellipsis styling where we want color but not hyperlinks
- */
-function extractActiveSgrCodes(text: string): string {
-  const codes: string[] = [];
-  let idx = 0;
-  
-  while (idx < text.length) {
-    if (text[idx] === '\x1b' && idx + 1 < text.length && text[idx + 1] === '[') {
-      // Found ANSI SGR escape sequence
-      let end = idx + 2;
-      while (end < text.length && text[end] !== 'm') {
-        end++;
-      }
-      if (end < text.length) {
-        const code = text.substring(idx, end + 1);
-        // Check if it's a reset (0m) or a style code
-        if (code === '\x1b[0m') {
-          // Reset - clear all previous codes
-          codes.length = 0;
-        } else {
-          // Style code - add it
-          codes.push(code);
-        }
-        idx = end + 1;
-      } else {
-        idx++;
-      }
-    } else if (text[idx] === '\x1b' && idx + 4 < text.length && text.substring(idx, idx + 4) === '\x1b]8;') {
-      // Skip OSC 8 hyperlink sequences (don't include in result)
-      let end = idx + 4;
-      while (end < text.length - 1) {
-        if (text[end] === '\x1b' && text[end + 1] === '\\') {
-          idx = end + 2;
-          break;
-        }
-        end++;
-      }
-      if (end >= text.length - 1) {
-        idx++;
-      }
-    } else {
-      idx++;
-    }
-  }
-  
-  return codes.join('');
-}
 
 function extractActiveAnsiCodes(text: string): string {
   const codes: string[] = [];

@@ -39,8 +39,8 @@ describe('Region resize and reflow', () => {
     region.set(Styled({}, longText));
     
     // Add a prompt (static lines)
-    const promptSection = region.add(['', 'Press SPACEBAR to continue...']);
-    
+    const _promptSection = region.add(['', 'Press SPACEBAR to continue...']);
+
     // Simulate initial render at narrow width
     (mockStdout as any).columns = 40; // Narrow terminal
     const renderer = (region as any).renderer;
@@ -85,8 +85,8 @@ describe('Region resize and reflow', () => {
     region.set(component);
     
     // Add prompt below
-    const promptSection = region.add(['', 'Press SPACEBAR to continue...']);
-    
+    const _promptSection2 = region.add(['', 'Press SPACEBAR to continue...']);
+
     // Simulate narrow terminal (content wraps to 4 lines)
     (mockStdout as any).columns = 20;
     const renderer = (region as any).renderer;
@@ -136,7 +136,7 @@ describe('Region resize and reflow', () => {
     (region as any).reRenderLastContent();
     renderer.flush();
     
-    const count1 = (writtenData.join('').match(/Press SPACEBAR/g) || []).length;
+    const _count1 = (writtenData.join('').match(/Press SPACEBAR/g) || []).length;
     writtenData = [];
     
     // Resize

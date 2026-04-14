@@ -4,7 +4,6 @@ import type { RenderContext, Component } from '../component.js';
 import type { Color } from '../types.js';
 import { applyStyle } from '../utils/colors.js';
 import { truncateToWidth } from '../utils/text.js';
-import { autoColor } from '../utils/terminal-theme.js';
 
 // Simple border styles - only the ones that look good
 export type BorderStyle = 'cap' | 'capHalf' | 'brace' | 'dot' | 'asterisk';

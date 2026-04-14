@@ -256,7 +256,7 @@ describe('RegionRenderer', () => {
     it('should not set up exit handlers when disableRendering is true', () => {
       const onceSpy = vi.spyOn(process, 'once');
 
-      const region = new RegionRenderer({
+      const _region = new RegionRenderer({
         stdout: mockStdout,
         disableRendering: true, // Exit handlers should NOT be set up
       });

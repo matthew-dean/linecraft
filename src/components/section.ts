@@ -4,7 +4,6 @@ import type { RenderContext, Component } from '../component.js';
 import { renderChildren } from '../component.js';
 import type { Color } from '../types.js';
 import { applyStyle } from '../utils/colors.js';
-import { autoColor } from '../utils/terminal-theme.js';
 
 export interface SectionOptions {
   title: string;
