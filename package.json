@@ -22,7 +22,13 @@
     "type": "git",
     "url": "https://github.com/matthew-dean/linecraft.git"
   },
-  "license": "MIT",
+  "license": "LicenseRef-FLL-1.2",
+  "licenses": [
+    {
+      "type": "LicenseRef-FLL-1.2",
+      "url": "https://fllicense.org"
+    }
+  ],
   "scripts": {
     "build:ts": "tsc -p tsconfig.build.json",
     "build": "pnpm build:ts",
