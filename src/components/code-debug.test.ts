@@ -224,6 +224,36 @@ describe('code-debug component', () => {
   });
 
   describe('hyperlink preservation', () => {
+    it('can render without ANSI colors or OSC 8 hyperlinks', () => {
+      const component = CodeDebug({
+        startLine: 5,
+        startColumn: 10,
+        endColumn: 15,
+        lineBefore: 'line before',
+        errorLine: 'error line here',
+        lineAfter: 'line after',
+        message: 'Syntax error',
+        filePath: 'test.less',
+        fullPath: '/test/test.less',
+        baseDir: '/test',
+        type: 'error',
+        colors: false,
+      });
+
+      const output = render(component, 80);
+      const text = output.join('\n');
+
+      expect(text).toBe(stripAnsi(text));
+      expect(text).not.toContain('\x1b]8;;');
+      expect(text).toContain('Syntax error');
+      expect(text).toContain('╭─[');
+      expect(text).toContain('test.less');
+      expect(text).toContain(':5:10]');
+      expect(text).toContain('error line here');
+      expect(text).toContain('┖');
+      expect(text).toContain('╰─');
+    });
+
     it('should preserve OSC 8 hyperlink on truncated file path', () => {
       // When a file path with a hyperlink is truncated, the entire visible portion should remain clickable
       const component = CodeDebug({

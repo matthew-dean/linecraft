@@ -8,6 +8,7 @@ import { fileLink } from '../utils/file-link.js';
 import { Styled } from './styled.js';
 import { grid as Grid } from '../layout/grid.js';
 import { autoColor, type AutoColor } from '../utils/terminal-theme.js';
+import type { TextStyle } from '../types.js';
 
 export type CodeDebugType = 'error' | 'warning' | 'info';
 
@@ -44,6 +45,8 @@ export interface CodeDebugOptions {
   type?: CodeDebugType;
   /** Maximum column to show before forcing ellipsis (to make room for message) */
   maxColumn?: number;
+  /** Emit ANSI color and OSC-8 terminal hyperlinks. Default: true */
+  colors?: boolean;
 }
 
 
@@ -69,7 +72,10 @@ export function CodeDebug(options: CodeDebugOptions): Component {
       baseDir,
       type = 'error',
       maxColumn,
+      colors = true,
     } = options;
+    const style = (text: string, textStyle?: TextStyle): string =>
+      colors ? applyStyle(text, textStyle) : text;
     
     // If availableWidth is Infinity (during Grid measurement), use a reasonable default
     // Otherwise use the actual available width
@@ -99,7 +105,7 @@ export function CodeDebug(options: CodeDebugOptions): Component {
     // Use truncateFocusRange to show the target range with proper truncation
     const targetEndCol = endColumn ?? startColumn;
     const defaultCodeColor = autoColor('base');
-    const styledErrorLine = applyStyle(errorLine, { color: defaultCodeColor });
+    const styledErrorLine = style(errorLine, { color: defaultCodeColor });
     const truncateResult = truncateFocusRange(
       styledErrorLine,
       codeAreaWidth,
@@ -134,20 +140,20 @@ export function CodeDebug(options: CodeDebugOptions): Component {
     // Icon and message at the top (Oxlint style)
     // Use grid to handle wrapping automatically
     const icon = type === 'error' ? '✖' : type === 'warning' ? '⚠' : 'ℹ';
-    const iconStyled = applyStyle(icon, { color: colorScheme.primary });
+    const iconStyled = style(icon, { color: colorScheme.primary });
     
     // Build the combined message text: errorCode (if present) + message
     // The errorCode should be underlined and bold, followed by ": ", then the message
     // All parts should have the message color
     let messageText: string;
     if (errorCode) {
-      const errorCodeStyled = applyStyle(errorCode, { 
+      const errorCodeStyled = style(errorCode, {
         color: colorScheme.primary,
         underline: true,
         bold: true
       });
       // Apply message color to ": " and message parts so they maintain color after errorCode's reset
-      const colonAndMessage = applyStyle(': ' + message, { color: colorScheme.message });
+      const colonAndMessage = style(': ' + message, { color: colorScheme.message });
       messageText = errorCodeStyled + colonAndMessage;
     } else {
       messageText = message;
@@ -156,7 +162,7 @@ export function CodeDebug(options: CodeDebugOptions): Component {
     // Use Styled component to handle wrapping - it uses wrapText which prevents mid-word breaks
     // Note: messageText may already have ANSI codes, so Styled will preserve them
     const messageComponent = Styled(
-      { color: colorScheme.message, overflow: 'wrap' },
+      colors ? { color: colorScheme.message, overflow: 'wrap' } : { overflow: 'wrap' },
       messageText
     );
     
@@ -185,14 +191,14 @@ export function CodeDebug(options: CodeDebugOptions): Component {
     
     // Build location line parts
     const curveIndent = ' '.repeat(lineNumWidth + 1);
-    const curve = applyStyle('╭─', { color: 'muted' });
+    const curve = style('╭─', { color: 'muted' });
     const bracketOpen = '[';
     const colon1 = ':';
     // Use location color (magenta) for line/column numbers
     const locationNumColor = 'location';
-    const lineNum = applyStyle(String(startLine), { color: locationNumColor });
+    const lineNum = style(String(startLine), { color: locationNumColor });
     const colon2 = ':';
-    const colNum = applyStyle(String(startColumn), { color: locationNumColor });
+    const colNum = style(String(startColumn), { color: locationNumColor });
     const bracketClose = ']';
     
     // Calculate max width for path: available width minus fixed parts
@@ -206,9 +212,9 @@ export function CodeDebug(options: CodeDebugOptions): Component {
     const pathMaxWidth = Math.max(10, Math.min(40, availableWidth - fixedPartsWidth));
     
     // Create clickable file link with styling and max width constraint
-    const pathWithLink = fileLink(fullPath, pathText);
+    const pathWithLink = colors ? fileLink(fullPath, pathText) : pathText;
     const pathStyled = Styled(
-      { color: 'accent', overflow: 'ellipsis-start', max: pathMaxWidth },
+      colors ? { color: 'accent', overflow: 'ellipsis-start', max: pathMaxWidth } : { overflow: 'ellipsis-start', max: pathMaxWidth },
       pathWithLink
     );
     
@@ -248,10 +254,10 @@ export function CodeDebug(options: CodeDebugOptions): Component {
       const beforeLineNumPadded = beforeLineNum.padStart(lineNumWidth);
       const truncatedBefore = truncateToWidth(lineBefore, codeAreaWidth);
       // Make non-error lines slightly dimmer
-      const dimmedBefore = applyStyle(truncatedBefore, { color: 'muted' });
+      const dimmedBefore = style(truncatedBefore, { color: 'muted' });
       codeLines.push(
-        applyStyle(`${beforeLineNumPadded} `, { color: lineNumColor }) +
-        applyStyle('│ ', { color: 'muted' }) + dimmedBefore
+        style(`${beforeLineNumPadded} `, { color: lineNumColor }) +
+        style('│ ', { color: 'muted' }) + dimmedBefore
       );
     }
     
@@ -273,15 +279,15 @@ export function CodeDebug(options: CodeDebugOptions): Component {
       // Strip existing ANSI codes from highlight range and apply new highlight color
       // This ensures the highlight color properly overrides the default code color
       const highlightPlain = stripAnsi(highlightRange);
-      const highlightedRangeStyled = applyStyle(highlightPlain, { color: 'highlight' });
+      const highlightedRangeStyled = style(highlightPlain, { color: 'highlight' });
       
       highlightedErrorLine = beforeHighlight + highlightedRangeStyled + afterHighlight;
     }
     
     const errorLineNum = String(startLine);
     const errorLineNumPadded = errorLineNum.padStart(lineNumWidth);
-    let errorLineDisplay = applyStyle(`${errorLineNumPadded} `, { color: lineNumColor }) +
-      applyStyle('│ ', { color: 'muted' }) + highlightedErrorLine;
+    let errorLineDisplay = style(`${errorLineNumPadded} `, { color: lineNumColor }) +
+      style('│ ', { color: 'muted' }) + highlightedErrorLine;
     codeLines.push(errorLineDisplay);
     
     // Underline line (Oxlint style)
@@ -298,7 +304,7 @@ export function CodeDebug(options: CodeDebugOptions): Component {
     const spacesBefore = Math.max(0, underlineStartInCode - 1);
     
     // Underline line: line number width + space + │ + space + spaces + underline
-    let indicatorLine = ' '.repeat(lineNumWidth) + ' ' + applyStyle('│', { color: 'muted' }) + ' ' +
+    let indicatorLine = ' '.repeat(lineNumWidth) + ' ' + style('│', { color: 'muted' }) + ' ' +
       ' '.repeat(spacesBefore);
     
     // Calculate connectCol for short message (if present)
@@ -336,23 +342,23 @@ export function CodeDebug(options: CodeDebugOptions): Component {
           // - right dashes = underlineLen - 3 - (connectPosInUnderline - 1) = underlineLen - connectPosInUnderline - 2
           const leftPart = '─'.repeat(Math.max(0, connectPosInUnderline - 1));
           const rightPart = '─'.repeat(Math.max(0, underlineLen - connectPosInUnderline - 2));
-          indicatorLine += applyStyle('┖' + leftPart + '┬' + rightPart + '┚', { color: colorScheme.primary });
+          indicatorLine += style('┖' + leftPart + '┬' + rightPart + '┚', { color: colorScheme.primary });
         } else if (underlineLen === 2) {
           // Exactly 2 characters: just the brackets, no T-bar
-          indicatorLine += applyStyle('┖┚', { color: colorScheme.primary });
+          indicatorLine += style('┖┚', { color: colorScheme.primary });
         } else {
           // Single character, just use T
-          indicatorLine += applyStyle('╿', { color: colorScheme.primary });
+          indicatorLine += style('╿', { color: colorScheme.primary });
         }
       } else {
         // No short message: flat underline with curved ends (no T-bar)
         // For underlineLen=2: ┖┚ (no dashes), for underlineLen=3: ┖─┚ (1 dash), etc.
         const dashes = '─'.repeat(Math.max(0, underlineLen - 2));
-        indicatorLine += applyStyle('┖' + dashes + '┚', { color: colorScheme.primary });
+        indicatorLine += style('┖' + dashes + '┚', { color: colorScheme.primary });
       }
     } else {
       // Single point - use ┬ (T pointing up) which has horizontal bar pointing to code, vertical line going down
-      indicatorLine += applyStyle('╿', { color: colorScheme.primary });
+      indicatorLine += style('╿', { color: colorScheme.primary });
     }
     
     codeLines.push(indicatorLine);
@@ -378,20 +384,20 @@ export function CodeDebug(options: CodeDebugOptions): Component {
         const messageWidth = countVisibleChars(shortMessage);
         const linePrefixWidth = lineNumWidth + 3; // lineNumWidth + space + │ + space
         const spacesBeforeMessage = Math.max(0, connectPosInIndicator - linePrefixWidth - messageWidth - 4);
-        const shortMessageLine = ' '.repeat(lineNumWidth) + ' ' + applyStyle('│', { color: 'muted' }) + ' ' +
+        const shortMessageLine = ' '.repeat(lineNumWidth) + ' ' + style('│', { color: 'muted' }) + ' ' +
           ' '.repeat(spacesBeforeMessage) +
-          applyStyle(shortMessage, { color: colorScheme.message }) +
-          applyStyle(' ──╯', { color: colorScheme.primary });
+          style(shortMessage, { color: colorScheme.message }) +
+          style(' ──╯', { color: colorScheme.primary });
         codeLines.push(shortMessageLine);
       } else {
         // Short message on right: connector pointing left (curved up) + message
         // The ╰ should be at connectPosInIndicator
         const linePrefixWidth = lineNumWidth + 3; // lineNumWidth + space + │ + space
         const spacesBeforeConnector = Math.max(0, connectPosInIndicator - linePrefixWidth - 1);
-        const shortMessageLine = ' '.repeat(lineNumWidth) + ' ' + applyStyle('│', { color: 'muted' }) + ' ' +
+        const shortMessageLine = ' '.repeat(lineNumWidth) + ' ' + style('│', { color: 'muted' }) + ' ' +
           ' '.repeat(spacesBeforeConnector) +
-          applyStyle('╰── ', { color: colorScheme.primary }) +
-          applyStyle(shortMessage, { color: colorScheme.message });
+          style('╰── ', { color: colorScheme.primary }) +
+          style(shortMessage, { color: colorScheme.message });
         codeLines.push(shortMessageLine);
       }
     }
@@ -402,20 +408,19 @@ export function CodeDebug(options: CodeDebugOptions): Component {
       const afterLineNumPadded = afterLineNum.padStart(lineNumWidth);
       const truncatedAfter = truncateToWidth(lineAfter, codeAreaWidth);
       // Make non-error lines slightly dimmer
-      const dimmedAfter = applyStyle(truncatedAfter, { color: 'muted' });
+      const dimmedAfter = style(truncatedAfter, { color: 'muted' });
       codeLines.push(
-        applyStyle(`${afterLineNumPadded} `, { color: lineNumColor }) +
-        applyStyle('│ ', { color: 'muted' }) + dimmedAfter
+        style(`${afterLineNumPadded} `, { color: lineNumColor }) +
+        style('│ ', { color: 'muted' }) + dimmedAfter
       );
     }
     
     // Bottom curve to close the box (Oxlint style)
     const bottomCurveIndent = ' '.repeat(lineNumWidth + 1);
-    const bottomCurve = bottomCurveIndent + applyStyle('╰─', { color: 'muted' });
+    const bottomCurve = bottomCurveIndent + style('╰─', { color: 'muted' });
     codeLines.push(bottomCurve);
     
     // Return lines directly (no Section wrapper for Oxlint style)
     return codeLines;
   };
 }
-
