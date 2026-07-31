@@ -51,7 +51,9 @@ blocked by `prepublishOnly`.
 The command is resumable. If one artifact was published successfully before a
 later publish or verification failed, rerunning `pnpm release` validates the
 existing artifact's license, restores its expected dist-tag, and continues with
-the missing artifact. An existing version with the wrong license is rejected.
+the missing artifact. Version lookups also retry transient registry 404s before
+deciding an artifact is absent, preventing an immutable republish attempt during
+registry propagation. An existing version with the wrong license is rejected.
 
 Published npm versions are immutable. The existing `0.2.6` package was
 accidentally published with FLL metadata. MIT `0.2.7` is the corrected

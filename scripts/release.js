@@ -172,19 +172,28 @@ function pack(cwd) {
 }
 
 function getPublishedLicense(name, version) {
-  const result = spawnSync('npm', ['view', `${name}@${version}`, 'version', '--json'], {
-    cwd: ROOT,
-    encoding: 'utf8',
-    env: sanitizeNpmEnvironment(process.env),
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  if (result.status === 0) {
-    return JSON.parse(
-      run('npm', ['view', `${name}@${version}`, 'license', '--json'], { capture: true })
-    );
-  }
-  if (!`${result.stdout}\n${result.stderr}`.includes('E404')) {
-    fail(`Could not verify ${name}@${version} availability:\n${result.stderr || result.stdout}`);
+  const spec = `${name}@${version}`;
+  for (let attempt = 1; attempt <= REGISTRY_VERIFY_ATTEMPTS; attempt++) {
+    const result = spawnSync('npm', ['view', spec, 'license', '--json'], {
+      cwd: ROOT,
+      encoding: 'utf8',
+      env: sanitizeNpmEnvironment(process.env),
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    if (result.status === 0) {
+      return JSON.parse(result.stdout);
+    }
+    const detail = `${result.stdout}\n${result.stderr}`;
+    if (!detail.includes('E404')) {
+      fail(`Could not verify ${spec} availability:\n${result.stderr || result.stdout}`);
+    }
+    if (attempt < REGISTRY_VERIFY_ATTEMPTS) {
+      console.warn(
+        `${spec} returned 404; retrying before treating the version as unpublished ` +
+        `(${attempt}/${REGISTRY_VERIFY_ATTEMPTS})`
+      );
+      sleep(REGISTRY_VERIFY_DELAY_MS);
+    }
   }
   return null;
 }
@@ -196,13 +205,17 @@ export function validateExistingRelease(spec, actualLicense, expectedLicense) {
   return actualLicense === expectedLicense ? 'resume' : 'publish';
 }
 
-function publishOrResume(name, version, expectedLicense, tarball, tag, publishEnv) {
+function publishOrResume(
+  name,
+  version,
+  actualLicense,
+  expectedLicense,
+  tarball,
+  tag,
+  publishEnv
+) {
   const spec = `${name}@${version}`;
-  const disposition = validateExistingRelease(
-    spec,
-    getPublishedLicense(name, version),
-    expectedLicense
-  );
+  const disposition = validateExistingRelease(spec, actualLicense, expectedLicense);
   if (disposition === 'publish') {
     run('npm', ['publish', tarball, '--tag', tag, '--access', 'public'], {
       env: publishEnv,
@@ -292,6 +305,8 @@ function main() {
   );
   const fllVersion = sourcePackage.version;
   const mitVersion = deriveMitVersion(fllVersion);
+  let publishedMitLicense = null;
+  let publishedFllLicense = null;
 
   assertVersionPolicy(mitVersion, fllVersion);
   assertSourcePolicy(sourcePackage, fllLicenseText, sourceReadme, mitLicenseText);
@@ -299,14 +314,16 @@ function main() {
   if (publish) {
     assertCleanTrackedWorktree();
     assertNpmAuthentication();
+    publishedMitLicense = getPublishedLicense(sourcePackage.name, mitVersion);
+    publishedFllLicense = getPublishedLicense(sourcePackage.name, fllVersion);
     validateExistingRelease(
       `${sourcePackage.name}@${mitVersion}`,
-      getPublishedLicense(sourcePackage.name, mitVersion),
+      publishedMitLicense,
       'MIT'
     );
     validateExistingRelease(
       `${sourcePackage.name}@${fllVersion}`,
-      getPublishedLicense(sourcePackage.name, fllVersion),
+      publishedFllLicense,
       FLL_LICENSE
     );
   }
@@ -375,6 +392,7 @@ function main() {
       publishOrResume(
         sourcePackage.name,
         mitVersion,
+        publishedMitLicense,
         'MIT',
         mitTarball,
         'legacy',
@@ -383,6 +401,7 @@ function main() {
       publishOrResume(
         sourcePackage.name,
         fllVersion,
+        publishedFllLicense,
         FLL_LICENSE,
         fllTarball,
         'latest',
