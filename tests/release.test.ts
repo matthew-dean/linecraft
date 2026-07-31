@@ -4,6 +4,9 @@ import {
   createMitPackageJson,
   createMitReadme,
   deriveMitVersion,
+  formatProcessFailure,
+  inspectReleaseRegistry,
+  isImmutablePublishConflict,
   isTransientRegistryVerificationError,
   sanitizeNpmEnvironment,
   validateExistingRelease,
@@ -80,6 +83,57 @@ describe('dual-license release policy', () => {
     expect(isTransientRegistryVerificationError(new Error('legacy must be 0.2.8 with MIT'))).toBe(true);
     expect(isTransientRegistryVerificationError(new Error('npm error code E401'))).toBe(false);
     expect(isTransientRegistryVerificationError(new Error('wrong license'))).toBe(false);
+  });
+
+  it('recognizes only immutable-version publish conflicts as resumable', () => {
+    expect(
+      isImmutablePublishConflict(
+        'npm error You cannot publish over the previously published versions: 0.2.8.'
+      )
+    ).toBe(true);
+    expect(isImmutablePublishConflict('npm error code EPUBLISHCONFLICT')).toBe(true);
+    expect(isImmutablePublishConflict('npm error code E401 Unauthorized')).toBe(false);
+    expect(isImmutablePublishConflict('npm error code EOTP')).toBe(false);
+  });
+
+  it('checks only versions that existing dist-tags identify as resumable', () => {
+    const calls: unknown[][] = [];
+    const inspect = (tags: { legacy: string; latest: string }) =>
+      inspectReleaseRegistry('linecraft', '0.2.8', '0.5.8', {
+        getTags: (name: string) => {
+          calls.push(['tags', name]);
+          return tags;
+        },
+        getLicense: (name: string, version: string, options: unknown) => {
+          calls.push(['license', name, version, options]);
+          return version.startsWith('0.2.') ? 'MIT' : 'LicenseRef-FLL-1.2';
+        },
+      });
+
+    expect(inspect({ legacy: '0.2.7', latest: '0.5.7' })).toMatchObject({
+      mitLicense: null,
+      fllLicense: null,
+    });
+    expect(calls).toEqual([['tags', 'linecraft']]);
+
+    calls.length = 0;
+    expect(inspect({ legacy: '0.2.8', latest: '0.5.7' })).toMatchObject({
+      mitLicense: 'MIT',
+      fllLicense: null,
+    });
+    expect(calls).toEqual([
+      ['tags', 'linecraft'],
+      ['license', 'linecraft', '0.2.8', { retryNotFound: true }],
+    ]);
+  });
+
+  it('preserves npm publish process diagnostics', () => {
+    expect(formatProcessFailure({ error: new Error('spawn npm ENOENT') })).toBe(
+      'spawn npm ENOENT'
+    );
+    expect(formatProcessFailure({ signal: 'SIGTERM' })).toBe(
+      'terminated by signal SIGTERM'
+    );
   });
 
 });

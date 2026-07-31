@@ -71,6 +71,45 @@ export function isTransientRegistryVerificationError(error) {
   );
 }
 
+export function isImmutablePublishConflict(output) {
+  return (
+    /\bEPUBLISHCONFLICT\b/u.test(output) ||
+    /cannot publish over (?:the )?previously published version/iu.test(output) ||
+    /cannot publish over the previously published versions/iu.test(output)
+  );
+}
+
+export function selectResumeVersions(tags, mitVersion, fllVersion) {
+  return {
+    mit: tags.legacy === mitVersion ? mitVersion : null,
+    fll: tags.latest === fllVersion ? fllVersion : null,
+  };
+}
+
+export function inspectReleaseRegistry(name, mitVersion, fllVersion, reader) {
+  const tags = reader.getTags(name);
+  const resumeVersions = selectResumeVersions(tags, mitVersion, fllVersion);
+  return {
+    tags,
+    mitLicense: resumeVersions.mit
+      ? reader.getLicense(name, resumeVersions.mit, { retryNotFound: true })
+      : null,
+    fllLicense: resumeVersions.fll
+      ? reader.getLicense(name, resumeVersions.fll, { retryNotFound: true })
+      : null,
+  };
+}
+
+export function formatProcessFailure(result) {
+  if (result.error) {
+    return result.error.message;
+  }
+  if (result.signal) {
+    return `terminated by signal ${result.signal}`;
+  }
+  return result.stderr || result.stdout || `exited with status ${String(result.status)}`;
+}
+
 function sleep(milliseconds) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
 }
@@ -171,9 +210,10 @@ function pack(cwd) {
   return parsed[0];
 }
 
-function getPublishedLicense(name, version) {
+function getPublishedLicense(name, version, options = {}) {
   const spec = `${name}@${version}`;
-  for (let attempt = 1; attempt <= REGISTRY_VERIFY_ATTEMPTS; attempt++) {
+  const attempts = options.retryNotFound ? REGISTRY_VERIFY_ATTEMPTS : 1;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
     const result = spawnSync('npm', ['view', spec, 'license', '--json'], {
       cwd: ROOT,
       encoding: 'utf8',
@@ -187,10 +227,10 @@ function getPublishedLicense(name, version) {
     if (!detail.includes('E404')) {
       fail(`Could not verify ${spec} availability:\n${result.stderr || result.stdout}`);
     }
-    if (attempt < REGISTRY_VERIFY_ATTEMPTS) {
+    if (attempt < attempts) {
       console.warn(
         `${spec} returned 404; retrying before treating the version as unpublished ` +
-        `(${attempt}/${REGISTRY_VERIFY_ATTEMPTS})`
+        `(${attempt}/${attempts})`
       );
       sleep(REGISTRY_VERIFY_DELAY_MS);
     }
@@ -217,13 +257,38 @@ function publishOrResume(
   const spec = `${name}@${version}`;
   const disposition = validateExistingRelease(spec, actualLicense, expectedLicense);
   if (disposition === 'publish') {
-    run('npm', ['publish', tarball, '--tag', tag, '--access', 'public'], {
-      env: publishEnv,
+    const result = spawnSync(
+      'npm',
+      ['publish', tarball, '--tag', tag, '--access', 'public'],
+      {
+        cwd: ROOT,
+        encoding: 'utf8',
+        env: sanitizeNpmEnvironment({ ...process.env, ...publishEnv }),
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }
+    );
+    if (result.status === 0) {
+      process.stdout.write(result.stdout ?? '');
+      process.stderr.write(result.stderr ?? '');
+      return;
+    }
+
+    const detail = formatProcessFailure(result);
+    if (!isImmutablePublishConflict(detail)) {
+      fail(`npm publish ${tarball} failed\n${detail}`);
+    }
+
+    const recoveredLicense = getPublishedLicense(name, version, {
+      retryNotFound: true,
     });
-  } else {
-    console.log(`${spec} already has ${expectedLicense}; resuming release`);
-    run('npm', ['dist-tag', 'add', spec, tag]);
+    if (recoveredLicense === null) {
+      fail(`npm reported ${spec} already exists, but its metadata could not be read`);
+    }
+    validateExistingRelease(spec, recoveredLicense, expectedLicense);
   }
+
+  console.log(`${spec} already has ${expectedLicense}; resuming release`);
+  run('npm', ['dist-tag', 'add', spec, tag]);
 }
 
 function assertCleanTrackedWorktree() {
@@ -314,8 +379,24 @@ function main() {
   if (publish) {
     assertCleanTrackedWorktree();
     assertNpmAuthentication();
-    publishedMitLicense = getPublishedLicense(sourcePackage.name, mitVersion);
-    publishedFllLicense = getPublishedLicense(sourcePackage.name, fllVersion);
+    const registry = inspectReleaseRegistry(
+      sourcePackage.name,
+      mitVersion,
+      fllVersion,
+      {
+        getTags: (name) => JSON.parse(
+          run('npm', ['view', name, 'dist-tags', '--json'], { capture: true })
+        ),
+        getLicense: (name, version, options) =>
+          getPublishedLicense(name, version, options),
+      }
+    );
+    console.log(
+      `npm registry currently has legacy=${String(registry.tags.legacy)} and ` +
+      `latest=${String(registry.tags.latest)}`
+    );
+    publishedMitLicense = registry.mitLicense;
+    publishedFllLicense = registry.fllLicense;
     validateExistingRelease(
       `${sourcePackage.name}@${mitVersion}`,
       publishedMitLicense,
