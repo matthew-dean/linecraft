@@ -458,15 +458,8 @@ Contributions welcome! Please open an issue or PR.
 
 ## License
 
-This project is licensed under the **Fair Labor License (FLL) v1.2**.
-
-- If you are an individual with a net worth under **$5M USD**, or  
-- Your organization is **Fair Labor Compliant** (your CEO or highest-paid executive makes no more than **15×** your median employee's total annual compensation),
-
-then you may use this software **for free**, subject to the terms of the license.
-
-If you do **not** meet these conditions and use this software in production or for business value, you must obtain a **paid license**, for example via [fllicense.org](https://fllicense.org).
-
-You may freely evaluate and test this software for up to **90 days** before deciding.
+The source repository and 0.2.x compatibility releases are licensed under the
+**MIT License**. The npm `latest` 0.5.x release line is published under the Fair
+Labor License (FLL) v1.2.
 
 See the full license text in [`LICENSE`](./LICENSE).

@@ -1,6 +1,6 @@
 {
   "name": "linecraft",
-  "version": "0.5.7",
+  "version": "0.2.7",
   "description": "High-performance terminal UI library for Node.js",
   "type": "module",
   "main": "./lib/index.js",
@@ -22,13 +22,7 @@
     "type": "git",
     "url": "https://github.com/matthew-dean/linecraft.git"
   },
-  "license": "LicenseRef-FLL-1.2",
-  "licenses": [
-    {
-      "type": "LicenseRef-FLL-1.2",
-      "url": "https://fllicense.org"
-    }
-  ],
+  "license": "MIT",
   "scripts": {
     "build:ts": "tsc -p tsconfig.build.json",
     "build": "pnpm build:ts",
@@ -41,7 +35,8 @@
     "example": "node scripts/run-example.js",
     "record": "vhs",
     "record:all": "node scripts/record-all.js",
-    "prepublishOnly": "pnpm lint && pnpm typecheck && pnpm test"
+    "release:dual": "node scripts/release-dual.js",
+    "prepublishOnly": "node scripts/guard-direct-publish.js && pnpm lint && pnpm typecheck && pnpm test"
   },
   "keywords": [
     "terminal",
