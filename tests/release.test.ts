@@ -4,10 +4,11 @@ import {
   createMitPackageJson,
   createMitReadme,
   deriveMitVersion,
-  formatProcessFailure,
   inspectReleaseRegistry,
   isImmutablePublishConflict,
   isTransientRegistryVerificationError,
+  publishOrResume,
+  publishTarball,
   sanitizeNpmEnvironment,
   validateExistingRelease,
 } from '../scripts/release.js';
@@ -85,17 +86,6 @@ describe('dual-license release policy', () => {
     expect(isTransientRegistryVerificationError(new Error('wrong license'))).toBe(false);
   });
 
-  it('recognizes only immutable-version publish conflicts as resumable', () => {
-    expect(
-      isImmutablePublishConflict(
-        'npm error You cannot publish over the previously published versions: 0.2.8.'
-      )
-    ).toBe(true);
-    expect(isImmutablePublishConflict('npm error code EPUBLISHCONFLICT')).toBe(true);
-    expect(isImmutablePublishConflict('npm error code E401 Unauthorized')).toBe(false);
-    expect(isImmutablePublishConflict('npm error code EOTP')).toBe(false);
-  });
-
   it('checks only versions that existing dist-tags identify as resumable', () => {
     const calls: unknown[][] = [];
     const inspect = (tags: { legacy: string; latest: string }) =>
@@ -127,13 +117,85 @@ describe('dual-license release policy', () => {
     ]);
   });
 
-  it('preserves npm publish process diagnostics', () => {
-    expect(formatProcessFailure({ error: new Error('spawn npm ENOENT') })).toBe(
-      'spawn npm ENOENT'
-    );
-    expect(formatProcessFailure({ signal: 'SIGTERM' })).toBe(
-      'terminated by signal SIGTERM'
-    );
+  it('publishes with interactive stdio so npm can prompt for an OTP', async () => {
+    const calls: unknown[][] = [];
+    await publishTarball('/tmp/linecraft.tgz', 'legacy', { LINECRAFT_DUAL_RELEASE: '1' },
+      (...args: unknown[]) => calls.push(args));
+
+    expect(calls).toEqual([[
+      'npm',
+      [
+        'publish',
+        '/tmp/linecraft.tgz',
+        '--tag',
+        'legacy',
+        '--access',
+        'public',
+      ],
+      { env: { LINECRAFT_DUAL_RELEASE: '1' } },
+    ]]);
+  });
+
+  it('recognizes only immutable publish conflicts as resumable', () => {
+    expect(isImmutablePublishConflict(Object.assign(
+      new Error('npm publish failed'),
+      { commandStderr: 'npm error You cannot publish over the previously published versions' }
+    ))).toBe(true);
+    expect(isImmutablePublishConflict(Object.assign(
+      new Error('npm publish failed'),
+      { commandStderr: 'npm error code EOTP' }
+    ))).toBe(false);
+  });
+
+  it('returns OTP failures immediately without a registry lookup', async () => {
+    const otpError = new Error('npm publish failed with EOTP');
+    const lookups: unknown[][] = [];
+
+    await expect(publishOrResume(
+      'linecraft',
+      '0.2.8',
+      null,
+      'MIT',
+      '/tmp/linecraft.tgz',
+      'legacy',
+      {},
+      {
+        publish: () => { throw otpError; },
+        getLicense: (...args: unknown[]) => {
+          lookups.push(args);
+          return null;
+        },
+      }
+    )).rejects.toBe(otpError);
+    expect(lookups).toEqual([]);
+  });
+
+  it('retries propagation and recovers a version that landed after tag preflight', async () => {
+    const tags: unknown[][] = [];
+    const lookups: unknown[][] = [];
+    const conflict = Object.assign(new Error('npm publish failed'), {
+      commandStderr: 'npm error You cannot publish over the previously published versions',
+    });
+
+    await expect(publishOrResume(
+      'linecraft',
+      '0.2.8',
+      null,
+      'MIT',
+      '/tmp/linecraft.tgz',
+      'legacy',
+      {},
+      {
+        publish: () => { throw conflict; },
+        getLicense: (...args: unknown[]) => {
+          lookups.push(args);
+          return 'MIT';
+        },
+        addTag: (...args: unknown[]) => { tags.push(args); },
+      }
+    )).resolves.toBeUndefined();
+    expect(lookups).toEqual([['linecraft', '0.2.8', { retryNotFound: true }]]);
+    expect(tags).toEqual([['linecraft@0.2.8', 'legacy']]);
   });
 
 });

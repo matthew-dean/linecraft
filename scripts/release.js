@@ -15,7 +15,7 @@ import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(SCRIPT_DIR, '..');
@@ -71,14 +71,6 @@ export function isTransientRegistryVerificationError(error) {
   );
 }
 
-export function isImmutablePublishConflict(output) {
-  return (
-    /\bEPUBLISHCONFLICT\b/u.test(output) ||
-    /cannot publish over (?:the )?previously published version/iu.test(output) ||
-    /cannot publish over the previously published versions/iu.test(output)
-  );
-}
-
 export function selectResumeVersions(tags, mitVersion, fllVersion) {
   return {
     mit: tags.legacy === mitVersion ? mitVersion : null,
@@ -98,16 +90,6 @@ export function inspectReleaseRegistry(name, mitVersion, fllVersion, reader) {
       ? reader.getLicense(name, resumeVersions.fll, { retryNotFound: true })
       : null,
   };
-}
-
-export function formatProcessFailure(result) {
-  if (result.error) {
-    return result.error.message;
-  }
-  if (result.signal) {
-    return `terminated by signal ${result.signal}`;
-  }
-  return result.stderr || result.stdout || `exited with status ${String(result.status)}`;
 }
 
 function sleep(milliseconds) {
@@ -162,6 +144,36 @@ function run(command, args, options = {}) {
     fail(`${command} ${args.join(' ')} failed${detail}`);
   }
   return options.capture ? result.stdout.trim() : '';
+}
+
+function runInteractive(command, args, options = {}) {
+  return new Promise((resolvePromise, reject) => {
+    const environment = { ...process.env, ...options.env };
+    const child = spawn(command, args, {
+      cwd: options.cwd ?? ROOT,
+      env: command === 'npm' ? sanitizeNpmEnvironment(environment) : environment,
+      // npm requires both stdin and stdout to be TTYs before offering its OTP
+      // prompt. Capture only stderr, and mirror it live so failures remain visible.
+      stdio: ['inherit', 'inherit', 'pipe'],
+    });
+    let stderr = '';
+
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk;
+      process.stderr.write(chunk);
+    });
+    child.on('error', reject);
+    child.on('close', (status) => {
+      if (status === 0) {
+        resolvePromise();
+        return;
+      }
+      const error = new Error(`${command} ${args.join(' ')} failed`);
+      error.commandStderr = stderr;
+      reject(error);
+    });
+  });
 }
 
 function assertSourcePolicy(sourcePackage, fllLicenseText, sourceReadme, mitLicenseText) {
@@ -238,6 +250,22 @@ function getPublishedLicense(name, version, options = {}) {
   return null;
 }
 
+export function isImmutablePublishConflict(error) {
+  const detail = [error instanceof Error ? error.message : String(error), error?.commandStderr]
+    .filter(Boolean)
+    .join('\n');
+  return /\bEPUBLISHCONFLICT\b|cannot publish over|previously published|pre-existing version/iu
+    .test(detail);
+}
+
+export function publishTarball(tarball, tag, publishEnv, runCommand = runInteractive) {
+  return runCommand(
+    'npm',
+    ['publish', tarball, '--tag', tag, '--access', 'public'],
+    { env: publishEnv }
+  );
+}
+
 export function validateExistingRelease(spec, actualLicense, expectedLicense) {
   if (actualLicense !== null && actualLicense !== expectedLicense) {
     fail(`${spec} is already published with ${actualLicense}; expected ${expectedLicense}`);
@@ -245,50 +273,42 @@ export function validateExistingRelease(spec, actualLicense, expectedLicense) {
   return actualLicense === expectedLicense ? 'resume' : 'publish';
 }
 
-function publishOrResume(
+export async function publishOrResume(
   name,
   version,
   actualLicense,
   expectedLicense,
   tarball,
   tag,
-  publishEnv
+  publishEnv,
+  operations = {}
 ) {
+  const publish = operations.publish ?? publishTarball;
+  const getLicense = operations.getLicense ?? getPublishedLicense;
+  const addTag = operations.addTag ?? ((specToTag, tagToAdd) =>
+    run('npm', ['dist-tag', 'add', specToTag, tagToAdd]));
   const spec = `${name}@${version}`;
   const disposition = validateExistingRelease(spec, actualLicense, expectedLicense);
   if (disposition === 'publish') {
-    const result = spawnSync(
-      'npm',
-      ['publish', tarball, '--tag', tag, '--access', 'public'],
-      {
-        cwd: ROOT,
-        encoding: 'utf8',
-        env: sanitizeNpmEnvironment({ ...process.env, ...publishEnv }),
-        stdio: ['ignore', 'pipe', 'pipe'],
-      }
-    );
-    if (result.status === 0) {
-      process.stdout.write(result.stdout ?? '');
-      process.stderr.write(result.stderr ?? '');
+    try {
+      await publish(tarball, tag, publishEnv);
       return;
+    } catch (publishError) {
+      // npm already printed the interactive failure. Retry registry propagation
+      // only for an immutable-version race. OTP/auth failures return immediately.
+      if (!isImmutablePublishConflict(publishError)) {
+        throw publishError;
+      }
+      const recoveredLicense = getLicense(name, version, { retryNotFound: true });
+      if (recoveredLicense === null) {
+        throw publishError;
+      }
+      validateExistingRelease(spec, recoveredLicense, expectedLicense);
     }
-
-    const detail = formatProcessFailure(result);
-    if (!isImmutablePublishConflict(detail)) {
-      fail(`npm publish ${tarball} failed\n${detail}`);
-    }
-
-    const recoveredLicense = getPublishedLicense(name, version, {
-      retryNotFound: true,
-    });
-    if (recoveredLicense === null) {
-      fail(`npm reported ${spec} already exists, but its metadata could not be read`);
-    }
-    validateExistingRelease(spec, recoveredLicense, expectedLicense);
   }
 
   console.log(`${spec} already has ${expectedLicense}; resuming release`);
-  run('npm', ['dist-tag', 'add', spec, tag]);
+  addTag(spec, tag);
 }
 
 function assertCleanTrackedWorktree() {
@@ -349,7 +369,7 @@ function assertNpmAuthentication() {
   }
 }
 
-function main() {
+async function main() {
   const args = process.argv.slice(2);
   if (args.includes('--help') || args.includes('-h')) {
     console.log(usage());
@@ -470,7 +490,7 @@ function main() {
 
     if (publish) {
       const publishEnv = { LINECRAFT_DUAL_RELEASE: '1' };
-      publishOrResume(
+      await publishOrResume(
         sourcePackage.name,
         mitVersion,
         publishedMitLicense,
@@ -479,7 +499,7 @@ function main() {
         'legacy',
         publishEnv
       );
-      publishOrResume(
+      await publishOrResume(
         sourcePackage.name,
         fllVersion,
         publishedFllLicense,
@@ -504,10 +524,8 @@ function main() {
 
 const invokedPath = process.argv[1] ? pathToFileURL(resolve(process.argv[1])).href : '';
 if (import.meta.url === invokedPath) {
-  try {
-    main();
-  } catch (error) {
+  main().catch((error) => {
     console.error(error instanceof Error ? error.message : error);
     process.exitCode = 1;
-  }
+  });
 }
