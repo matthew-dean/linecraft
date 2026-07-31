@@ -311,4 +311,29 @@ describe('code-debug component', () => {
       }
     });
   });
+
+  describe('terminal resize safety', () => {
+    it('does not append invisible spaces that reflow into blank rows', () => {
+      const component = CodeDebug({
+        startLine: 3,
+        startColumn: 3,
+        endColumn: 12,
+        errorLine: '  background: white;',
+        message: "arm[3] ∩ arm[4] overlap on 'U','u'",
+        shortMessage: 'arm 3 can start here; arm 7 is entered first',
+        filePath: 'fixtures/css/decls.css',
+        fullPath: '/project/fixtures/css/decls.css',
+        baseDir: '/project',
+        type: 'warning',
+      });
+
+      for (const width of [80, 160]) {
+        const output = render(component, width);
+        expect(output.length).toBeGreaterThan(0);
+        for (const line of output) {
+          expect(stripAnsi(line)).not.toMatch(/ $/u);
+        }
+      }
+    });
+  });
 });

@@ -11,6 +11,34 @@ describe('Style Component', () => {
   });
 
   describe('basic styling', () => {
+    it('fills its allocated width for left and center alignment', () => {
+      const render = (
+        align: 'left' | 'center',
+        omitTrailingPadding = false
+      ) => callComponent(
+        Styled({ align, backgroundColor: 'blue' }, 'Hello'),
+        {
+          availableWidth: 20,
+          region,
+          columnIndex: 0,
+          rowIndex: 0,
+          omitTrailingPadding,
+        }
+      ) as string;
+
+      const left = render('left');
+      const center = render('center');
+
+      expect(left).toContain('\x1b[44m');
+      expect(center).toContain('\x1b[44m');
+      expect(left.replace(/\x1b\[[0-9;]*m/g, '')).toBe(`Hello${' '.repeat(15)}`);
+      expect(center.replace(/\x1b\[[0-9;]*m/g, '')).toBe(`${' '.repeat(7)}Hello${' '.repeat(8)}`);
+      expect(render('left', true).replace(/\x1b\[[0-9;]*m/g, '')).toBe('Hello');
+      expect(render('center', true).replace(/\x1b\[[0-9;]*m/g, '')).toBe(
+        `${' '.repeat(7)}Hello`
+      );
+    });
+
     it('should apply color', () => {
       const component = Styled({ color: 'red' }, 'Hello');
       const result = callComponent(component, {
@@ -156,4 +184,3 @@ describe('Style Component', () => {
     });
   });
 });
-

@@ -22,6 +22,8 @@ const ROOT = resolve(SCRIPT_DIR, '..');
 const OUTPUT_DIR = join(ROOT, '.release');
 const FLL_LICENSE = 'LicenseRef-FLL-1.2';
 const README_LICENSE_HEADING = '## License';
+const REGISTRY_VERIFY_ATTEMPTS = 6;
+const REGISTRY_VERIFY_DELAY_MS = 2_000;
 
 const MIT_README_SECTION = `## License
 
@@ -43,6 +45,34 @@ tarballs in .release/ without publishing.`;
 
 function fail(message) {
   throw new Error(message);
+}
+
+export function sanitizeNpmEnvironment(environment) {
+  const sanitized = { ...environment };
+  for (const key of Object.keys(sanitized)) {
+    const normalized = key.toLowerCase();
+    if (
+      normalized === 'npm_config_verify_deps_before_run' ||
+      /^npm_config__.+_registry$/.test(normalized)
+    ) {
+      delete sanitized[key];
+    }
+  }
+  return sanitized;
+}
+
+export function isTransientRegistryVerificationError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    /\bE404\b|\b404\b|No match found/u.test(message) ||
+    /\bE(?:CONNRESET|TIMEDOUT|AI_AGAIN)\b|\b50[0234]\b/u.test(message) ||
+    message.startsWith('legacy must be ') ||
+    message.startsWith('latest must be ')
+  );
+}
+
+function sleep(milliseconds) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
 }
 
 export function assertVersionPolicy(mitVersion, fllVersion) {
@@ -80,10 +110,11 @@ export function createMitReadme(sourceReadme) {
 }
 
 function run(command, args, options = {}) {
+  const environment = { ...process.env, ...options.env };
   const result = spawnSync(command, args, {
     cwd: options.cwd ?? ROOT,
     encoding: 'utf8',
-    env: { ...process.env, ...options.env },
+    env: command === 'npm' ? sanitizeNpmEnvironment(environment) : environment,
     stdio: options.capture ? ['ignore', 'pipe', 'pipe'] : 'inherit',
   });
 
@@ -141,18 +172,28 @@ function pack(cwd) {
 }
 
 function getPublishedLicense(name, version) {
-  const result = spawnSync('npm', ['view', `${name}@${version}`, 'version', '--json'], {
-    cwd: ROOT,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  if (result.status === 0) {
-    return JSON.parse(
-      run('npm', ['view', `${name}@${version}`, 'license', '--json'], { capture: true })
-    );
-  }
-  if (!`${result.stdout}\n${result.stderr}`.includes('E404')) {
-    fail(`Could not verify ${name}@${version} availability:\n${result.stderr || result.stdout}`);
+  const spec = `${name}@${version}`;
+  for (let attempt = 1; attempt <= REGISTRY_VERIFY_ATTEMPTS; attempt++) {
+    const result = spawnSync('npm', ['view', spec, 'license', '--json'], {
+      cwd: ROOT,
+      encoding: 'utf8',
+      env: sanitizeNpmEnvironment(process.env),
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    if (result.status === 0) {
+      return JSON.parse(result.stdout);
+    }
+    const detail = `${result.stdout}\n${result.stderr}`;
+    if (!detail.includes('E404')) {
+      fail(`Could not verify ${spec} availability:\n${result.stderr || result.stdout}`);
+    }
+    if (attempt < REGISTRY_VERIFY_ATTEMPTS) {
+      console.warn(
+        `${spec} returned 404; retrying before treating the version as unpublished ` +
+        `(${attempt}/${REGISTRY_VERIFY_ATTEMPTS})`
+      );
+      sleep(REGISTRY_VERIFY_DELAY_MS);
+    }
   }
   return null;
 }
@@ -164,13 +205,17 @@ export function validateExistingRelease(spec, actualLicense, expectedLicense) {
   return actualLicense === expectedLicense ? 'resume' : 'publish';
 }
 
-function publishOrResume(name, version, expectedLicense, tarball, tag, publishEnv) {
+function publishOrResume(
+  name,
+  version,
+  actualLicense,
+  expectedLicense,
+  tarball,
+  tag,
+  publishEnv
+) {
   const spec = `${name}@${version}`;
-  const disposition = validateExistingRelease(
-    spec,
-    getPublishedLicense(name, version),
-    expectedLicense
-  );
+  const disposition = validateExistingRelease(spec, actualLicense, expectedLicense);
   if (disposition === 'publish') {
     run('npm', ['publish', tarball, '--tag', tag, '--access', 'public'], {
       env: publishEnv,
@@ -191,19 +236,51 @@ function assertCleanTrackedWorktree() {
 }
 
 function verifyPublishedPolicy(name, mitVersion, fllVersion) {
-  const tags = JSON.parse(run('npm', ['view', name, 'dist-tags', '--json'], { capture: true }));
-  const mitLicense = JSON.parse(
-    run('npm', ['view', `${name}@${mitVersion}`, 'license', '--json'], { capture: true })
-  );
-  const fllLicense = JSON.parse(
-    run('npm', ['view', `${name}@${fllVersion}`, 'license', '--json'], { capture: true })
-  );
+  for (let attempt = 1; attempt <= REGISTRY_VERIFY_ATTEMPTS; attempt++) {
+    try {
+      const tags = JSON.parse(
+        run('npm', ['view', name, 'dist-tags', '--json'], { capture: true })
+      );
+      const mitLicense = JSON.parse(
+        run('npm', ['view', `${name}@${mitVersion}`, 'license', '--json'], { capture: true })
+      );
+      const fllLicense = JSON.parse(
+        run('npm', ['view', `${name}@${fllVersion}`, 'license', '--json'], { capture: true })
+      );
 
-  if (tags.legacy !== mitVersion || mitLicense !== 'MIT') {
-    fail(`legacy must be ${mitVersion} with MIT`);
+      if (tags.legacy !== mitVersion || mitLicense !== 'MIT') {
+        fail(`legacy must be ${mitVersion} with MIT`);
+      }
+      if (tags.latest !== fllVersion || fllLicense !== FLL_LICENSE) {
+        fail(`latest must be ${fllVersion} with ${FLL_LICENSE}`);
+      }
+      return;
+    } catch (error) {
+      if (
+        attempt === REGISTRY_VERIFY_ATTEMPTS ||
+        !isTransientRegistryVerificationError(error)
+      ) {
+        throw error;
+      }
+      console.warn(
+        `npm registry metadata has not converged yet; retrying verification ` +
+        `(${attempt}/${REGISTRY_VERIFY_ATTEMPTS})`
+      );
+      sleep(REGISTRY_VERIFY_DELAY_MS);
+    }
   }
-  if (tags.latest !== fllVersion || fllLicense !== FLL_LICENSE) {
-    fail(`latest must be ${fllVersion} with ${FLL_LICENSE}`);
+}
+
+function assertNpmAuthentication() {
+  try {
+    const username = run('npm', ['whoami'], { capture: true });
+    console.log(`npm authenticated as ${username}`);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    fail(
+      'npm authentication failed. Run `npm login --registry=https://registry.npmjs.org/`, ' +
+      'confirm `npm whoami`, then rerun `pnpm release`.\n' + detail
+    );
   }
 }
 
@@ -228,21 +305,25 @@ function main() {
   );
   const fllVersion = sourcePackage.version;
   const mitVersion = deriveMitVersion(fllVersion);
+  let publishedMitLicense = null;
+  let publishedFllLicense = null;
 
   assertVersionPolicy(mitVersion, fllVersion);
   assertSourcePolicy(sourcePackage, fllLicenseText, sourceReadme, mitLicenseText);
 
   if (publish) {
     assertCleanTrackedWorktree();
-    run('npm', ['whoami'], { capture: true });
+    assertNpmAuthentication();
+    publishedMitLicense = getPublishedLicense(sourcePackage.name, mitVersion);
+    publishedFllLicense = getPublishedLicense(sourcePackage.name, fllVersion);
     validateExistingRelease(
       `${sourcePackage.name}@${mitVersion}`,
-      getPublishedLicense(sourcePackage.name, mitVersion),
+      publishedMitLicense,
       'MIT'
     );
     validateExistingRelease(
       `${sourcePackage.name}@${fllVersion}`,
-      getPublishedLicense(sourcePackage.name, fllVersion),
+      publishedFllLicense,
       FLL_LICENSE
     );
   }
@@ -311,6 +392,7 @@ function main() {
       publishOrResume(
         sourcePackage.name,
         mitVersion,
+        publishedMitLicense,
         'MIT',
         mitTarball,
         'legacy',
@@ -319,6 +401,7 @@ function main() {
       publishOrResume(
         sourcePackage.name,
         fllVersion,
+        publishedFllLicense,
         FLL_LICENSE,
         fllTarball,
         'latest',

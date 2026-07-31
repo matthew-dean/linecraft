@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { grid as Grid } from './grid.js';
 import { Styled } from '../components/styled.js';
+import { fill } from '../components/fill.js';
 import { TerminalRegion } from '../region.js';
 import { callComponent } from '../component.js';
 import { countVisibleChars, stripAnsi } from '../utils/text.js';
@@ -57,6 +58,59 @@ describe('Grid Layout', () => {
       const line = region.getLine(1);
       expect(line).toContain('A');
       expect(line).toContain('B');
+    });
+
+    it('should keep inter-column padding without padding the end of the row', () => {
+      const gridComponent = Grid(
+        { template: [20, '1*'] },
+        Styled({ backgroundColor: 'blue' }, 'A'),
+        Styled({}, 'B')
+      );
+
+      const result = callComponent(gridComponent, {
+        availableWidth: 80,
+        region,
+        columnIndex: 0,
+        rowIndex: 0,
+      });
+
+      expect(result).toBeTypeOf('string');
+      const plain = stripAnsi(result as string);
+      expect(plain).toBe(`A${' '.repeat(19)}B`);
+      expect(result).toContain(`\x1b[44mA${' '.repeat(19)}\x1b[0m`);
+      expect(plain).not.toMatch(/ $/u);
+    });
+
+    it('preserves intentional styled spaces in the final column', () => {
+      const gridComponent = Grid(
+        { template: ['1*'] },
+        fill(' ', { backgroundColor: 'blue' })
+      );
+
+      const result = callComponent(gridComponent, {
+        availableWidth: 20,
+        region,
+        columnIndex: 0,
+        rowIndex: 0,
+      }) as string;
+
+      expect(stripAnsi(result)).toBe(' '.repeat(20));
+      expect(result).toContain('\x1b[44m');
+    });
+
+    it('preserves spaces inside OSC hyperlink targets', () => {
+      const hyperlink = '\x1b]8;;file:///tmp/a b.txt\x1b\\link\x1b]8;;\x1b\\';
+      const result = callComponent(
+        Grid({ template: ['1*'] }, hyperlink),
+        {
+          availableWidth: 80,
+          region,
+          columnIndex: 0,
+          rowIndex: 0,
+        }
+      );
+
+      expect(result).toBe(hyperlink);
     });
 
     it('should handle flex ratios', () => {
@@ -622,4 +676,3 @@ describe('Grid Layout', () => {
     });
   });
 });
-

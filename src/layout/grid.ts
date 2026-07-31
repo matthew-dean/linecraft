@@ -3,7 +3,7 @@
 
 import type { Color, FillChar } from '../types.js';
 import { applyStyle } from '../utils/colors.js';
-import { stripAnsi, countVisibleChars, splitAtVisiblePos } from '../utils/text.js';
+import { countVisibleChars, splitAtVisiblePos } from '../utils/text.js';
 import type { RenderContext, Component } from '../component.js';
 import { callComponent, createChildContext } from '../component.js';
 
@@ -477,6 +477,7 @@ export function grid(
             availableWidth: childWidth,
             columnIndex: colIdx,
             rowIndex: rowIdx,
+            omitTrailingPadding: colIdx === rowChildren.length - 1,
           });
           
           const result = callComponent(child, childCtx);
@@ -494,10 +495,11 @@ export function grid(
           for (let colIdx = 0; colIdx < rowChildren.length; colIdx++) {
             const result = rowResults[colIdx];
             const columnWidth = columnWidths[colIdx] ?? 0;
+            const isLastColumn = colIdx === rowChildren.length - 1;
             
             let columnContent: string;
             if (result === null) {
-              columnContent = ' '.repeat(columnWidth);
+              columnContent = '';
             } else if (Array.isArray(result)) {
               columnContent = result[lineIdx] ?? '';
             } else if (typeof result === 'string') {
@@ -514,7 +516,7 @@ export function grid(
               finalContent = split.before;
             }
             const finalVisibleWidth = countVisibleChars(finalContent);
-            const paddedContent = finalVisibleWidth < columnWidth
+            const paddedContent = !isLastColumn && finalVisibleWidth < columnWidth
               ? finalContent + ' '.repeat(columnWidth - finalVisibleWidth)
               : finalContent;
             lineParts.push(paddedContent);
@@ -526,17 +528,13 @@ export function grid(
           }
           
           const line = lineParts.join('');
-          const plainLine = stripAnsi(line);
-          const paddedLine = plainLine.length < ctx.availableWidth
-            ? line + ' '.repeat(ctx.availableWidth - plainLine.length)
-            : line;
-          allRowLines.push(paddedLine);
+          allRowLines.push(line);
         }
         
         // Add row gap (except after last row)
         if (rowIdx < rowsData.length - 1 && rowGap > 0) {
           for (let i = 0; i < rowGap; i++) {
-            allRowLines.push(' '.repeat(ctx.availableWidth));
+            allRowLines.push('');
           }
         }
       }
@@ -603,6 +601,7 @@ export function grid(
         availableWidth: childWidth,
         columnIndex: i,
         rowIndex: 0,
+        omitTrailingPadding: i === validChildren.length - 1,
       });
       
       // Render child
@@ -693,12 +692,7 @@ export function grid(
         }
         
         const line = lineParts.join('');
-        // Pad to full width to ensure right column is at the end
-        const visibleLineWidth = countVisibleChars(line);
-        const paddedLine = visibleLineWidth < ctx.availableWidth 
-          ? line + ' '.repeat(ctx.availableWidth - visibleLineWidth)
-          : line;
-        return paddedLine;
+        return line;
       }
       
       // Standard rendering for other cases
@@ -709,6 +703,7 @@ export function grid(
         const result = results[partIdx];
         partIdx++;
         const columnWidth = actualWidths[i] ?? 0;
+        const isLastColumn = i === validChildren.length - 1;
         const track = tracks[i];
         // Treat max-only minmax columns as auto (no padding, content-based)
         const isAuto = track?.type === 'auto' || (track?.type === 'minmax' && track?.hasMin === false && track?.max !== undefined);
@@ -722,7 +717,7 @@ export function grid(
             const { char: spaceChar, color: spaceColor } = getSpaceBetweenChar(spaceBetween, i);
             const fillText = spaceChar.repeat(columnWidth);
             lineParts.push(spaceColor ? applyStyle(fillText, { color: spaceColor }) : fillText);
-          } else if (!isAuto) {
+          } else if (!isAuto && !isLastColumn) {
             lineParts.push(' '.repeat(columnWidth));
           } else {
             lineParts.push('');
@@ -761,7 +756,7 @@ export function grid(
                 finalContent = split.before;
               }
               const finalVisibleWidth = countVisibleChars(finalContent);
-              paddedContent = finalVisibleWidth < columnWidth
+              paddedContent = !isLastColumn && finalVisibleWidth < columnWidth
                 ? finalContent + ' '.repeat(columnWidth - finalVisibleWidth)
                 : finalContent;
             }
@@ -784,12 +779,7 @@ export function grid(
       }
       
       const line = lineParts.join('');
-      // CRITICAL: Pad line to full availableWidth to ensure grid fills the region
-      const visibleLineWidth = countVisibleChars(line);
-      const paddedLine = visibleLineWidth < ctx.availableWidth 
-        ? line + ' '.repeat(ctx.availableWidth - visibleLineWidth)
-        : line;
-      return paddedLine;
+      return line;
     }
     
     // Multi-line - combine line by line
@@ -802,6 +792,7 @@ export function grid(
         const result = results[partIdx];
         partIdx++;
         const columnWidth = actualWidths[i] ?? 0;
+        const isLastColumn = i === validChildren.length - 1;
         const track = tracks[i];
         // Treat max-only minmax columns as auto (no padding, content-based)
         const isAuto = track?.type === 'auto' || (track?.type === 'minmax' && track?.hasMin === false && track?.max !== undefined);
@@ -814,7 +805,7 @@ export function grid(
             const { char: spaceChar, color: spaceColor } = getSpaceBetweenChar(spaceBetween, i);
             const fillText = spaceChar.repeat(columnWidth);
             lineParts.push(spaceColor ? applyStyle(fillText, { color: spaceColor }) : fillText);
-          } else if (!isAuto) {
+          } else if (!isAuto && !isLastColumn) {
             lineParts.push(' '.repeat(columnWidth));
           } else {
             lineParts.push('');
@@ -859,7 +850,7 @@ export function grid(
               finalContent = split.before;
             }
             const finalVisibleWidth = countVisibleChars(finalContent);
-            paddedContent = finalVisibleWidth < columnWidth
+            paddedContent = !isLastColumn && finalVisibleWidth < columnWidth
               ? finalContent + ' '.repeat(columnWidth - finalVisibleWidth)
               : finalContent;
           }
@@ -881,15 +872,9 @@ export function grid(
       }
       
       const line = lineParts.join('');
-      // CRITICAL: Pad line to full width to ensure grid fills the region
-      const plainLine = line.replace(/\x1b\[[0-9;]*m/g, '');
-      const paddedLine = plainLine.length < ctx.availableWidth 
-        ? line + ' '.repeat(ctx.availableWidth - plainLine.length)
-        : line;
-      lines.push(paddedLine);
+      lines.push(line);
     }
     
   return lines;
 };
 }
-
