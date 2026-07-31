@@ -59,6 +59,26 @@ describe('Grid Layout', () => {
       expect(line).toContain('B');
     });
 
+    it('should keep inter-column padding without padding the end of the row', () => {
+      const gridComponent = Grid(
+        { template: [20, '1*'] },
+        Styled({}, 'A'),
+        Styled({}, 'B')
+      );
+
+      const result = callComponent(gridComponent, {
+        availableWidth: 80,
+        region,
+        columnIndex: 0,
+        rowIndex: 0,
+      });
+
+      expect(result).toBeTypeOf('string');
+      const plain = stripAnsi(result as string);
+      expect(plain).toBe(`A${' '.repeat(19)}B`);
+      expect(plain).not.toMatch(/ $/u);
+    });
+
     it('should handle flex ratios', () => {
       const gridComponent = Grid({ template: ['1*', '2*', '1*'] }, 
         Styled({}, 'A'),
@@ -622,4 +642,3 @@ describe('Grid Layout', () => {
     });
   });
 });
-

@@ -3,7 +3,7 @@
 
 import type { Color, FillChar } from '../types.js';
 import { applyStyle } from '../utils/colors.js';
-import { stripAnsi, countVisibleChars, splitAtVisiblePos } from '../utils/text.js';
+import { countVisibleChars, splitAtVisiblePos, trimTrailingSpaces } from '../utils/text.js';
 import type { RenderContext, Component } from '../component.js';
 import { callComponent, createChildContext } from '../component.js';
 
@@ -526,17 +526,13 @@ export function grid(
           }
           
           const line = lineParts.join('');
-          const plainLine = stripAnsi(line);
-          const paddedLine = plainLine.length < ctx.availableWidth
-            ? line + ' '.repeat(ctx.availableWidth - plainLine.length)
-            : line;
-          allRowLines.push(paddedLine);
+          allRowLines.push(trimTrailingSpaces(line));
         }
         
         // Add row gap (except after last row)
         if (rowIdx < rowsData.length - 1 && rowGap > 0) {
           for (let i = 0; i < rowGap; i++) {
-            allRowLines.push(' '.repeat(ctx.availableWidth));
+            allRowLines.push('');
           }
         }
       }
@@ -693,12 +689,7 @@ export function grid(
         }
         
         const line = lineParts.join('');
-        // Pad to full width to ensure right column is at the end
-        const visibleLineWidth = countVisibleChars(line);
-        const paddedLine = visibleLineWidth < ctx.availableWidth 
-          ? line + ' '.repeat(ctx.availableWidth - visibleLineWidth)
-          : line;
-        return paddedLine;
+        return trimTrailingSpaces(line);
       }
       
       // Standard rendering for other cases
@@ -784,12 +775,7 @@ export function grid(
       }
       
       const line = lineParts.join('');
-      // CRITICAL: Pad line to full availableWidth to ensure grid fills the region
-      const visibleLineWidth = countVisibleChars(line);
-      const paddedLine = visibleLineWidth < ctx.availableWidth 
-        ? line + ' '.repeat(ctx.availableWidth - visibleLineWidth)
-        : line;
-      return paddedLine;
+      return trimTrailingSpaces(line);
     }
     
     // Multi-line - combine line by line
@@ -881,15 +867,9 @@ export function grid(
       }
       
       const line = lineParts.join('');
-      // CRITICAL: Pad line to full width to ensure grid fills the region
-      const plainLine = line.replace(/\x1b\[[0-9;]*m/g, '');
-      const paddedLine = plainLine.length < ctx.availableWidth 
-        ? line + ' '.repeat(ctx.availableWidth - plainLine.length)
-        : line;
-      lines.push(paddedLine);
+      lines.push(trimTrailingSpaces(line));
     }
     
   return lines;
 };
 }
-
