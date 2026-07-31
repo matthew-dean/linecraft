@@ -4,6 +4,8 @@ import {
   createMitPackageJson,
   createMitReadme,
   deriveMitVersion,
+  isTransientRegistryVerificationError,
+  sanitizeNpmEnvironment,
   validateExistingRelease,
 } from '../scripts/release.js';
 
@@ -56,6 +58,28 @@ describe('dual-license release policy', () => {
     expect(() =>
       validateExistingRelease('linecraft@0.2.7', 'LicenseRef-FLL-1.2', 'MIT')
     ).toThrow('linecraft@0.2.7 is already published with LicenseRef-FLL-1.2');
+  });
+
+  it('removes pnpm-only config before invoking npm', () => {
+    const environment = sanitizeNpmEnvironment({
+      PATH: '/bin',
+      npm_config_registry: 'https://registry.npmjs.org/',
+      npm_config__georiot_registry: 'https://npm.pkg.github.com/',
+      npm_config__jsr_registry: 'https://npm.jsr.io/',
+      npm_config_verify_deps_before_run: 'true',
+    });
+
+    expect(environment).toEqual({
+      PATH: '/bin',
+      npm_config_registry: 'https://registry.npmjs.org/',
+    });
+  });
+
+  it('retries registry propagation failures but not policy failures', () => {
+    expect(isTransientRegistryVerificationError(new Error('npm error code E404'))).toBe(true);
+    expect(isTransientRegistryVerificationError(new Error('legacy must be 0.2.7 with MIT'))).toBe(true);
+    expect(isTransientRegistryVerificationError(new Error('npm error code E401'))).toBe(false);
+    expect(isTransientRegistryVerificationError(new Error('wrong license'))).toBe(false);
   });
 
 });

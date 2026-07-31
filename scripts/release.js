@@ -22,6 +22,8 @@ const ROOT = resolve(SCRIPT_DIR, '..');
 const OUTPUT_DIR = join(ROOT, '.release');
 const FLL_LICENSE = 'LicenseRef-FLL-1.2';
 const README_LICENSE_HEADING = '## License';
+const REGISTRY_VERIFY_ATTEMPTS = 6;
+const REGISTRY_VERIFY_DELAY_MS = 2_000;
 
 const MIT_README_SECTION = `## License
 
@@ -43,6 +45,34 @@ tarballs in .release/ without publishing.`;
 
 function fail(message) {
   throw new Error(message);
+}
+
+export function sanitizeNpmEnvironment(environment) {
+  const sanitized = { ...environment };
+  for (const key of Object.keys(sanitized)) {
+    const normalized = key.toLowerCase();
+    if (
+      normalized === 'npm_config_verify_deps_before_run' ||
+      /^npm_config__.+_registry$/.test(normalized)
+    ) {
+      delete sanitized[key];
+    }
+  }
+  return sanitized;
+}
+
+export function isTransientRegistryVerificationError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    /\bE404\b|\b404\b|No match found/u.test(message) ||
+    /\bE(?:CONNRESET|TIMEDOUT|AI_AGAIN)\b|\b50[0234]\b/u.test(message) ||
+    message.startsWith('legacy must be ') ||
+    message.startsWith('latest must be ')
+  );
+}
+
+function sleep(milliseconds) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
 }
 
 export function assertVersionPolicy(mitVersion, fllVersion) {
@@ -80,10 +110,11 @@ export function createMitReadme(sourceReadme) {
 }
 
 function run(command, args, options = {}) {
+  const environment = { ...process.env, ...options.env };
   const result = spawnSync(command, args, {
     cwd: options.cwd ?? ROOT,
     encoding: 'utf8',
-    env: { ...process.env, ...options.env },
+    env: command === 'npm' ? sanitizeNpmEnvironment(environment) : environment,
     stdio: options.capture ? ['ignore', 'pipe', 'pipe'] : 'inherit',
   });
 
@@ -144,6 +175,7 @@ function getPublishedLicense(name, version) {
   const result = spawnSync('npm', ['view', `${name}@${version}`, 'version', '--json'], {
     cwd: ROOT,
     encoding: 'utf8',
+    env: sanitizeNpmEnvironment(process.env),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   if (result.status === 0) {
@@ -191,19 +223,51 @@ function assertCleanTrackedWorktree() {
 }
 
 function verifyPublishedPolicy(name, mitVersion, fllVersion) {
-  const tags = JSON.parse(run('npm', ['view', name, 'dist-tags', '--json'], { capture: true }));
-  const mitLicense = JSON.parse(
-    run('npm', ['view', `${name}@${mitVersion}`, 'license', '--json'], { capture: true })
-  );
-  const fllLicense = JSON.parse(
-    run('npm', ['view', `${name}@${fllVersion}`, 'license', '--json'], { capture: true })
-  );
+  for (let attempt = 1; attempt <= REGISTRY_VERIFY_ATTEMPTS; attempt++) {
+    try {
+      const tags = JSON.parse(
+        run('npm', ['view', name, 'dist-tags', '--json'], { capture: true })
+      );
+      const mitLicense = JSON.parse(
+        run('npm', ['view', `${name}@${mitVersion}`, 'license', '--json'], { capture: true })
+      );
+      const fllLicense = JSON.parse(
+        run('npm', ['view', `${name}@${fllVersion}`, 'license', '--json'], { capture: true })
+      );
 
-  if (tags.legacy !== mitVersion || mitLicense !== 'MIT') {
-    fail(`legacy must be ${mitVersion} with MIT`);
+      if (tags.legacy !== mitVersion || mitLicense !== 'MIT') {
+        fail(`legacy must be ${mitVersion} with MIT`);
+      }
+      if (tags.latest !== fllVersion || fllLicense !== FLL_LICENSE) {
+        fail(`latest must be ${fllVersion} with ${FLL_LICENSE}`);
+      }
+      return;
+    } catch (error) {
+      if (
+        attempt === REGISTRY_VERIFY_ATTEMPTS ||
+        !isTransientRegistryVerificationError(error)
+      ) {
+        throw error;
+      }
+      console.warn(
+        `npm registry metadata has not converged yet; retrying verification ` +
+        `(${attempt}/${REGISTRY_VERIFY_ATTEMPTS})`
+      );
+      sleep(REGISTRY_VERIFY_DELAY_MS);
+    }
   }
-  if (tags.latest !== fllVersion || fllLicense !== FLL_LICENSE) {
-    fail(`latest must be ${fllVersion} with ${FLL_LICENSE}`);
+}
+
+function assertNpmAuthentication() {
+  try {
+    const username = run('npm', ['whoami'], { capture: true });
+    console.log(`npm authenticated as ${username}`);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    fail(
+      'npm authentication failed. Run `npm login --registry=https://registry.npmjs.org/`, ' +
+      'confirm `npm whoami`, then rerun `pnpm release`.\n' + detail
+    );
   }
 }
 
@@ -234,7 +298,7 @@ function main() {
 
   if (publish) {
     assertCleanTrackedWorktree();
-    run('npm', ['whoami'], { capture: true });
+    assertNpmAuthentication();
     validateExistingRelease(
       `${sourcePackage.name}@${mitVersion}`,
       getPublishedLicense(sourcePackage.name, mitVersion),

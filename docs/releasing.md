@@ -43,8 +43,10 @@ The script publishes in this fixed order:
 2. FLL 0.5.x with `npm publish --tag latest`
 
 It then reads the npm metadata back and verifies that `legacy` is the requested
-MIT 0.2.x version and `latest` is the requested FLL 0.5.x version. Direct
-`npm publish` from the repository is blocked by `prepublishOnly`.
+MIT 0.2.x version and `latest` is the requested FLL 0.5.x version. Verification
+retries briefly because newly published npm metadata can return a transient 404
+while registry caches converge. Direct `npm publish` from the repository is
+blocked by `prepublishOnly`.
 
 The command is resumable. If one artifact was published successfully before a
 later publish or verification failed, rerunning `pnpm release` validates the
@@ -52,8 +54,5 @@ existing artifact's license, restores its expected dist-tag, and continues with
 the missing artifact. An existing version with the wrong license is rejected.
 
 Published npm versions are immutable. The existing `0.2.6` package was
-accidentally published with FLL metadata, so correct the compatibility line with
-a new MIT `0.2.7` release rather than trying to replace `0.2.6`.
-
-Known consumers pinned to `0.2.6` include Jess, Parser Thing/Parseman, and
-Less.js-related worktrees. Update those pins deliberately after `0.2.7` exists.
+accidentally published with FLL metadata. MIT `0.2.7` is the corrected
+compatibility release; consumers should use it instead of `0.2.6`.
