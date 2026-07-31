@@ -1,6 +1,7 @@
 {
   "name": "linecraft",
   "version": "0.5.7",
+  "packageManager": "pnpm@10.15.1",
   "description": "High-performance terminal UI library for Node.js",
   "type": "module",
   "main": "./lib/index.js",
@@ -41,7 +42,9 @@
     "example": "node scripts/run-example.js",
     "record": "vhs",
     "record:all": "node scripts/record-all.js",
-    "prepublishOnly": "pnpm lint && pnpm typecheck && pnpm test"
+    "release": "node scripts/release.js --publish",
+    "release:dry-run": "node scripts/release.js",
+    "prepublishOnly": "node scripts/guard-direct-publish.js && pnpm lint && pnpm typecheck && pnpm test"
   },
   "keywords": [
     "terminal",
