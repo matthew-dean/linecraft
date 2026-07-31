@@ -86,6 +86,30 @@ export function selectResumeVersions(tags, mitVersion, fllVersion) {
   };
 }
 
+export function inspectReleaseRegistry(name, mitVersion, fllVersion, reader) {
+  const tags = reader.getTags(name);
+  const resumeVersions = selectResumeVersions(tags, mitVersion, fllVersion);
+  return {
+    tags,
+    mitLicense: resumeVersions.mit
+      ? reader.getLicense(name, resumeVersions.mit, { retryNotFound: true })
+      : null,
+    fllLicense: resumeVersions.fll
+      ? reader.getLicense(name, resumeVersions.fll, { retryNotFound: true })
+      : null,
+  };
+}
+
+export function formatProcessFailure(result) {
+  if (result.error) {
+    return result.error.message;
+  }
+  if (result.signal) {
+    return `terminated by signal ${result.signal}`;
+  }
+  return result.stderr || result.stdout || `exited with status ${String(result.status)}`;
+}
+
 function sleep(milliseconds) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
 }
@@ -244,14 +268,14 @@ function publishOrResume(
       }
     );
     if (result.status === 0) {
-      process.stdout.write(result.stdout);
-      process.stderr.write(result.stderr);
+      process.stdout.write(result.stdout ?? '');
+      process.stderr.write(result.stderr ?? '');
       return;
     }
 
-    const detail = `${result.stdout}\n${result.stderr}`;
+    const detail = formatProcessFailure(result);
     if (!isImmutablePublishConflict(detail)) {
-      fail(`npm publish ${tarball} failed\n${result.stderr || result.stdout}`);
+      fail(`npm publish ${tarball} failed\n${detail}`);
     }
 
     const recoveredLicense = getPublishedLicense(name, version, {
@@ -355,19 +379,24 @@ function main() {
   if (publish) {
     assertCleanTrackedWorktree();
     assertNpmAuthentication();
-    const tags = JSON.parse(
-      run('npm', ['view', sourcePackage.name, 'dist-tags', '--json'], { capture: true })
+    const registry = inspectReleaseRegistry(
+      sourcePackage.name,
+      mitVersion,
+      fllVersion,
+      {
+        getTags: (name) => JSON.parse(
+          run('npm', ['view', name, 'dist-tags', '--json'], { capture: true })
+        ),
+        getLicense: (name, version, options) =>
+          getPublishedLicense(name, version, options),
+      }
     );
     console.log(
-      `npm registry currently has legacy=${String(tags.legacy)} and latest=${String(tags.latest)}`
+      `npm registry currently has legacy=${String(registry.tags.legacy)} and ` +
+      `latest=${String(registry.tags.latest)}`
     );
-    const resumeVersions = selectResumeVersions(tags, mitVersion, fllVersion);
-    publishedMitLicense = resumeVersions.mit
-      ? getPublishedLicense(sourcePackage.name, resumeVersions.mit)
-      : null;
-    publishedFllLicense = resumeVersions.fll
-      ? getPublishedLicense(sourcePackage.name, resumeVersions.fll)
-      : null;
+    publishedMitLicense = registry.mitLicense;
+    publishedFllLicense = registry.fllLicense;
     validateExistingRelease(
       `${sourcePackage.name}@${mitVersion}`,
       publishedMitLicense,

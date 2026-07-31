@@ -4,10 +4,11 @@ import {
   createMitPackageJson,
   createMitReadme,
   deriveMitVersion,
+  formatProcessFailure,
+  inspectReleaseRegistry,
   isImmutablePublishConflict,
   isTransientRegistryVerificationError,
   sanitizeNpmEnvironment,
-  selectResumeVersions,
   validateExistingRelease,
 } from '../scripts/release.js';
 
@@ -96,20 +97,43 @@ describe('dual-license release policy', () => {
   });
 
   it('checks only versions that existing dist-tags identify as resumable', () => {
-    expect(
-      selectResumeVersions(
-        { legacy: '0.2.7', latest: '0.5.7' },
-        '0.2.8',
-        '0.5.8'
-      )
-    ).toEqual({ mit: null, fll: null });
-    expect(
-      selectResumeVersions(
-        { legacy: '0.2.8', latest: '0.5.7' },
-        '0.2.8',
-        '0.5.8'
-      )
-    ).toEqual({ mit: '0.2.8', fll: null });
+    const calls: unknown[][] = [];
+    const inspect = (tags: { legacy: string; latest: string }) =>
+      inspectReleaseRegistry('linecraft', '0.2.8', '0.5.8', {
+        getTags: (name: string) => {
+          calls.push(['tags', name]);
+          return tags;
+        },
+        getLicense: (name: string, version: string, options: unknown) => {
+          calls.push(['license', name, version, options]);
+          return version.startsWith('0.2.') ? 'MIT' : 'LicenseRef-FLL-1.2';
+        },
+      });
+
+    expect(inspect({ legacy: '0.2.7', latest: '0.5.7' })).toMatchObject({
+      mitLicense: null,
+      fllLicense: null,
+    });
+    expect(calls).toEqual([['tags', 'linecraft']]);
+
+    calls.length = 0;
+    expect(inspect({ legacy: '0.2.8', latest: '0.5.7' })).toMatchObject({
+      mitLicense: 'MIT',
+      fllLicense: null,
+    });
+    expect(calls).toEqual([
+      ['tags', 'linecraft'],
+      ['license', 'linecraft', '0.2.8', { retryNotFound: true }],
+    ]);
+  });
+
+  it('preserves npm publish process diagnostics', () => {
+    expect(formatProcessFailure({ error: new Error('spawn npm ENOENT') })).toBe(
+      'spawn npm ENOENT'
+    );
+    expect(formatProcessFailure({ signal: 'SIGTERM' })).toBe(
+      'terminated by signal SIGTERM'
+    );
   });
 
 });
