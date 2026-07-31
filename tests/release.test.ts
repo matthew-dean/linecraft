@@ -4,8 +4,10 @@ import {
   createMitPackageJson,
   createMitReadme,
   deriveMitVersion,
+  isImmutablePublishConflict,
   isTransientRegistryVerificationError,
   sanitizeNpmEnvironment,
+  selectResumeVersions,
   validateExistingRelease,
 } from '../scripts/release.js';
 
@@ -80,6 +82,34 @@ describe('dual-license release policy', () => {
     expect(isTransientRegistryVerificationError(new Error('legacy must be 0.2.8 with MIT'))).toBe(true);
     expect(isTransientRegistryVerificationError(new Error('npm error code E401'))).toBe(false);
     expect(isTransientRegistryVerificationError(new Error('wrong license'))).toBe(false);
+  });
+
+  it('recognizes only immutable-version publish conflicts as resumable', () => {
+    expect(
+      isImmutablePublishConflict(
+        'npm error You cannot publish over the previously published versions: 0.2.8.'
+      )
+    ).toBe(true);
+    expect(isImmutablePublishConflict('npm error code EPUBLISHCONFLICT')).toBe(true);
+    expect(isImmutablePublishConflict('npm error code E401 Unauthorized')).toBe(false);
+    expect(isImmutablePublishConflict('npm error code EOTP')).toBe(false);
+  });
+
+  it('checks only versions that existing dist-tags identify as resumable', () => {
+    expect(
+      selectResumeVersions(
+        { legacy: '0.2.7', latest: '0.5.7' },
+        '0.2.8',
+        '0.5.8'
+      )
+    ).toEqual({ mit: null, fll: null });
+    expect(
+      selectResumeVersions(
+        { legacy: '0.2.8', latest: '0.5.7' },
+        '0.2.8',
+        '0.5.8'
+      )
+    ).toEqual({ mit: '0.2.8', fll: null });
   });
 
 });

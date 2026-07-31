@@ -48,12 +48,13 @@ retries briefly because newly published npm metadata can return a transient 404
 while registry caches converge. Direct `npm publish` from the repository is
 blocked by `prepublishOnly`.
 
-The command is resumable. If one artifact was published successfully before a
-later publish or verification failed, rerunning `pnpm release` validates the
-existing artifact's license, restores its expected dist-tag, and continues with
-the missing artifact. Version lookups also retry transient registry 404s before
-deciding an artifact is absent, preventing an immutable republish attempt during
-registry propagation. An existing version with the wrong license is rejected.
+The command is resumable. Its preflight reads the existing `legacy` and `latest`
+dist-tags rather than querying versions that have not been published yet. If a
+tag already points to the requested version, the script validates that artifact's
+license, restores the tag, and continues with the missing artifact. If npm reports
+an unusual untagged immutable-version conflict, the script retries that existing
+version's metadata and resumes only after validating its license. An existing
+version with the wrong license is rejected.
 
 Published npm versions are immutable. The existing `0.2.6` package was
 accidentally published with FLL metadata. MIT `0.2.7` is the corrected

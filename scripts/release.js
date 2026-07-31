@@ -71,6 +71,21 @@ export function isTransientRegistryVerificationError(error) {
   );
 }
 
+export function isImmutablePublishConflict(output) {
+  return (
+    /\bEPUBLISHCONFLICT\b/u.test(output) ||
+    /cannot publish over (?:the )?previously published version/iu.test(output) ||
+    /cannot publish over the previously published versions/iu.test(output)
+  );
+}
+
+export function selectResumeVersions(tags, mitVersion, fllVersion) {
+  return {
+    mit: tags.legacy === mitVersion ? mitVersion : null,
+    fll: tags.latest === fllVersion ? fllVersion : null,
+  };
+}
+
 function sleep(milliseconds) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
 }
@@ -171,9 +186,10 @@ function pack(cwd) {
   return parsed[0];
 }
 
-function getPublishedLicense(name, version) {
+function getPublishedLicense(name, version, options = {}) {
   const spec = `${name}@${version}`;
-  for (let attempt = 1; attempt <= REGISTRY_VERIFY_ATTEMPTS; attempt++) {
+  const attempts = options.retryNotFound ? REGISTRY_VERIFY_ATTEMPTS : 1;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
     const result = spawnSync('npm', ['view', spec, 'license', '--json'], {
       cwd: ROOT,
       encoding: 'utf8',
@@ -187,10 +203,10 @@ function getPublishedLicense(name, version) {
     if (!detail.includes('E404')) {
       fail(`Could not verify ${spec} availability:\n${result.stderr || result.stdout}`);
     }
-    if (attempt < REGISTRY_VERIFY_ATTEMPTS) {
+    if (attempt < attempts) {
       console.warn(
         `${spec} returned 404; retrying before treating the version as unpublished ` +
-        `(${attempt}/${REGISTRY_VERIFY_ATTEMPTS})`
+        `(${attempt}/${attempts})`
       );
       sleep(REGISTRY_VERIFY_DELAY_MS);
     }
@@ -217,13 +233,38 @@ function publishOrResume(
   const spec = `${name}@${version}`;
   const disposition = validateExistingRelease(spec, actualLicense, expectedLicense);
   if (disposition === 'publish') {
-    run('npm', ['publish', tarball, '--tag', tag, '--access', 'public'], {
-      env: publishEnv,
+    const result = spawnSync(
+      'npm',
+      ['publish', tarball, '--tag', tag, '--access', 'public'],
+      {
+        cwd: ROOT,
+        encoding: 'utf8',
+        env: sanitizeNpmEnvironment({ ...process.env, ...publishEnv }),
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }
+    );
+    if (result.status === 0) {
+      process.stdout.write(result.stdout);
+      process.stderr.write(result.stderr);
+      return;
+    }
+
+    const detail = `${result.stdout}\n${result.stderr}`;
+    if (!isImmutablePublishConflict(detail)) {
+      fail(`npm publish ${tarball} failed\n${result.stderr || result.stdout}`);
+    }
+
+    const recoveredLicense = getPublishedLicense(name, version, {
+      retryNotFound: true,
     });
-  } else {
-    console.log(`${spec} already has ${expectedLicense}; resuming release`);
-    run('npm', ['dist-tag', 'add', spec, tag]);
+    if (recoveredLicense === null) {
+      fail(`npm reported ${spec} already exists, but its metadata could not be read`);
+    }
+    validateExistingRelease(spec, recoveredLicense, expectedLicense);
   }
+
+  console.log(`${spec} already has ${expectedLicense}; resuming release`);
+  run('npm', ['dist-tag', 'add', spec, tag]);
 }
 
 function assertCleanTrackedWorktree() {
@@ -314,8 +355,19 @@ function main() {
   if (publish) {
     assertCleanTrackedWorktree();
     assertNpmAuthentication();
-    publishedMitLicense = getPublishedLicense(sourcePackage.name, mitVersion);
-    publishedFllLicense = getPublishedLicense(sourcePackage.name, fllVersion);
+    const tags = JSON.parse(
+      run('npm', ['view', sourcePackage.name, 'dist-tags', '--json'], { capture: true })
+    );
+    console.log(
+      `npm registry currently has legacy=${String(tags.legacy)} and latest=${String(tags.latest)}`
+    );
+    const resumeVersions = selectResumeVersions(tags, mitVersion, fllVersion);
+    publishedMitLicense = resumeVersions.mit
+      ? getPublishedLicense(sourcePackage.name, resumeVersions.mit)
+      : null;
+    publishedFllLicense = resumeVersions.fll
+      ? getPublishedLicense(sourcePackage.name, resumeVersions.fll)
+      : null;
     validateExistingRelease(
       `${sourcePackage.name}@${mitVersion}`,
       publishedMitLicense,
