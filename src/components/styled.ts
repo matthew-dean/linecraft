@@ -64,7 +64,7 @@ export function Styled(
         lines.push('');
       }
       const formatted = lines.map(line => {
-        const aligned = alignText(line, availableWidth, alignMode);
+        const aligned = alignText(line, availableWidth, alignMode, ctx.omitTrailingPadding);
         // Check if the line already has ANSI codes - if so, preserve them
         const hasAnsiCodes = /\x1b\[[0-9;]*m/.test(aligned);
         if (hasAnsiCodes) {
@@ -100,7 +100,7 @@ export function Styled(
       }
       
       // Apply alignment
-      const aligned = alignText(processed, availableWidth, alignMode);
+      const aligned = alignText(processed, availableWidth, alignMode, ctx.omitTrailingPadding);
       // Check if the line already has ANSI codes - if so, preserve them
       const hasAnsiCodes = /\x1b\[[0-9;]*m/.test(aligned);
       if (hasAnsiCodes) {
@@ -133,7 +133,12 @@ export function Styled(
 /**
  * Align text within available width
  */
-function alignText(text: string, width: number, align: 'left' | 'right' | 'center'): string {
+function alignText(
+  text: string,
+  width: number,
+  align: 'left' | 'right' | 'center',
+  omitTrailingPadding = false
+): string {
   // Get plain text length (without ANSI codes)
   const plainText = text.replace(/\x1b\[[0-9;]*m/g, '');
   const textLength = plainText.length;
@@ -151,11 +156,9 @@ function alignText(text: string, width: number, align: 'left' | 'right' | 'cente
     return ' '.repeat(padding) + text;
   } else if (align === 'center') {
     const leftPad = Math.floor(padding / 2);
-    const rightPad = padding - leftPad;
+    const rightPad = omitTrailingPadding ? 0 : padding - leftPad;
     return ' '.repeat(leftPad) + text + ' '.repeat(rightPad);
   } else {
-    // 'left' - default, no padding needed
-    return text + ' '.repeat(padding);
+    return text + (omitTrailingPadding ? '' : ' '.repeat(padding));
   }
 }
-
