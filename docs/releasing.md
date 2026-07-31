@@ -25,7 +25,7 @@ script derives the MIT version by keeping the patch version synchronized:
 pnpm release:dry-run
 ```
 
-For example, FLL `0.5.7` always produces MIT `0.2.7`. The dry run executes lint,
+For example, FLL `0.5.8` always produces MIT `0.2.8`. The dry run executes lint,
 typecheck, tests, and the build, then creates two tarballs and a manifest under
 `.release/` without publishing.
 

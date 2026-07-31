@@ -11,19 +11,19 @@ import {
 
 describe('dual-license release policy', () => {
   it('requires MIT on 0.2.x and FLL on 0.5.x', () => {
-    expect(() => assertVersionPolicy('0.2.7', '0.5.7')).not.toThrow();
-    expect(() => assertVersionPolicy('0.5.7', '0.5.8')).toThrow(
+    expect(() => assertVersionPolicy('0.2.8', '0.5.8')).not.toThrow();
+    expect(() => assertVersionPolicy('0.5.8', '0.5.9')).toThrow(
       'MIT releases must use the 0.2.x line'
     );
-    expect(() => assertVersionPolicy('0.2.7', '0.2.8')).toThrow(
+    expect(() => assertVersionPolicy('0.2.8', '0.2.9')).toThrow(
       'FLL releases must use the 0.5.x line'
     );
   });
 
   it('derives the synchronized MIT version from the main FLL patch version', () => {
-    expect(deriveMitVersion('0.5.7')).toBe('0.2.7');
-    expect(deriveMitVersion('0.5.8-beta.1')).toBe('0.2.8-beta.1');
-    expect(() => deriveMitVersion('0.3.7')).toThrow(
+    expect(deriveMitVersion('0.5.8')).toBe('0.2.8');
+    expect(deriveMitVersion('0.5.9-beta.1')).toBe('0.2.9-beta.1');
+    expect(() => deriveMitVersion('0.3.8')).toThrow(
       'FLL releases must use the 0.5.x line'
     );
   });
@@ -31,15 +31,15 @@ describe('dual-license release policy', () => {
   it('creates MIT 0.2.x metadata from the main 0.5.x manifest', () => {
     const source = {
       name: 'linecraft',
-      version: '0.5.7',
+      version: '0.5.8',
       license: 'LicenseRef-FLL-1.2',
     };
 
-    expect(createMitPackageJson(source, '0.2.7')).toMatchObject({
-      version: '0.2.7',
+    expect(createMitPackageJson(source, '0.2.8')).toMatchObject({
+      version: '0.2.8',
       license: 'MIT',
     });
-    expect(source.version).toBe('0.5.7');
+    expect(source.version).toBe('0.5.8');
   });
 
   it('replaces only the staged MIT README license section', () => {
@@ -53,11 +53,11 @@ describe('dual-license release policy', () => {
   });
 
   it('resumes correctly published versions and rejects license mismatches', () => {
-    expect(validateExistingRelease('linecraft@0.2.7', null, 'MIT')).toBe('publish');
-    expect(validateExistingRelease('linecraft@0.2.7', 'MIT', 'MIT')).toBe('resume');
+    expect(validateExistingRelease('linecraft@0.2.8', null, 'MIT')).toBe('publish');
+    expect(validateExistingRelease('linecraft@0.2.8', 'MIT', 'MIT')).toBe('resume');
     expect(() =>
-      validateExistingRelease('linecraft@0.2.7', 'LicenseRef-FLL-1.2', 'MIT')
-    ).toThrow('linecraft@0.2.7 is already published with LicenseRef-FLL-1.2');
+      validateExistingRelease('linecraft@0.2.8', 'LicenseRef-FLL-1.2', 'MIT')
+    ).toThrow('linecraft@0.2.8 is already published with LicenseRef-FLL-1.2');
   });
 
   it('removes pnpm-only config before invoking npm', () => {
@@ -77,7 +77,7 @@ describe('dual-license release policy', () => {
 
   it('retries registry propagation failures but not policy failures', () => {
     expect(isTransientRegistryVerificationError(new Error('npm error code E404'))).toBe(true);
-    expect(isTransientRegistryVerificationError(new Error('legacy must be 0.2.7 with MIT'))).toBe(true);
+    expect(isTransientRegistryVerificationError(new Error('legacy must be 0.2.8 with MIT'))).toBe(true);
     expect(isTransientRegistryVerificationError(new Error('npm error code E401'))).toBe(false);
     expect(isTransientRegistryVerificationError(new Error('wrong license'))).toBe(false);
   });
