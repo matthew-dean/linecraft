@@ -71,14 +71,6 @@ export function isTransientRegistryVerificationError(error) {
   );
 }
 
-export function isImmutablePublishConflict(output) {
-  return (
-    /\bEPUBLISHCONFLICT\b/u.test(output) ||
-    /cannot publish over (?:the )?previously published version/iu.test(output) ||
-    /cannot publish over the previously published versions/iu.test(output)
-  );
-}
-
 export function selectResumeVersions(tags, mitVersion, fllVersion) {
   return {
     mit: tags.legacy === mitVersion ? mitVersion : null,
@@ -98,16 +90,6 @@ export function inspectReleaseRegistry(name, mitVersion, fllVersion, reader) {
       ? reader.getLicense(name, resumeVersions.fll, { retryNotFound: true })
       : null,
   };
-}
-
-export function formatProcessFailure(result) {
-  if (result.error) {
-    return result.error.message;
-  }
-  if (result.signal) {
-    return `terminated by signal ${result.signal}`;
-  }
-  return result.stderr || result.stdout || `exited with status ${String(result.status)}`;
 }
 
 function sleep(milliseconds) {
@@ -238,6 +220,15 @@ function getPublishedLicense(name, version, options = {}) {
   return null;
 }
 
+export function publishTarball(tarball, tag, publishEnv, runCommand = run) {
+  // Keep stdio inherited: npm needs the terminal's stdin to prompt for a 2FA OTP.
+  runCommand(
+    'npm',
+    ['publish', tarball, '--tag', tag, '--access', 'public'],
+    { env: publishEnv }
+  );
+}
+
 export function validateExistingRelease(spec, actualLicense, expectedLicense) {
   if (actualLicense !== null && actualLicense !== expectedLicense) {
     fail(`${spec} is already published with ${actualLicense}; expected ${expectedLicense}`);
@@ -257,34 +248,8 @@ function publishOrResume(
   const spec = `${name}@${version}`;
   const disposition = validateExistingRelease(spec, actualLicense, expectedLicense);
   if (disposition === 'publish') {
-    const result = spawnSync(
-      'npm',
-      ['publish', tarball, '--tag', tag, '--access', 'public'],
-      {
-        cwd: ROOT,
-        encoding: 'utf8',
-        env: sanitizeNpmEnvironment({ ...process.env, ...publishEnv }),
-        stdio: ['ignore', 'pipe', 'pipe'],
-      }
-    );
-    if (result.status === 0) {
-      process.stdout.write(result.stdout ?? '');
-      process.stderr.write(result.stderr ?? '');
-      return;
-    }
-
-    const detail = formatProcessFailure(result);
-    if (!isImmutablePublishConflict(detail)) {
-      fail(`npm publish ${tarball} failed\n${detail}`);
-    }
-
-    const recoveredLicense = getPublishedLicense(name, version, {
-      retryNotFound: true,
-    });
-    if (recoveredLicense === null) {
-      fail(`npm reported ${spec} already exists, but its metadata could not be read`);
-    }
-    validateExistingRelease(spec, recoveredLicense, expectedLicense);
+    publishTarball(tarball, tag, publishEnv);
+    return;
   }
 
   console.log(`${spec} already has ${expectedLicense}; resuming release`);

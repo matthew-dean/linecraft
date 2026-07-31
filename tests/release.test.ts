@@ -4,10 +4,9 @@ import {
   createMitPackageJson,
   createMitReadme,
   deriveMitVersion,
-  formatProcessFailure,
   inspectReleaseRegistry,
-  isImmutablePublishConflict,
   isTransientRegistryVerificationError,
+  publishTarball,
   sanitizeNpmEnvironment,
   validateExistingRelease,
 } from '../scripts/release.js';
@@ -85,17 +84,6 @@ describe('dual-license release policy', () => {
     expect(isTransientRegistryVerificationError(new Error('wrong license'))).toBe(false);
   });
 
-  it('recognizes only immutable-version publish conflicts as resumable', () => {
-    expect(
-      isImmutablePublishConflict(
-        'npm error You cannot publish over the previously published versions: 0.2.8.'
-      )
-    ).toBe(true);
-    expect(isImmutablePublishConflict('npm error code EPUBLISHCONFLICT')).toBe(true);
-    expect(isImmutablePublishConflict('npm error code E401 Unauthorized')).toBe(false);
-    expect(isImmutablePublishConflict('npm error code EOTP')).toBe(false);
-  });
-
   it('checks only versions that existing dist-tags identify as resumable', () => {
     const calls: unknown[][] = [];
     const inspect = (tags: { legacy: string; latest: string }) =>
@@ -127,13 +115,24 @@ describe('dual-license release policy', () => {
     ]);
   });
 
-  it('preserves npm publish process diagnostics', () => {
-    expect(formatProcessFailure({ error: new Error('spawn npm ENOENT') })).toBe(
-      'spawn npm ENOENT'
-    );
-    expect(formatProcessFailure({ signal: 'SIGTERM' })).toBe(
-      'terminated by signal SIGTERM'
-    );
+  it('publishes with inherited stdio so npm can prompt for an OTP', () => {
+    const calls: unknown[][] = [];
+    publishTarball('/tmp/linecraft.tgz', 'legacy', { LINECRAFT_DUAL_RELEASE: '1' },
+      (...args: unknown[]) => calls.push(args));
+
+    expect(calls).toEqual([[
+      'npm',
+      [
+        'publish',
+        '/tmp/linecraft.tgz',
+        '--tag',
+        'legacy',
+        '--access',
+        'public',
+      ],
+      { env: { LINECRAFT_DUAL_RELEASE: '1' } },
+    ]]);
+    expect((calls[0]?.[2] as { capture?: boolean }).capture).not.toBe(true);
   });
 
 });
