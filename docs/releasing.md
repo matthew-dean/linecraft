@@ -5,33 +5,36 @@ Linecraft publishes the same compiled implementation in two version lines:
 - `0.2.x` is licensed under MIT and published with the npm `legacy` tag.
 - `0.5.x` is licensed under FLL v1.2 and published with the npm `latest` tag.
 
-The repository stays on the MIT 0.2.x line. Its root `LICENSE`, README license
-section, version, and package metadata are all MIT. Do not replace those tracked
-files to prepare an FLL release.
+The repository and every pull request stay on the leading FLL 0.5.x line. The
+root `LICENSE`, README, version, and package metadata are all FLL. Direct
+publishing is blocked so both synchronized artifacts always go through the
+policy checks.
 
-The release script copies the build into a temporary directory, then writes the
-saved FLL release asset to that package's actual `LICENSE` path and substitutes
-its version, package metadata, and README license section. The temporary package
-is always removed after packing or publishing, including after failures.
+The release script copies the build into two temporary directories. The FLL
+artifact retains the source metadata. The MIT artifact derives its 0.2.x
+version and substitutes the saved MIT text at its actual `LICENSE` path, plus
+MIT package metadata and README section. Temporary packages are always removed,
+including after failures.
 
 ## Prepare and inspect
 
-Set root `package.json` to the intended MIT 0.2.x version, then pass the matching
-leading FLL version explicitly:
+Set root `package.json` to the intended leading 0.5.x version. The release
+script derives the MIT version by keeping the patch version synchronized:
 
 ```bash
-pnpm release:dual --fll 0.5.7
+pnpm release:dry-run
 ```
 
-This runs lint, typecheck, tests, and the build, then creates two tarballs and a
-manifest under `.release/`. The command does not publish without `--publish`.
+For example, FLL `0.5.7` always produces MIT `0.2.7`. The dry run executes lint,
+typecheck, tests, and the build, then creates two tarballs and a manifest under
+`.release/` without publishing.
 
 ## Publish
 
 Publishing requires npm authentication and a clean tracked worktree:
 
 ```bash
-pnpm release:dual --fll 0.5.7 --publish
+pnpm release
 ```
 
 The script publishes in this fixed order:

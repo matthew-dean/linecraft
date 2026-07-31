@@ -23,66 +23,26 @@ const OUTPUT_DIR = join(ROOT, '.release');
 const FLL_LICENSE = 'LicenseRef-FLL-1.2';
 const README_LICENSE_HEADING = '## License';
 
-const FLL_README_SECTION = `## License
+const MIT_README_SECTION = `## License
 
-This **0.5.x release** is licensed under the **Fair Labor License (FLL) v1.2**.
+This **0.2.x compatibility release** is licensed under the **MIT License**.
 
-- If you are an individual with a net worth under **$5M USD**, or
-- Your organization is **Fair Labor Compliant** (your CEO or highest-paid
-  executive makes no more than **15×** your median employee's total annual
-  compensation),
-
-then you may use this software for free, subject to the license terms. Other
-operational users must obtain a paid license, for example via
-[fllicense.org](https://fllicense.org). Evaluation and testing are permitted for
-up to 90 days. See the full license text in [\`LICENSE\`](./LICENSE).
+The current 0.5.x release line uses the Fair Labor License. See the full MIT
+license text bundled with this package in [\`LICENSE\`](./LICENSE).
 `;
 
 function usage() {
   return `Usage:
-  pnpm release:dual --fll 0.5.7
-  pnpm release:dual --fll 0.5.7 --publish
+  pnpm release
+  pnpm release:dry-run
 
-Options:
-  --fll <version>  Required leading FLL version; must be 0.5.x
-  --publish        Publish MIT as "legacy", then FLL as "latest"
-  --skip-checks    Skip lint, typecheck, and tests (packing still builds)
-  --help           Show this help
-
-The MIT version is read from package.json and must be 0.2.x. Without
---publish, the command only validates and creates both tarballs in .release/.`;
+The FLL 0.5.x version is read from package.json. The matching MIT 0.2.x
+version is derived from the same patch version. release:dry-run creates both
+tarballs in .release/ without publishing.`;
 }
 
 function fail(message) {
   throw new Error(message);
-}
-
-export function parseArgs(argv) {
-  const options = {
-    fllVersion: undefined,
-    publish: false,
-    skipChecks: false,
-    help: false,
-  };
-
-  for (let index = 0; index < argv.length; index++) {
-    const arg = argv[index];
-    if (arg === '--fll') {
-      options.fllVersion = argv[++index];
-    } else if (arg.startsWith('--fll=')) {
-      options.fllVersion = arg.slice('--fll='.length);
-    } else if (arg === '--publish') {
-      options.publish = true;
-    } else if (arg === '--skip-checks') {
-      options.skipChecks = true;
-    } else if (arg === '--help' || arg === '-h') {
-      options.help = true;
-    } else {
-      fail(`Unknown option: ${arg}`);
-    }
-  }
-
-  return options;
 }
 
 export function assertVersionPolicy(mitVersion, fllVersion) {
@@ -94,26 +54,29 @@ export function assertVersionPolicy(mitVersion, fllVersion) {
   }
 }
 
-export function createFllPackageJson(sourcePackage, fllVersion) {
-  return {
-    ...sourcePackage,
-    version: fllVersion,
-    license: FLL_LICENSE,
-    licenses: [
-      {
-        type: FLL_LICENSE,
-        url: 'https://fllicense.org',
-      },
-    ],
-  };
+export function deriveMitVersion(fllVersion) {
+  if (!/^0\.5\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(fllVersion)) {
+    fail(`FLL releases must use the 0.5.x line; received ${fllVersion}`);
+  }
+  return fllVersion.replace(/^0\.5\./, '0.2.');
 }
 
-export function createFllReadme(sourceReadme) {
+export function createMitPackageJson(sourcePackage, mitVersion) {
+  const transformed = {
+    ...sourcePackage,
+    version: mitVersion,
+    license: 'MIT',
+  };
+  delete transformed.licenses;
+  return transformed;
+}
+
+export function createMitReadme(sourceReadme) {
   const headingIndex = sourceReadme.indexOf(README_LICENSE_HEADING);
   if (headingIndex < 0) {
     fail(`README is missing its ${README_LICENSE_HEADING} section`);
   }
-  return sourceReadme.slice(0, headingIndex) + FLL_README_SECTION;
+  return sourceReadme.slice(0, headingIndex) + MIT_README_SECTION;
 }
 
 function run(command, args, options = {}) {
@@ -131,18 +94,18 @@ function run(command, args, options = {}) {
   return options.capture ? result.stdout.trim() : '';
 }
 
-function assertSourcePolicy(sourcePackage, mitLicenseText, sourceReadme, fllLicenseText) {
-  if (sourcePackage.license !== 'MIT') {
-    fail(`Source package must be MIT; received ${String(sourcePackage.license)}`);
-  }
-  if (!mitLicenseText.startsWith('MIT License\n')) {
-    fail('Root LICENSE is not the expected MIT license');
-  }
-  if (!sourceReadme.includes('0.2.x compatibility releases are licensed under the')) {
-    fail('Root README does not describe the MIT 0.2.x source release');
+function assertSourcePolicy(sourcePackage, fllLicenseText, sourceReadme, mitLicenseText) {
+  if (sourcePackage.license !== FLL_LICENSE) {
+    fail(`Source package must be ${FLL_LICENSE}; received ${String(sourcePackage.license)}`);
   }
   if (!fllLicenseText.startsWith('Fair Labor License (FLL) v1.2\n')) {
-    fail('The staged FLL v1.2 release asset is missing or invalid');
+    fail('Root LICENSE is not the expected FLL v1.2 license');
+  }
+  if (!sourceReadme.includes('Fair Labor License (FLL) v1.2')) {
+    fail('Root README does not describe the FLL v1.2 release');
+  }
+  if (!mitLicenseText.startsWith('MIT License\n')) {
+    fail('The staged MIT release asset is missing or invalid');
   }
 }
 
@@ -218,39 +181,40 @@ function verifyPublishedPolicy(name, mitVersion, fllVersion) {
 }
 
 function main() {
-  const options = parseArgs(process.argv.slice(2));
-  if (options.help) {
+  const args = process.argv.slice(2);
+  if (args.includes('--help') || args.includes('-h')) {
     console.log(usage());
     return;
   }
-  if (!options.fllVersion) {
-    fail('Missing required --fll <0.5.x version>');
+  const unexpectedArgs = args.filter((arg) => arg !== '--publish');
+  if (unexpectedArgs.length > 0) {
+    fail(`Unknown option: ${unexpectedArgs[0]}`);
   }
+  const publish = args.includes('--publish');
 
   const sourcePackage = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
   const sourceReadme = readFileSync(join(ROOT, 'README.md'), 'utf8');
-  const mitLicenseText = readFileSync(join(ROOT, 'LICENSE'), 'utf8');
-  const fllLicenseText = readFileSync(
-    join(ROOT, 'scripts', 'release-assets', 'FLL-1.2.txt'),
+  const fllLicenseText = readFileSync(join(ROOT, 'LICENSE'), 'utf8');
+  const mitLicenseText = readFileSync(
+    join(ROOT, 'scripts', 'release-assets', 'MIT.txt'),
     'utf8'
   );
-  const mitVersion = sourcePackage.version;
+  const fllVersion = sourcePackage.version;
+  const mitVersion = deriveMitVersion(fllVersion);
 
-  assertVersionPolicy(mitVersion, options.fllVersion);
-  assertSourcePolicy(sourcePackage, mitLicenseText, sourceReadme, fllLicenseText);
+  assertVersionPolicy(mitVersion, fllVersion);
+  assertSourcePolicy(sourcePackage, fllLicenseText, sourceReadme, mitLicenseText);
 
-  if (options.publish) {
+  if (publish) {
     assertCleanTrackedWorktree();
     run('npm', ['whoami'], { capture: true });
     assertVersionAvailable(sourcePackage.name, mitVersion);
-    assertVersionAvailable(sourcePackage.name, options.fllVersion);
+    assertVersionAvailable(sourcePackage.name, fllVersion);
   }
 
-  if (!options.skipChecks) {
-    run('pnpm', ['lint']);
-    run('pnpm', ['typecheck']);
-    run('pnpm', ['exec', 'vitest', 'run']);
-  }
+  run('pnpm', ['lint']);
+  run('pnpm', ['typecheck']);
+  run('pnpm', ['exec', 'vitest', 'run']);
   // TypeScript does not remove outputs for source files that no longer exist.
   // Always build release artifacts from an empty, ignored output directory.
   rmSync(join(ROOT, 'lib'), { recursive: true, force: true });
@@ -259,27 +223,40 @@ function main() {
   rmSync(OUTPUT_DIR, { recursive: true, force: true });
   mkdirSync(OUTPUT_DIR, { recursive: true });
 
-  const mitPack = pack(ROOT);
+  const mitTempRoot = mkdtempSync(join(tmpdir(), 'linecraft-mit-'));
   const tempRoot = mkdtempSync(join(tmpdir(), 'linecraft-fll-'));
   try {
+    cpSync(join(ROOT, 'lib'), join(mitTempRoot, 'lib'), { recursive: true });
+    writeFileSync(
+      join(mitTempRoot, 'package.json'),
+      `${JSON.stringify(createMitPackageJson(sourcePackage, mitVersion), null, 2)}\n`
+    );
+    writeFileSync(join(mitTempRoot, 'README.md'), createMitReadme(sourceReadme));
+    writeFileSync(join(mitTempRoot, 'LICENSE'), mitLicenseText);
+
     cpSync(join(ROOT, 'lib'), join(tempRoot, 'lib'), { recursive: true });
     writeFileSync(
       join(tempRoot, 'package.json'),
-      `${JSON.stringify(createFllPackageJson(sourcePackage, options.fllVersion), null, 2)}\n`
+      `${JSON.stringify(sourcePackage, null, 2)}\n`
     );
-    writeFileSync(join(tempRoot, 'README.md'), createFllReadme(sourceReadme));
+    writeFileSync(join(tempRoot, 'README.md'), sourceReadme);
     writeFileSync(join(tempRoot, 'LICENSE'), fllLicenseText);
 
-    if (hashDirectory(join(ROOT, 'lib')) !== hashDirectory(join(tempRoot, 'lib'))) {
+    const sourceBuildHash = hashDirectory(join(ROOT, 'lib'));
+    if (
+      sourceBuildHash !== hashDirectory(join(mitTempRoot, 'lib')) ||
+      sourceBuildHash !== hashDirectory(join(tempRoot, 'lib'))
+    ) {
       fail('MIT and FLL builds are not byte-for-byte synchronized');
     }
 
+    const mitPack = pack(mitTempRoot);
     const fllPack = pack(tempRoot);
     const manifest = {
       sourceCommit: run('git', ['rev-parse', 'HEAD'], { capture: true }),
       policy: {
         legacy: { version: mitVersion, license: 'MIT' },
-        latest: { version: options.fllVersion, license: FLL_LICENSE },
+        latest: { version: fllVersion, license: FLL_LICENSE },
       },
       artifacts: { mit: mitPack, fll: fllPack },
     };
@@ -294,7 +271,7 @@ function main() {
       fail('npm pack did not create both release artifacts');
     }
 
-    if (options.publish) {
+    if (publish) {
       const publishEnv = { LINECRAFT_DUAL_RELEASE: '1' };
       run('npm', ['publish', mitTarball, '--tag', 'legacy', '--access', 'public'], {
         env: publishEnv,
@@ -302,15 +279,16 @@ function main() {
       run('npm', ['publish', fllTarball, '--tag', 'latest', '--access', 'public'], {
         env: publishEnv,
       });
-      verifyPublishedPolicy(sourcePackage.name, mitVersion, options.fllVersion);
+      verifyPublishedPolicy(sourcePackage.name, mitVersion, fllVersion);
       console.log(`Published ${sourcePackage.name}@${mitVersion} (MIT/legacy)`);
-      console.log(`Published ${sourcePackage.name}@${options.fllVersion} (FLL/latest)`);
+      console.log(`Published ${sourcePackage.name}@${fllVersion} (FLL/latest)`);
     } else {
       console.log(`Prepared MIT legacy artifact: ${mitTarball}`);
       console.log(`Prepared FLL latest artifact: ${fllTarball}`);
-      console.log('Dry run only; add --publish after reviewing .release/release-manifest.json');
+      console.log('Dry run only; run `pnpm release` to publish both artifacts');
     }
   } finally {
+    rmSync(mitTempRoot, { recursive: true, force: true });
     rmSync(tempRoot, { recursive: true, force: true });
   }
 }
