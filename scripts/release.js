@@ -140,17 +140,44 @@ function pack(cwd) {
   return parsed[0];
 }
 
-function assertVersionAvailable(name, version) {
+function getPublishedLicense(name, version) {
   const result = spawnSync('npm', ['view', `${name}@${version}`, 'version', '--json'], {
     cwd: ROOT,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   if (result.status === 0) {
-    fail(`${name}@${version} is already published`);
+    return JSON.parse(
+      run('npm', ['view', `${name}@${version}`, 'license', '--json'], { capture: true })
+    );
   }
   if (!`${result.stdout}\n${result.stderr}`.includes('E404')) {
     fail(`Could not verify ${name}@${version} availability:\n${result.stderr || result.stdout}`);
+  }
+  return null;
+}
+
+export function validateExistingRelease(spec, actualLicense, expectedLicense) {
+  if (actualLicense !== null && actualLicense !== expectedLicense) {
+    fail(`${spec} is already published with ${actualLicense}; expected ${expectedLicense}`);
+  }
+  return actualLicense === expectedLicense ? 'resume' : 'publish';
+}
+
+function publishOrResume(name, version, expectedLicense, tarball, tag, publishEnv) {
+  const spec = `${name}@${version}`;
+  const disposition = validateExistingRelease(
+    spec,
+    getPublishedLicense(name, version),
+    expectedLicense
+  );
+  if (disposition === 'publish') {
+    run('npm', ['publish', tarball, '--tag', tag, '--access', 'public'], {
+      env: publishEnv,
+    });
+  } else {
+    console.log(`${spec} already has ${expectedLicense}; resuming release`);
+    run('npm', ['dist-tag', 'add', spec, tag]);
   }
 }
 
@@ -208,8 +235,16 @@ function main() {
   if (publish) {
     assertCleanTrackedWorktree();
     run('npm', ['whoami'], { capture: true });
-    assertVersionAvailable(sourcePackage.name, mitVersion);
-    assertVersionAvailable(sourcePackage.name, fllVersion);
+    validateExistingRelease(
+      `${sourcePackage.name}@${mitVersion}`,
+      getPublishedLicense(sourcePackage.name, mitVersion),
+      'MIT'
+    );
+    validateExistingRelease(
+      `${sourcePackage.name}@${fllVersion}`,
+      getPublishedLicense(sourcePackage.name, fllVersion),
+      FLL_LICENSE
+    );
   }
 
   run('pnpm', ['lint']);
@@ -273,12 +308,22 @@ function main() {
 
     if (publish) {
       const publishEnv = { LINECRAFT_DUAL_RELEASE: '1' };
-      run('npm', ['publish', mitTarball, '--tag', 'legacy', '--access', 'public'], {
-        env: publishEnv,
-      });
-      run('npm', ['publish', fllTarball, '--tag', 'latest', '--access', 'public'], {
-        env: publishEnv,
-      });
+      publishOrResume(
+        sourcePackage.name,
+        mitVersion,
+        'MIT',
+        mitTarball,
+        'legacy',
+        publishEnv
+      );
+      publishOrResume(
+        sourcePackage.name,
+        fllVersion,
+        FLL_LICENSE,
+        fllTarball,
+        'latest',
+        publishEnv
+      );
       verifyPublishedPolicy(sourcePackage.name, mitVersion, fllVersion);
       console.log(`Published ${sourcePackage.name}@${mitVersion} (MIT/legacy)`);
       console.log(`Published ${sourcePackage.name}@${fllVersion} (FLL/latest)`);

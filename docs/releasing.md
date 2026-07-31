@@ -46,6 +46,11 @@ It then reads the npm metadata back and verifies that `legacy` is the requested
 MIT 0.2.x version and `latest` is the requested FLL 0.5.x version. Direct
 `npm publish` from the repository is blocked by `prepublishOnly`.
 
+The command is resumable. If one artifact was published successfully before a
+later publish or verification failed, rerunning `pnpm release` validates the
+existing artifact's license, restores its expected dist-tag, and continues with
+the missing artifact. An existing version with the wrong license is rejected.
+
 Published npm versions are immutable. The existing `0.2.6` package was
 accidentally published with FLL metadata, so correct the compatibility line with
 a new MIT `0.2.7` release rather than trying to replace `0.2.6`.

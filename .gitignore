@@ -4,5 +4,4 @@ build/
 *.node
 .DS_Store
 *.log
-pnpm-lock.yaml
 .release/

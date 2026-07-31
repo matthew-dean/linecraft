@@ -4,6 +4,7 @@ import {
   createMitPackageJson,
   createMitReadme,
   deriveMitVersion,
+  validateExistingRelease,
 } from '../scripts/release.js';
 
 describe('dual-license release policy', () => {
@@ -47,6 +48,14 @@ describe('dual-license release policy', () => {
     expect(transformed).toContain('0.2.x compatibility release');
     expect(transformed).toContain('MIT License');
     expect(transformed).not.toContain('FLL terms');
+  });
+
+  it('resumes correctly published versions and rejects license mismatches', () => {
+    expect(validateExistingRelease('linecraft@0.2.7', null, 'MIT')).toBe('publish');
+    expect(validateExistingRelease('linecraft@0.2.7', 'MIT', 'MIT')).toBe('resume');
+    expect(() =>
+      validateExistingRelease('linecraft@0.2.7', 'LicenseRef-FLL-1.2', 'MIT')
+    ).toThrow('linecraft@0.2.7 is already published with LicenseRef-FLL-1.2');
   });
 
 });
