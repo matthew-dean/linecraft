@@ -15,7 +15,7 @@ import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(SCRIPT_DIR, '..');
@@ -146,6 +146,36 @@ function run(command, args, options = {}) {
   return options.capture ? result.stdout.trim() : '';
 }
 
+function runInteractive(command, args, options = {}) {
+  return new Promise((resolvePromise, reject) => {
+    const environment = { ...process.env, ...options.env };
+    const child = spawn(command, args, {
+      cwd: options.cwd ?? ROOT,
+      env: command === 'npm' ? sanitizeNpmEnvironment(environment) : environment,
+      // npm requires both stdin and stdout to be TTYs before offering its OTP
+      // prompt. Capture only stderr, and mirror it live so failures remain visible.
+      stdio: ['inherit', 'inherit', 'pipe'],
+    });
+    let stderr = '';
+
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk;
+      process.stderr.write(chunk);
+    });
+    child.on('error', reject);
+    child.on('close', (status) => {
+      if (status === 0) {
+        resolvePromise();
+        return;
+      }
+      const error = new Error(`${command} ${args.join(' ')} failed`);
+      error.commandStderr = stderr;
+      reject(error);
+    });
+  });
+}
+
 function assertSourcePolicy(sourcePackage, fllLicenseText, sourceReadme, mitLicenseText) {
   if (sourcePackage.license !== FLL_LICENSE) {
     fail(`Source package must be ${FLL_LICENSE}; received ${String(sourcePackage.license)}`);
@@ -220,9 +250,16 @@ function getPublishedLicense(name, version, options = {}) {
   return null;
 }
 
-export function publishTarball(tarball, tag, publishEnv, runCommand = run) {
-  // Keep stdio inherited: npm needs the terminal's stdin to prompt for a 2FA OTP.
-  runCommand(
+export function isImmutablePublishConflict(error) {
+  const detail = [error instanceof Error ? error.message : String(error), error?.commandStderr]
+    .filter(Boolean)
+    .join('\n');
+  return /\bEPUBLISHCONFLICT\b|cannot publish over|previously published|pre-existing version/iu
+    .test(detail);
+}
+
+export function publishTarball(tarball, tag, publishEnv, runCommand = runInteractive) {
+  return runCommand(
     'npm',
     ['publish', tarball, '--tag', tag, '--access', 'public'],
     { env: publishEnv }
@@ -236,7 +273,7 @@ export function validateExistingRelease(spec, actualLicense, expectedLicense) {
   return actualLicense === expectedLicense ? 'resume' : 'publish';
 }
 
-export function publishOrResume(
+export async function publishOrResume(
   name,
   version,
   actualLicense,
@@ -254,13 +291,15 @@ export function publishOrResume(
   const disposition = validateExistingRelease(spec, actualLicense, expectedLicense);
   if (disposition === 'publish') {
     try {
-      publish(tarball, tag, publishEnv);
+      await publish(tarball, tag, publishEnv);
       return;
     } catch (publishError) {
-      // npm already printed the interactive failure. A single lookup handles the
-      // race where another/previous publish succeeded after our tag preflight.
-      // Do not retry here: an OTP/auth failure should return immediately.
-      const recoveredLicense = getLicense(name, version);
+      // npm already printed the interactive failure. Retry registry propagation
+      // only for an immutable-version race. OTP/auth failures return immediately.
+      if (!isImmutablePublishConflict(publishError)) {
+        throw publishError;
+      }
+      const recoveredLicense = getLicense(name, version, { retryNotFound: true });
       if (recoveredLicense === null) {
         throw publishError;
       }
@@ -330,7 +369,7 @@ function assertNpmAuthentication() {
   }
 }
 
-function main() {
+async function main() {
   const args = process.argv.slice(2);
   if (args.includes('--help') || args.includes('-h')) {
     console.log(usage());
@@ -451,7 +490,7 @@ function main() {
 
     if (publish) {
       const publishEnv = { LINECRAFT_DUAL_RELEASE: '1' };
-      publishOrResume(
+      await publishOrResume(
         sourcePackage.name,
         mitVersion,
         publishedMitLicense,
@@ -460,7 +499,7 @@ function main() {
         'legacy',
         publishEnv
       );
-      publishOrResume(
+      await publishOrResume(
         sourcePackage.name,
         fllVersion,
         publishedFllLicense,
@@ -485,10 +524,8 @@ function main() {
 
 const invokedPath = process.argv[1] ? pathToFileURL(resolve(process.argv[1])).href : '';
 if (import.meta.url === invokedPath) {
-  try {
-    main();
-  } catch (error) {
+  main().catch((error) => {
     console.error(error instanceof Error ? error.message : error);
     process.exitCode = 1;
-  }
+  });
 }

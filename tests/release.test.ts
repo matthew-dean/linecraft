@@ -5,6 +5,7 @@ import {
   createMitReadme,
   deriveMitVersion,
   inspectReleaseRegistry,
+  isImmutablePublishConflict,
   isTransientRegistryVerificationError,
   publishOrResume,
   publishTarball,
@@ -116,9 +117,9 @@ describe('dual-license release policy', () => {
     ]);
   });
 
-  it('publishes with inherited stdio so npm can prompt for an OTP', () => {
+  it('publishes with interactive stdio so npm can prompt for an OTP', async () => {
     const calls: unknown[][] = [];
-    publishTarball('/tmp/linecraft.tgz', 'legacy', { LINECRAFT_DUAL_RELEASE: '1' },
+    await publishTarball('/tmp/linecraft.tgz', 'legacy', { LINECRAFT_DUAL_RELEASE: '1' },
       (...args: unknown[]) => calls.push(args));
 
     expect(calls).toEqual([[
@@ -133,14 +134,24 @@ describe('dual-license release policy', () => {
       ],
       { env: { LINECRAFT_DUAL_RELEASE: '1' } },
     ]]);
-    expect((calls[0]?.[2] as { capture?: boolean }).capture).not.toBe(true);
   });
 
-  it('returns OTP failures immediately when the target version is still absent', () => {
+  it('recognizes only immutable publish conflicts as resumable', () => {
+    expect(isImmutablePublishConflict(Object.assign(
+      new Error('npm publish failed'),
+      { commandStderr: 'npm error You cannot publish over the previously published versions' }
+    ))).toBe(true);
+    expect(isImmutablePublishConflict(Object.assign(
+      new Error('npm publish failed'),
+      { commandStderr: 'npm error code EOTP' }
+    ))).toBe(false);
+  });
+
+  it('returns OTP failures immediately without a registry lookup', async () => {
     const otpError = new Error('npm publish failed with EOTP');
     const lookups: unknown[][] = [];
 
-    expect(() => publishOrResume(
+    await expect(publishOrResume(
       'linecraft',
       '0.2.8',
       null,
@@ -155,14 +166,18 @@ describe('dual-license release policy', () => {
           return null;
         },
       }
-    )).toThrow(otpError);
-    expect(lookups).toEqual([['linecraft', '0.2.8']]);
+    )).rejects.toBe(otpError);
+    expect(lookups).toEqual([]);
   });
 
-  it('recovers a version that landed after tag preflight', () => {
+  it('retries propagation and recovers a version that landed after tag preflight', async () => {
     const tags: unknown[][] = [];
+    const lookups: unknown[][] = [];
+    const conflict = Object.assign(new Error('npm publish failed'), {
+      commandStderr: 'npm error You cannot publish over the previously published versions',
+    });
 
-    expect(() => publishOrResume(
+    await expect(publishOrResume(
       'linecraft',
       '0.2.8',
       null,
@@ -171,11 +186,15 @@ describe('dual-license release policy', () => {
       'legacy',
       {},
       {
-        publish: () => { throw new Error('immutable version conflict'); },
-        getLicense: () => 'MIT',
+        publish: () => { throw conflict; },
+        getLicense: (...args: unknown[]) => {
+          lookups.push(args);
+          return 'MIT';
+        },
         addTag: (...args: unknown[]) => { tags.push(args); },
       }
-    )).not.toThrow();
+    )).resolves.toBeUndefined();
+    expect(lookups).toEqual([['linecraft', '0.2.8', { retryNotFound: true }]]);
     expect(tags).toEqual([['linecraft@0.2.8', 'legacy']]);
   });
 
