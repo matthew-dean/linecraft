@@ -236,24 +236,40 @@ export function validateExistingRelease(spec, actualLicense, expectedLicense) {
   return actualLicense === expectedLicense ? 'resume' : 'publish';
 }
 
-function publishOrResume(
+export function publishOrResume(
   name,
   version,
   actualLicense,
   expectedLicense,
   tarball,
   tag,
-  publishEnv
+  publishEnv,
+  operations = {}
 ) {
+  const publish = operations.publish ?? publishTarball;
+  const getLicense = operations.getLicense ?? getPublishedLicense;
+  const addTag = operations.addTag ?? ((specToTag, tagToAdd) =>
+    run('npm', ['dist-tag', 'add', specToTag, tagToAdd]));
   const spec = `${name}@${version}`;
   const disposition = validateExistingRelease(spec, actualLicense, expectedLicense);
   if (disposition === 'publish') {
-    publishTarball(tarball, tag, publishEnv);
-    return;
+    try {
+      publish(tarball, tag, publishEnv);
+      return;
+    } catch (publishError) {
+      // npm already printed the interactive failure. A single lookup handles the
+      // race where another/previous publish succeeded after our tag preflight.
+      // Do not retry here: an OTP/auth failure should return immediately.
+      const recoveredLicense = getLicense(name, version);
+      if (recoveredLicense === null) {
+        throw publishError;
+      }
+      validateExistingRelease(spec, recoveredLicense, expectedLicense);
+    }
   }
 
   console.log(`${spec} already has ${expectedLicense}; resuming release`);
-  run('npm', ['dist-tag', 'add', spec, tag]);
+  addTag(spec, tag);
 }
 
 function assertCleanTrackedWorktree() {

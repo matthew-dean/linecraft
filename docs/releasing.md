@@ -53,7 +53,10 @@ dist-tags rather than querying versions that have not been published yet. If a
 tag already points to the requested version, the script validates that artifact's
 license, restores the tag, and continues with the missing artifact. An existing
 version with the wrong license is rejected. `npm publish` inherits the interactive
-terminal so npm can prompt for a required two-factor authentication code.
+terminal so npm can prompt for a required two-factor authentication code. If a
+publish fails because the version landed after preflight, one immediate metadata
+lookup validates the artifact and repairs its tag. Other failures, including OTP
+or authentication errors, return immediately without a metadata retry loop.
 
 Published npm versions are immutable. The existing `0.2.6` package was
 accidentally published with FLL metadata. MIT `0.2.7` is the corrected

@@ -6,6 +6,7 @@ import {
   deriveMitVersion,
   inspectReleaseRegistry,
   isTransientRegistryVerificationError,
+  publishOrResume,
   publishTarball,
   sanitizeNpmEnvironment,
   validateExistingRelease,
@@ -133,6 +134,49 @@ describe('dual-license release policy', () => {
       { env: { LINECRAFT_DUAL_RELEASE: '1' } },
     ]]);
     expect((calls[0]?.[2] as { capture?: boolean }).capture).not.toBe(true);
+  });
+
+  it('returns OTP failures immediately when the target version is still absent', () => {
+    const otpError = new Error('npm publish failed with EOTP');
+    const lookups: unknown[][] = [];
+
+    expect(() => publishOrResume(
+      'linecraft',
+      '0.2.8',
+      null,
+      'MIT',
+      '/tmp/linecraft.tgz',
+      'legacy',
+      {},
+      {
+        publish: () => { throw otpError; },
+        getLicense: (...args: unknown[]) => {
+          lookups.push(args);
+          return null;
+        },
+      }
+    )).toThrow(otpError);
+    expect(lookups).toEqual([['linecraft', '0.2.8']]);
+  });
+
+  it('recovers a version that landed after tag preflight', () => {
+    const tags: unknown[][] = [];
+
+    expect(() => publishOrResume(
+      'linecraft',
+      '0.2.8',
+      null,
+      'MIT',
+      '/tmp/linecraft.tgz',
+      'legacy',
+      {},
+      {
+        publish: () => { throw new Error('immutable version conflict'); },
+        getLicense: () => 'MIT',
+        addTag: (...args: unknown[]) => { tags.push(args); },
+      }
+    )).not.toThrow();
+    expect(tags).toEqual([['linecraft@0.2.8', 'legacy']]);
   });
 
 });
