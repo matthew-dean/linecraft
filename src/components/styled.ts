@@ -151,11 +151,8 @@ function alignText(text: string, width: number, align: 'left' | 'right' | 'cente
     return ' '.repeat(padding) + text;
   } else if (align === 'center') {
     const leftPad = Math.floor(padding / 2);
-    const rightPad = padding - leftPad;
-    return ' '.repeat(leftPad) + text + ' '.repeat(rightPad);
+    return ' '.repeat(leftPad) + text;
   } else {
-    // 'left' - default, no padding needed
-    return text + ' '.repeat(padding);
+    return text;
   }
 }
-

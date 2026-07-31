@@ -85,39 +85,6 @@ function skipEscapeSequence(text: string, idx: number): number {
 }
 
 /**
- * Remove trailing terminal spaces while preserving ANSI/OSC control sequences.
- *
- * Styled text commonly ends as `"text   \x1b[0m"`, so trimming the raw string
- * does not remove the spaces the terminal will actually render. Escape
- * sequences are retained to keep style and hyperlink state balanced.
- */
-export function trimTrailingSpaces(text: string): string {
-  let result = '';
-  let pendingSuffix = '';
-  let idx = 0;
-
-  while (idx < text.length) {
-    const nextIdx = skipEscapeSequence(text, idx);
-    if (nextIdx > idx) {
-      pendingSuffix += text.substring(idx, nextIdx);
-      idx = nextIdx;
-      continue;
-    }
-
-    const char = text[idx];
-    if (char === ' ') {
-      pendingSuffix += char;
-    } else {
-      result += pendingSuffix + char;
-      pendingSuffix = '';
-    }
-    idx++;
-  }
-
-  return result + pendingSuffix.replace(/ /gu, '');
-}
-
-/**
  * Truncate text to a maximum visual width while preserving ANSI escape codes
  * 
  * This function truncates text based on its visual width (ignoring ANSI codes),

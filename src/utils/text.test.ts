@@ -1,31 +1,10 @@
 // Unit tests for text utilities
 
 import { describe, it, expect } from 'vitest';
-import { truncateToWidth, truncateStart, truncateEnd, truncateMiddle, truncateFocusRange, mapColumnToDisplay, countVisibleChars, stripAnsi, splitAtVisiblePos, trimTrailingSpaces } from './text.js';
+import { truncateToWidth, truncateStart, truncateEnd, truncateMiddle, truncateFocusRange, mapColumnToDisplay, countVisibleChars, stripAnsi, splitAtVisiblePos } from './text.js';
 import { applyStyle } from './colors.js';
 
 describe('text utilities', () => {
-  describe('trimTrailingSpaces', () => {
-    it('removes plain trailing spaces', () => {
-      expect(trimTrailingSpaces('content   ')).toBe('content');
-    });
-
-    it('removes styled trailing spaces while preserving ANSI resets', () => {
-      const text = '\x1b[33mcontent   \x1b[0m';
-      const result = trimTrailingSpaces(text);
-
-      expect(stripAnsi(result)).toBe('content');
-      expect(result).toBe('\x1b[33mcontent\x1b[0m');
-    });
-
-    it('preserves meaningful spaces before later content', () => {
-      const text = '\x1b[33mleft   \x1b[0mright  ';
-      const result = trimTrailingSpaces(text);
-
-      expect(stripAnsi(result)).toBe('left   right');
-    });
-  });
-
   describe('truncateToWidth', () => {
     it('should preserve ANSI codes when truncating', () => {
       const text = applyStyle('Hello World', { color: 'red' });

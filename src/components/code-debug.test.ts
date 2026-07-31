@@ -327,11 +327,12 @@ describe('code-debug component', () => {
         type: 'warning',
       });
 
-      const output = render(component, 160);
-
-      expect(output.length).toBeGreaterThan(0);
-      for (const line of output) {
-        expect(stripAnsi(line)).not.toMatch(/ $/u);
+      for (const width of [80, 160]) {
+        const output = render(component, width);
+        expect(output.length).toBeGreaterThan(0);
+        for (const line of output) {
+          expect(stripAnsi(line)).not.toMatch(/ $/u);
+        }
       }
     });
   });

@@ -11,6 +11,21 @@ describe('Style Component', () => {
   });
 
   describe('basic styling', () => {
+    it('does not add trailing spaces for left or center alignment', () => {
+      const render = (align: 'left' | 'center') => callComponent(
+        Styled({ align }, 'Hello'),
+        {
+          availableWidth: 20,
+          region,
+          columnIndex: 0,
+          rowIndex: 0,
+        }
+      ) as string;
+
+      expect(render('left')).toBe('Hello');
+      expect(render('center')).toBe(`${' '.repeat(7)}Hello`);
+    });
+
     it('should apply color', () => {
       const component = Styled({ color: 'red' }, 'Hello');
       const result = callComponent(component, {
@@ -156,4 +171,3 @@ describe('Style Component', () => {
     });
   });
 });
-
